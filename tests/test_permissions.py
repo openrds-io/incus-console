@@ -44,7 +44,7 @@ def test_viewer_sees_but_cannot_change(server_app, setup, fake):
     assert "web-1" in page
     for hidden in ("Terminal", ">Stop<", "Rename", "Take snapshot", "Edit YAML", "Files"):
         assert hidden not in page
-    assert "Create container" not in text(vic.get(f"{base}/instances"))
+    assert "Create instance" not in text(vic.get(f"{base}/instances"))
     assert vic.post(f"{base}/instances/web-1/action", {"action": "stop"}).status_code == 403
     assert fake.instances["web-1"]["status"] == "Running"
     assert vic.get(f"{base}/instances/web-1/files").status_code == 403

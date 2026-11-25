@@ -163,9 +163,11 @@ def test_terminal_runs_sh_in_application_containers(app, browser, sid, fake):
     assert ["sh"] in commands and ["su", "-l"] in commands
 
 
-def test_instance_list_offers_both_create_buttons(browser, sid, fake):
-    page = text(browser.get(f"/servers/{sid}/instances"))
-    assert re.search(r"create-instance\?type=oci", page) and "Create container" in page
+def test_create_form_has_a_tab_per_kind(browser, sid, fake):
+    assert "Create instance" in text(browser.get(f"/servers/{sid}/instances"))
+    form = text(browser.get(f"/servers/{sid}/create-instance"))
+    for kind in ("oci", "vm"):
+        assert re.search(rf"create-instance\?type={kind}", form)
 
 
 def test_environment_values_are_hidden_from_viewers_and_operators(server_app, setup, admin, fake):

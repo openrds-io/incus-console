@@ -531,6 +531,19 @@ class IncusClient:
             raise IncusError(500, "Incus did not offer a terminal session.")
         return {"id": op["id"], "data": fds["0"], "control": fds["control"]}
 
+    def console_interactive(self, name: str, cols: int = 80, rows: int = 24):
+        """Attach to an instance's text console.
+
+        Returns ``{"id": ..., "data": ..., "control": ...}`` like exec_interactive.
+        """
+        body = {"type": "console", "width": cols, "height": rows}
+        response = self.request("POST", path("instances", name, "console"), body=body)
+        op = response.get("metadata") or {}
+        fds = (op.get("metadata") or {}).get("fds") or {}
+        if not op.get("id") or "0" not in fds or "control" not in fds:
+            raise IncusError(500, "Incus did not offer a console session.")
+        return {"id": op["id"], "data": fds["0"], "control": fds["control"]}
+
     def websocket(self, op_id: str, secret: str):
         """Open one of an operation's websockets over this client's transport.
 

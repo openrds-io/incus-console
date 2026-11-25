@@ -53,12 +53,33 @@ OCI_SETTINGS = [
     ("oci.uid", "User id", "text", "Runs the command as this user id."),
     ("oci.gid", "Group id", "text", ""),
 ]
+# Virtual machines: no process limit or container security, but firmware options.
+VM_SETTINGS = [
+    ("limits.cpu", "CPUs", "text", "A number of CPUs, or CPU ids such as 0-3. Incus gives 1."),
+    ("limits.memory", "Memory", "text", "Such as 4GiB. Incus gives 1GiB."),
+    ("boot.autostart", "Start when the host starts", "bool", ""),
+    (
+        "security.secureboot",
+        "Secure Boot",
+        "bool",
+        "On by default. Turn it off for systems whose boot loader is not signed.",
+    ),
+    (
+        "security.csm",
+        "Legacy BIOS (CSM)",
+        "bool",
+        "For systems that cannot boot with UEFI. Needs Secure Boot off.",
+    ),
+    *[setting for setting in SETTINGS if setting[0].startswith("snapshots.")],
+]
+VM_DEFAULTS = {"security.secureboot": "true", "security.csm": "false"}
 ENV_NAME = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")
 # Headings shown above the first setting of each group.
 GROUPS = {
     "oci.entrypoint": "Application",
     "limits.cpu": "Limits",
     "boot.autostart": "Behaviour",
+    "security.secureboot": "Firmware",
     "snapshots.schedule": "Scheduled snapshots",
 }
 # What an empty field means, when "No limit" would be wrong.

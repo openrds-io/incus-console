@@ -3,6 +3,20 @@ document.addEventListener("submit", (event) => {
   const message = event.target.dataset.confirm;
   if (message && !window.confirm(message)) {
     event.preventDefault();
+    return;
+  }
+  // A button with data-busy says the request is under way: some, such as
+  // creating an instance, wait for Incus to download an image first.
+  const button = event.submitter;
+  if (button && button.dataset.busy) {
+    const busy = button.dataset.busy;
+    // Disable after the browser has read the form, so the button is still sent.
+    setTimeout(() => {
+      button.disabled = true;
+      button.textContent = busy;
+    });
+    const note = event.target.querySelector("[data-busy-note]");
+    if (note) note.hidden = false;
   }
 });
 

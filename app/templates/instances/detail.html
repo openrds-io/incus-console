@@ -7,6 +7,9 @@
 {% block controls %}
 {{ actions(instance, 'detail') }}
 {% if allowed('srv.files') %}<a class="p-button is-dense u-no-margin--bottom" href="{{ url_for('srv.files', name=instance.name, path='/') }}">Files</a>{% endif %}
+{% if instance.status == 'Running' and allowed('srv.instance_console') %}
+<a class="p-button is-dense u-no-margin--bottom" href="{{ url_for('srv.instance_console', name=instance.name) }}">Console</a>
+{% endif %}
 <a class="p-button is-dense u-no-margin--bottom" href="{{ url_for('srv.instance_logs', name=instance.name) }}">Logs</a>
 {% if allowed('srv.instance_copy') %}<a class="p-button is-dense u-no-margin--bottom" href="{{ url_for('srv.instance_copy', name=instance.name) }}">Copy</a>{% endif %}
 {% if allowed('srv.instance_publish') %}<a class="p-button is-dense u-no-margin--bottom" href="{{ url_for('srv.instance_publish', name=instance.name) }}">Publish</a>{% endif %}

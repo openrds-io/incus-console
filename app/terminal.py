@@ -1,4 +1,6 @@
-"""The browser terminal: xterm.js <-> this app <-> an Incus exec session.
+"""The browser terminal: xterm.js <-> this app <-> an Incus exec or console session.
+
+The text console uses the same browser protocol as the terminal.
 
 The browser sends ``{"t": "i", "d": keys}`` and
 ``{"t": "r", "c": cols, "r": rows}``; output goes back as binary frames, then
@@ -17,6 +19,8 @@ from flask import Response, abort, request
 from .incus import IncusError
 
 MAX_SIZE = 1000  # columns or rows
+# How much of the console's earlier output to show when the console page opens.
+REPLAY_BYTES = 64 * 1024
 
 
 def same_origin() -> bool:
@@ -89,18 +93,16 @@ def pump(browser, data, control) -> None:
         thread.join(5)
 
 
-def relay(client, name: str, command: list[str]):
-    """Accept the browser's websocket and attach it to a new shell in ``name``."""
-    from simple_websocket import ConnectionClosed, Server
+def _open(client, browser, start):
+    """Start an Incus session and open its websockets; on failure tell the browser.
 
-    if not same_origin():
-        abort(403)
-    cols = _size(request.args.get("cols"), 80)
-    rows = _size(request.args.get("rows"), 24)
-    browser = Server.accept(request.environ)
+    Returns ``(data, control)``, or None after sending the browser the error.
+    """
+    from simple_websocket import ConnectionClosed
+
     opened = []
     try:
-        session = client.exec_interactive(name, command, cols, rows)
+        session = start()
         for secret in (session["data"], session["control"]):
             opened.append(client.websocket(session["id"], secret))
     except IncusError as error:
@@ -111,9 +113,43 @@ def relay(client, name: str, command: list[str]):
             browser.close()
         except ConnectionClosed:
             pass
-        return _done(browser)
-    pump(browser, *opened)
+        return None
+    return opened
+
+
+def relay(client, name: str, command: list[str] | None = None):
+    """Accept the browser's websocket and attach it to a new shell in ``name``,
+    or to its text console when ``command`` is None."""
+    from simple_websocket import Server
+
+    if not same_origin():
+        abort(403)
+    cols = _size(request.args.get("cols"), 80)
+    rows = _size(request.args.get("rows"), 24)
+    browser = Server.accept(request.environ)
+    if command is None:
+        opened = _open(client, browser, lambda: client.console_interactive(name, cols, rows))
+        if opened:
+            _replay(client, browser, name)
+    else:
+        opened = _open(client, browser, lambda: client.exec_interactive(name, command, cols, rows))
+    if opened:
+        pump(browser, *opened)
     return _done(browser)
+
+
+def _replay(client, browser, name: str) -> None:
+    """Show what the console printed before we attached (boot messages, the last
+    prompt): a console that already booted otherwise stays blank until a key."""
+    try:
+        earlier = client.console_log(name)
+    except IncusError:
+        return  # no log to show: the live console still works
+    if not earlier:
+        return
+    data = earlier.encode()[-REPLAY_BYTES:]
+    # Serial consoles end lines with \r\n already; a bare \n would stair-step.
+    browser.send(data.replace(b"\r\n", b"\n").replace(b"\n", b"\r\n"))
 
 
 def _done(browser):

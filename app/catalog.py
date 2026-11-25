@@ -28,6 +28,8 @@ ARCHITECTURES = {
     "riscv64": "riscv64",
 }
 CONTAINER_FILES = {"squashfs", "root.tar.xz"}
+VM_FILES = {"disk-kvm.img"}
+FILES = {"container": CONTAINER_FILES, "virtual-machine": VM_FILES}
 
 _cache: dict[str, tuple[float, dict]] = {}
 _lock = threading.Lock()
@@ -66,16 +68,17 @@ def _natural(value: str) -> list:
     return [int(part) if part.isdigit() else part for part in re.split(r"(\d+)", value or "")]
 
 
-def _is_container(product: dict) -> bool:
+def _has_files(product: dict, files: set[str]) -> bool:
     for version in (product.get("versions") or {}).values():
         types = {item.get("ftype") for item in (version.get("items") or {}).values()}
-        if types & CONTAINER_FILES:
+        if types & files:
             return True
     return False
 
 
-def container_images(index: dict, architectures: list[str]) -> list[dict]:
-    """Container images for these Incus architectures, grouped by OS.
+def container_images(index: dict, architectures: list[str], kind: str = "container") -> list[dict]:
+    """Images of one kind (container or virtual-machine) for these Incus
+    architectures, grouped by OS.
 
     Returns ``[{"os": "Debian", "images": [{"alias", "label", "variant"}, ...]}, ...]``
     with releases newest first.
@@ -83,7 +86,7 @@ def container_images(index: dict, architectures: list[str]) -> list[dict]:
     wanted = {ARCHITECTURES.get(a, a) for a in architectures}
     by_os: dict[str, list[dict]] = {}
     for product in (index.get("products") or {}).values():
-        if product.get("arch") not in wanted or not _is_container(product):
+        if product.get("arch") not in wanted or not _has_files(product, FILES[kind]):
             continue
         aliases = [a.strip() for a in (product.get("aliases") or "").split(",") if a.strip()]
         if not aliases:
@@ -113,5 +116,5 @@ def container_images(index: dict, architectures: list[str]) -> list[dict]:
     return groups
 
 
-def for_server(server: str, architectures: list[str]) -> list[dict]:
-    return container_images(_index(server), architectures)
+def for_server(server: str, architectures: list[str], kind: str = "container") -> list[dict]:
+    return container_images(_index(server), architectures, kind)

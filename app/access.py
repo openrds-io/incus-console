@@ -41,6 +41,8 @@ REQUIRED = {
     "srv.instance_action": "operate",
     "srv.instance_terminal": "operate",
     "srv.instance_terminal_ws": "operate",
+    "srv.instance_console": "operate",
+    "srv.instance_console_ws": "operate",
     "srv.snapshot_create": "operate",
     "srv.volume_snapshot_create": "operate",
     "srv.operation_cancel": "operate",
