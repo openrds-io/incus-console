@@ -344,3 +344,8 @@ table.credentials code {
   padding: 0;
   background: none;
 }
+
+/* Keep a status dot and its word together. */
+.status-label {
+  white-space: nowrap;
+}

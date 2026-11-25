@@ -6,7 +6,7 @@
   'frozen': 'caution', 'pending': 'caution', 'cancelling': 'caution',
   'error': 'negative', 'failure': 'negative', 'cancelled': 'negative', 'unknown': 'caution',
 }.get((value or '')|lower, 'neutral') -%}
-<span class="status-dot is-{{ kind }}" aria-hidden="true"></span>{{ value or '-' }}
+<span class="status-label"><span class="status-dot is-{{ kind }}" aria-hidden="true"></span>{{ value or '-' }}</span>
 {%- endmacro %}
 
 {% macro csrf() -%}
