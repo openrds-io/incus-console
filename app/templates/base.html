@@ -4,15 +4,15 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{% block title %}{% endblock %} | Incus Console</title>
-  <link rel="icon" type="image/png" sizes="32x32" href="{{ url_for('static', filename='img/favicon-32x32.png') }}">
+  <link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='img/logo.svg') }}">
   <link rel="stylesheet" href="{{ url_for('static', filename='vendor/vanilla-framework-4.61.0.min.css') }}">
   <link rel="stylesheet" href="{{ url_for('static', filename='css/app.css') }}">
 </head>
 <body>
 {% macro logo() %}
-<a class="p-panel__logo" href="{{ url_for('servers.home') }}">
-  <img class="p-panel__logo-image" src="{{ url_for('static', filename='img/incus-logo.svg') }}" alt="Incus Console logo" width="39" height="36">
-  <div class="logo-text p-heading--4">Incus Console</div>
+<a class="brand" href="{{ url_for('servers.home') }}" aria-label="Incus Console home">
+  <img class="brand__mark" src="{{ url_for('static', filename='img/logo.svg') }}" alt="" height="32">
+  <span class="brand__name">Incus Console</span>
 </a>
 {% endmacro %}
 {% set here = request.endpoint or '' %}

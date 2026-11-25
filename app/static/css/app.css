@@ -1,15 +1,13 @@
-/* Additions to Vanilla Framework (static/vendor/) for this console.
+/* SPDX-License-Identifier: Apache-2.0
+   Styles for incus-console on top of Vanilla Framework (static/vendor/). */
 
-   The fonts and the logo rules follow incus-ui-canonical (src/sass/_settings.scss
-   and _pattern_navigation.scss); see NOTICE.md. */
-
-/* Local fonts first, like incus-ui-canonical: nothing is fetched from a CDN. */
+/* Fonts installed on the machine; nothing is fetched from a CDN. */
 body,
 button,
 input,
 select,
 textarea {
-  font-family: "Ubuntu Sans", "Ubuntu", "Cantarell", system-ui, -apple-system, "Segoe UI", sans-serif;
+  font-family: system-ui, -apple-system, "Segoe UI", "Ubuntu Sans", Cantarell, sans-serif;
 }
 code,
 pre,
@@ -47,36 +45,29 @@ label code {
   font-family: "Ubuntu Sans Mono", "Ubuntu Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
 }
 
-/* Logo in the navigation panel. */
-.p-panel__logo {
-  padding-top: 0.5rem;
-  display: flex;
+/* Product mark and name at the top of the navigation. */
+.brand {
+  display: inline-flex;
   align-items: center;
-  gap: 0.75rem;
-  margin-top: 0;
-  text-decoration: none;
-}
-.p-panel__logo:hover {
-  text-decoration: none;
-}
-.p-panel__logo-image {
-  height: 36px;
-  width: auto;
-  margin-top: 2px;
-}
-.p-panel__logo .logo-text {
-  margin: 0;
-  padding: 0;
+  gap: 0.6rem;
+  padding: 0.6rem 0;
   color: #fff;
+  font-size: 1.25rem;
+  font-weight: 550;
+  text-decoration: none;
+}
+.brand:hover,
+.brand:visited {
+  color: #fff;
+  text-decoration: none;
+}
+.brand__mark {
+  flex: none;
+  width: auto;
+  height: 32px;
+}
+.brand__name {
   white-space: nowrap;
-}
-.l-navigation.is-collapsed .logo-text {
-  display: none;
-}
-@media (min-width: 620px) {
-  .l-navigation.is-collapsed .logo-text {
-    display: block;
-  }
 }
 
 /* Project picker at the top of the navigation. */
@@ -131,7 +122,7 @@ label code {
   align-items: center;
 }
 
-/* Status dots, like incus-ui-canonical's status icons. */
+/* Status dots next to instance states. */
 .status-dot,
 .title-status.has-dot::before {
   display: inline-block;
@@ -278,7 +269,7 @@ label code {
   gap: 0.75rem;
 }
 
-/* Footer with the version, like incus-ui-canonical's status bar. */
+/* Footer with the version. */
 .status-bar {
   padding: 0.5rem 1.5rem;
   border-top: 1px solid #d9d9d9;

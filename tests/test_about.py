@@ -36,7 +36,7 @@ def test_desktop_about(browser, sid):
     assert "Desktop" in page and "Signed in as" not in page
     assert "6.0" in page  # the fake server's Incus version
     assert "Database" in page  # the single desktop user sees installation details
-    assert "GNU General Public License v3.0 only" in page
+    assert "Apache License 2.0" in page
     assert f"Version {build()['label']}" in text(browser.get("/servers"))
 
 

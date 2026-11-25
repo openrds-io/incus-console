@@ -1,7 +1,7 @@
 """Projects: create, configure (features, limits, restrictions), rename, delete.
 
-The form follows incus-ui-canonical's project form: details and features,
-resource limits, and restrictions.
+The form has three parts: details and features, resource limits, and
+restrictions.
 """
 
 from __future__ import annotations

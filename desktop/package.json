@@ -3,7 +3,7 @@
   "productName": "Incus Console",
   "version": "26.11.1",
   "description": "Desktop app for incus-console: a lean console for Incus",
-  "license": "GPL-3.0-only",
+  "license": "Apache-2.0",
   "author": "OpenRDS",
   "homepage": "https://github.com/openrds-io/incus-console",
   "private": true,
