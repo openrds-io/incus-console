@@ -12,7 +12,7 @@ List every file brought in from another project here.
 
 | Path | Origin | License | Modified |
 | ---- | ------ | ------- | -------- |
-| `app/static/img/logo.svg` | [lxc/incus-ui](https://github.com/lxc/incus-ui) `src/assets/logo.svg`, Copyright Contributors to Incus UI | Apache-2.0 | No |
+| `app/static/img/logo.svg` | [lxc/incus-ui](https://github.com/lxc/incus-ui) `src/assets/logo.svg`, Copyright 2026 LinuxContainers contributors | Apache-2.0 | No |
 | `desktop/build/icon.png` | rendered from `app/static/img/logo.svg` above | Apache-2.0 | Yes: drawn at 1024 pixels |
 | `app/static/vendor/vanilla-framework-4.61.0.min.css` | Canonical's [Vanilla Framework](https://github.com/canonical/vanilla-framework) 4.61.0, compiled from its npm package with Sass (steps in `README.md`) | LGPL-3.0 | Yes: its three `@font-face` rules that load fonts from assets.ubuntu.com removed |
 | `app/static/vendor/xterm/` | [xterm.js](https://github.com/xtermjs/xterm.js) 5.5.0 and its fit addon 0.10.0, copied from npm by `desktop/scripts/vendor-xterm.mjs` | MIT (`app/static/vendor/xterm/LICENSE`) | No |

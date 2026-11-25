@@ -5,10 +5,11 @@ path = "**"
 SPDX-FileCopyrightText = "2026 Contributors to Incus Console"
 SPDX-License-Identifier = "Apache-2.0"
 
+# app/static/img/logo.svg carries its own SPDX header; the icon is drawn from it.
 [[annotations]]
-path = ["app/static/img/logo.svg", "desktop/build/icon.png"]
+path = "desktop/build/icon.png"
 precedence = "override"
-SPDX-FileCopyrightText = "Contributors to Incus UI"
+SPDX-FileCopyrightText = "2026 LinuxContainers contributors"
 SPDX-License-Identifier = "Apache-2.0"
 
 [[annotations]]
