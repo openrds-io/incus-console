@@ -1,6 +1,6 @@
-"""incus-console: a lean web and desktop console for Incus.
+"""Incus Console: a lean web and desktop console for Incus.
 
-Same stack as openrds-io/ui: Flask, server-rendered Jinja2, pytest.
+Flask, server-rendered Jinja2, pytest.
 `flask run` finds this package by its name.
 """
 
