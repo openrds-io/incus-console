@@ -1,15 +1,16 @@
 {% extends "base.html" %}
+{% from "macros.html" import crumbs %}
 {% block title %}Terminal - {{ instance.name }}{% endblock %}
+{% block heading %}{{ crumbs([('Instances', url_for('srv.instances')), (instance.name, url_for('srv.instance', name=instance.name)), ('Terminal', None)]) }} <span id="term-state" class="title-status" role="status">Connecting</span>{% endblock %}
+{% block controls %}
+<button type="button" id="term-again" class="p-button is-dense u-no-margin--bottom" hidden>Reconnect</button>
+{% endblock %}
 {% block content %}
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@xterm/xterm@5.5.0/css/xterm.css">
-<p class="breadcrumb"><a href="{{ url_for('srv.instances') }}">Instances</a> / <a href="{{ url_for('srv.instance', name=instance.name) }}">{{ instance.name }}</a> /</p>
-<div class="heading">
-  <h1>Terminal <span id="term-state" class="badge" role="status">Connecting</span></h1>
-  <button type="button" id="term-again" class="btn btn-small" hidden>Reconnect</button>
-  <a class="btn btn-small" href="{{ url_for('srv.instance', name=instance.name) }}">Back to {{ instance.name }}</a>
-</div>
 {% if instance.status != 'Running' %}
-<p class="flash flash-info">{{ instance.name }} is {{ instance.status|lower }}. Start it to open a terminal.</p>
+<div class="p-notification--information">
+  <div class="p-notification__content"><p class="p-notification__message">{{ instance.name }} is {{ instance.status|lower }}. Start it to open a terminal.</p></div>
+</div>
 {% else %}
 <div id="term" class="terminal" data-ws="{{ ws_path }}" aria-label="Terminal for {{ instance.name }}"></div>
 <script src="https://cdn.jsdelivr.net/npm/@xterm/xterm@5.5.0/lib/xterm.js" defer></script>

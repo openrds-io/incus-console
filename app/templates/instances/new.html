@@ -1,29 +1,37 @@
 {% extends "base.html" %}
+{% from "macros.html" import crumbs, csrf %}
 {% block title %}Create container{% endblock %}
+{% block heading %}{{ crumbs([('Instances', url_for('srv.instances')), ('Create container', None)]) }}{% endblock %}
 {% block content %}
-<h1>Create container</h1>
-<form class="card form" method="post">
-  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-  <label>Name <input name="name" value="{{ form.get('name', '') }}" required autofocus pattern="[A-Za-z][A-Za-z0-9\-]*" title="Letters, digits and dashes, starting with a letter"></label>
-  <label>Description <input name="description" value="{{ form.get('description', '') }}"></label>
+<form class="narrow-form" method="post">
+  {{ csrf() }}
+  <label for="name">Name</label>
+  <input type="text" id="name" name="name" value="{{ form.get('name', '') }}" required autofocus pattern="[A-Za-z][A-Za-z0-9\-]*" title="Letters, digits and dashes, starting with a letter">
+  <label for="description">Description</label>
+  <input type="text" id="description" name="description" value="{{ form.get('description', '') }}">
 
   <fieldset>
     <legend>Image</legend>
-    <label class="check"><input type="radio" name="source" value="remote"{% if form.get('source', 'remote') == 'remote' %} checked{% endif %}> From an image server</label>
+    <label class="p-radio">
+      <input type="radio" class="p-radio__input" name="source" value="remote"{% if form.get('source', 'remote') == 'remote' %} checked{% endif %}>
+      <span class="p-radio__label">From an image server</span>
+    </label>
     <div class="row">
-      <label>Alias <input name="alias" list="aliases" value="{{ form.get('alias', suggestions[0]) }}"></label>
-      <label>Image server <input name="image_server" value="{{ form.get('image_server', image_server) }}"></label>
+      <div class="col-4"><label for="alias">Alias</label><input type="text" id="alias" name="alias" list="aliases" value="{{ form.get('alias', suggestions[0]) }}"></div>
+      <div class="col-4"><label for="image_server">Image server</label><input type="text" id="image_server" name="image_server" value="{{ form.get('image_server', image_server) }}"></div>
     </div>
     <datalist id="aliases">{% for alias in suggestions %}<option value="{{ alias }}">{% endfor %}</datalist>
     {% if images %}
-    <label class="check"><input type="radio" name="source" value="local"{% if form.get('source') == 'local' %} checked{% endif %}> Already on this server</label>
-    <label>Local image
-      <select name="fingerprint">
-        {% for image in images %}
-        <option value="{{ image.fingerprint }}">{{ (image.properties or {}).get('description') or image.fingerprint[:12] }} ({{ image.type }})</option>
-        {% endfor %}
-      </select>
+    <label class="p-radio">
+      <input type="radio" class="p-radio__input" name="source" value="local"{% if form.get('source') == 'local' %} checked{% endif %}>
+      <span class="p-radio__label">Already on this server</span>
     </label>
+    <label for="fingerprint">Local image</label>
+    <select id="fingerprint" name="fingerprint">
+      {% for image in images %}
+      <option value="{{ image.fingerprint }}">{{ (image.properties or {}).get('description') or image.fingerprint[:12] }} ({{ image.type }})</option>
+      {% endfor %}
+    </select>
     {% endif %}
   </fieldset>
 
@@ -31,22 +39,28 @@
     <legend>Profiles</legend>
     {% set chosen = form.getlist('profiles') or ['default'] %}
     {% for profile in profiles %}
-    <label class="check"><input type="checkbox" name="profiles" value="{{ profile }}"{% if profile in chosen %} checked{% endif %}> {{ profile }}</label>
+    <label class="p-checkbox">
+      <input type="checkbox" class="p-checkbox__input" name="profiles" value="{{ profile }}"{% if profile in chosen %} checked{% endif %}>
+      <span class="p-checkbox__label">{{ profile }}</span>
+    </label>
     {% endfor %}
   </fieldset>
 
   <fieldset>
     <legend>Limits</legend>
     <div class="row">
-      <label>CPUs <input name="cpu" value="{{ form.get('cpu', '') }}" placeholder="No limit"></label>
-      <label>Memory <input name="memory" value="{{ form.get('memory', '') }}" placeholder="No limit, e.g. 2GiB"></label>
+      <div class="col-4"><label for="cpu">CPUs</label><input type="text" id="cpu" name="cpu" value="{{ form.get('cpu', '') }}" placeholder="No limit"></div>
+      <div class="col-4"><label for="memory">Memory</label><input type="text" id="memory" name="memory" value="{{ form.get('memory', '') }}" placeholder="No limit, e.g. 2GiB"></div>
     </div>
   </fieldset>
 
-  <label class="check"><input type="checkbox" name="start" value="1" checked> Start after creating</label>
-  <div class="button-row">
-    <button class="btn btn-primary">Create</button>
-    <a class="btn btn-quiet" href="{{ url_for('srv.instances') }}">Cancel</a>
+  <label class="p-checkbox">
+    <input type="checkbox" class="p-checkbox__input" name="start" value="1" checked>
+    <span class="p-checkbox__label">Start after creating</span>
+  </label>
+  <div class="form-buttons">
+    <a class="p-button--base" href="{{ url_for('srv.instances') }}">Cancel</a>
+    <button class="p-button--positive">Create</button>
   </div>
 </form>
 {% endblock %}

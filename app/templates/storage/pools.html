@@ -1,24 +1,24 @@
 {% extends "base.html" %}
-{% block title %}Storage{% endblock %}
+{% from "macros.html" import status, empty %}
+{% block title %}Storage pools{% endblock %}
 {% block content %}
-<h1>Storage pools</h1>
 {% if pools %}
-<table class="list">
-  <thead><tr><th>Name</th><th>Driver</th><th>Status</th><th>Description</th><th>Used by</th><th></th></tr></thead>
+<table aria-label="Storage pools">
+  <thead><tr><th>Name</th><th>Driver</th><th>Description</th><th>Used by</th><th>Status</th><th class="u-align--right">Actions</th></tr></thead>
   <tbody>
   {% for pool in pools %}
     <tr>
       <td>{{ pool.name }}</td>
       <td>{{ pool.driver }}</td>
-      <td>{{ pool.status or '-' }}</td>
-      <td>{{ pool.description or '-' }}</td>
+      <td>{{ pool.description or '' }}</td>
       <td>{{ (pool.used_by or [])|length }}</td>
-      <td class="actions"><a class="btn btn-small" href="{{ url_for('srv.buckets', pool=pool.name) }}">Buckets</a></td>
+      <td>{{ status(pool.status) }}</td>
+      <td class="u-align--right"><a class="p-button is-dense u-no-margin--bottom" href="{{ url_for('srv.buckets', pool=pool.name) }}">Buckets</a></td>
     </tr>
   {% endfor %}
   </tbody>
 </table>
 {% else %}
-<p class="empty">No storage pools.</p>
+{{ empty("No storage pools.") }}
 {% endif %}
 {% endblock %}

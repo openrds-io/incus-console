@@ -1,20 +1,19 @@
 {% extends "base.html" %}
+{% from "macros.html" import csrf, empty %}
 {% block title %}Servers{% endblock %}
 {% block content %}
-<h1>Servers</h1>
 {% if servers %}
-<table class="list">
-  <thead><tr><th>Name</th><th>Connection</th><th>Address</th><th></th></tr></thead>
+<table aria-label="Servers">
+  <thead><tr><th>Name</th><th>Connection</th><th>Address</th><th class="u-align--right">Actions</th></tr></thead>
   <tbody>
   {% for s in servers %}
     <tr>
       <td><a href="{{ url_for('srv.instances', sid=s.id) }}">{{ s.name }}</a></td>
       <td>{{ 'Local socket' if s.kind == 'unix' else 'HTTPS' }}</td>
       <td><code>{{ s.address }}</code></td>
-      <td class="actions">
-        <form method="post" action="{{ url_for('servers.delete', server_id=s.id) }}" data-confirm="Remove {{ s.name }} from this console?">
-          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-          <button class="btn btn-small btn-danger">Remove</button>
+      <td class="u-align--right">
+        <form class="inline" method="post" action="{{ url_for('servers.delete', server_id=s.id) }}" data-confirm="Remove {{ s.name }} from this console?">
+          {{ csrf() }}<button class="p-button--negative is-dense u-no-margin--bottom">Remove</button>
         </form>
       </td>
     </tr>
@@ -22,53 +21,71 @@
   </tbody>
 </table>
 {% else %}
-<p class="empty">No servers yet. Add one below.</p>
+{{ empty("No servers yet. Add one below.") }}
 {% endif %}
 
 {% if detected %}
-<h2>Found on this machine</h2>
-{% for socket in detected %}
-<form class="inline-row" method="post" action="{{ url_for('servers.add') }}">
-  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-  <input type="hidden" name="kind" value="unix">
-  <input type="hidden" name="address" value="{{ socket.path }}">
-  <code>{{ socket.path }}</code>
-  <input name="name" value="{{ socket.name }}" aria-label="Name" required>
-  <button class="btn btn-primary">Add</button>
-</form>
-{% endfor %}
+<h2 class="p-heading--4">Found on this machine</h2>
+<table aria-label="Detected sockets">
+  <tbody>
+  {% for socket in detected %}
+    <tr>
+      <td><code>{{ socket.path }}</code></td>
+      <td>
+        <form class="inline-form" method="post" action="{{ url_for('servers.add') }}">
+          {{ csrf() }}
+          <input type="hidden" name="kind" value="unix">
+          <input type="hidden" name="address" value="{{ socket.path }}">
+          <input type="text" name="name" value="{{ socket.name }}" aria-label="Name" required>
+          <button class="p-button--positive">Add</button>
+        </form>
+      </td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
 {% endif %}
 
-<h2>Add a server</h2>
-<div class="cards">
-  <form class="card" method="post" action="{{ url_for('servers.add') }}">
-    <h3>Remote, with a trust token</h3>
-    <p class="hint">On the server run <code>incus config trust add incus-console</code> and paste the token it prints.</p>
-    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-    <input type="hidden" name="kind" value="token">
-    <label>Name <input name="name" placeholder="Optional"></label>
-    <label>Token <textarea name="token" rows="4" required></textarea></label>
-    <button class="btn btn-primary">Add server</button>
-  </form>
-  <form class="card" method="post" action="{{ url_for('servers.add') }}">
-    <h3>Local socket</h3>
-    <p class="hint">Linux: <code>/var/lib/incus/unix.socket</code> (the account running this console needs the <code>incus-admin</code> group). Colima: <code>~/.colima/&lt;profile&gt;/incus.sock</code>.</p>
-    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-    <input type="hidden" name="kind" value="unix">
-    <label>Name <input name="name" placeholder="Local"></label>
-    <label>Socket path <input name="address" placeholder="/var/lib/incus/unix.socket" required></label>
-    <button class="btn btn-primary">Add server</button>
-  </form>
-  <form class="card" method="post" action="{{ url_for('servers.add') }}">
-    <h3>Remote, already trusted</h3>
-    <p class="hint">For a server that already trusts this console's certificate.</p>
-    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-    <input type="hidden" name="kind" value="https">
-    <label>Name <input name="name" placeholder="Optional"></label>
-    <label>Address <input name="address" placeholder="https://host:8443" required></label>
-    <label>Server certificate fingerprint (SHA-256) <input name="fingerprint" placeholder="Empty for a public certificate"></label>
-    <button class="btn btn-primary">Add server</button>
-  </form>
+<h2 class="p-heading--4">Add a server</h2>
+<div class="row">
+  <div class="col-4">
+    <form class="p-card" method="post" action="{{ url_for('servers.add') }}">
+      <h3 class="p-heading--5">Remote, with a trust token</h3>
+      <p class="p-form-help-text">On the server run <code>incus config trust add incus-console</code> and paste the token it prints.</p>
+      {{ csrf() }}<input type="hidden" name="kind" value="token">
+      <label for="token-name">Name</label>
+      <input type="text" id="token-name" name="name" placeholder="Optional">
+      <label for="token">Token</label>
+      <textarea id="token" name="token" rows="4" required></textarea>
+      <button class="p-button--positive u-no-margin--bottom">Add server</button>
+    </form>
+  </div>
+  <div class="col-4">
+    <form class="p-card" method="post" action="{{ url_for('servers.add') }}">
+      <h3 class="p-heading--5">Local socket</h3>
+      <p class="p-form-help-text">Linux: <code>/var/lib/incus/unix.socket</code> (the account running this console needs the <code>incus-admin</code> group). Colima: <code>~/.colima/&lt;profile&gt;/incus.sock</code>.</p>
+      {{ csrf() }}<input type="hidden" name="kind" value="unix">
+      <label for="socket-name">Name</label>
+      <input type="text" id="socket-name" name="name" placeholder="Local">
+      <label for="socket-path">Socket path</label>
+      <input type="text" id="socket-path" name="address" placeholder="/var/lib/incus/unix.socket" required>
+      <button class="p-button--positive u-no-margin--bottom">Add server</button>
+    </form>
+  </div>
+  <div class="col-4">
+    <form class="p-card" method="post" action="{{ url_for('servers.add') }}">
+      <h3 class="p-heading--5">Remote, already trusted</h3>
+      <p class="p-form-help-text">For a server that already trusts this console's certificate.</p>
+      {{ csrf() }}<input type="hidden" name="kind" value="https">
+      <label for="https-name">Name</label>
+      <input type="text" id="https-name" name="name" placeholder="Optional">
+      <label for="https-address">Address</label>
+      <input type="text" id="https-address" name="address" placeholder="https://host:8443" required>
+      <label for="https-fingerprint">Server certificate fingerprint (SHA-256)</label>
+      <input type="text" id="https-fingerprint" name="fingerprint" placeholder="Empty for a public certificate">
+      <button class="p-button--positive u-no-margin--bottom">Add server</button>
+    </form>
+  </div>
 </div>
-<p class="hint">This console's client certificate fingerprint: <code>{{ client_fingerprint }}</code></p>
+<p class="p-text--small u-text--muted">This console's client certificate fingerprint: <code>{{ client_fingerprint }}</code></p>
 {% endblock %}

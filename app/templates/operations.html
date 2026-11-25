@@ -1,22 +1,21 @@
 {% extends "base.html" %}
+{% from "macros.html" import status, csrf, empty %}
 {% block title %}Operations{% endblock %}
 {% block content %}
-<h1>Operations</h1>
 {% if operations %}
-<table class="list">
-  <thead><tr><th>Started</th><th>Action</th><th>Status</th><th>Detail</th><th></th></tr></thead>
+<table aria-label="Operations">
+  <thead><tr><th>Started</th><th>Action</th><th>Detail</th><th>Status</th><th class="u-align--right">Actions</th></tr></thead>
   <tbody>
   {% for op in operations %}
     <tr>
       <td>{{ op.created_at|when }}</td>
       <td>{{ op.description or op.class }}</td>
-      <td><span class="badge status-{{ op.status|lower }}">{{ op.status }}</span></td>
       <td>{{ op.err or '' }}</td>
-      <td class="actions">
+      <td>{{ status(op.status) }}</td>
+      <td class="u-align--right">
         {% if op.may_cancel and op.status == 'Running' %}
-        <form method="post" action="{{ url_for('srv.operation_cancel', op_id=op.id) }}">
-          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-          <button class="btn btn-small">Cancel</button>
+        <form class="inline" method="post" action="{{ url_for('srv.operation_cancel', op_id=op.id) }}">
+          {{ csrf() }}<button class="p-button is-dense u-no-margin--bottom">Cancel</button>
         </form>
         {% endif %}
       </td>
@@ -25,6 +24,6 @@
   </tbody>
 </table>
 {% else %}
-<p class="empty">No running or recent operations.</p>
+{{ empty("No running or recent operations.") }}
 {% endif %}
 {% endblock %}

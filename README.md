@@ -85,6 +85,27 @@ location / {
 }
 ```
 
+## Look and feel
+
+The pages use Canonical's Vanilla Framework, as incus-ui-canonical does, with
+the Incus logo from that project (see `NOTICE.md`). The compiled CSS is checked
+in at `app/static/vendor/`. To rebuild it (Node needed):
+
+```bash
+mkdir -p /tmp/vanilla-build && cd /tmp/vanilla-build
+npm init -y >/dev/null
+npm install --no-save vanilla-framework@4.61.0 sass@1.97.2
+printf '@import "vanilla-framework";\n@include vanilla;\n' > vanilla.scss
+npx sass --load-path=node_modules --style=compressed --no-source-map --quiet-deps \
+  vanilla.scss vanilla.css
+# Drop the @font-face rules that load fonts from assets.ubuntu.com; app.css
+# uses local fonts first, like incus-ui-canonical.
+python3 -c "import re,sys; p=sys.argv[1]; s=open(p,encoding='utf-8-sig').read(); open(p,'w').write(re.sub(r'@font-face\{[^}]*assets\.ubuntu\.com[^}]*\}','',s))" vanilla.css
+cp vanilla.css <repo>/app/static/vendor/vanilla-framework-4.61.0.min.css
+```
+
+`app/static/css/app.css` holds this console's own additions.
+
 ## Configuration
 
 Defaults are in `app/config.py`. Override them in

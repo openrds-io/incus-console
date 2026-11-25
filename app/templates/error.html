@@ -1,7 +1,9 @@
 {% extends "base.html" %}
-{% block title %}Problem{% endblock %}
+{% block title %}{% if error.status == 0 %}Cannot reach the server{% else %}Incus reported a problem{% endif %}{% endblock %}
 {% block content %}
-<h1>{% if error.status == 0 %}Cannot reach the server{% else %}Incus reported a problem{% endif %}</h1>
-<p class="flash flash-error">{{ error.message }}</p>
-<p><a class="btn" href="{{ path }}">Try again</a> <a class="btn btn-quiet" href="{{ url_for('servers.index') }}">Servers</a></p>
+<div class="p-notification--negative">
+  <div class="p-notification__content"><p class="p-notification__message">{{ error.message }}</p></div>
+</div>
+<a class="p-button" href="{{ path }}">Try again</a>
+<a class="p-button--base" href="{{ url_for('servers.index') }}">Servers</a>
 {% endblock %}

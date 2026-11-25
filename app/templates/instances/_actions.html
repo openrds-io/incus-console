@@ -1,19 +1,19 @@
 {% macro actions(instance, back) %}
 {% set status = instance.status %}
-<form class="button-row" method="post" action="{{ url_for('srv.instance_action', name=instance.name) }}">
+<form class="inline" method="post" action="{{ url_for('srv.instance_action', name=instance.name) }}">
   <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
   <input type="hidden" name="back" value="{{ back }}">
   {% if status == 'Stopped' %}
-  <button class="btn btn-small" name="action" value="start">Start</button>
+  <button class="p-button is-dense u-no-margin--bottom" name="action" value="start">Start</button>
   {% elif status == 'Frozen' %}
-  <button class="btn btn-small" name="action" value="unfreeze">Resume</button>
+  <button class="p-button is-dense u-no-margin--bottom" name="action" value="unfreeze">Resume</button>
   {% else %}
   {% if status == 'Running' and instance.type == 'container' %}
-  <a class="btn btn-small" href="{{ url_for('srv.instance_terminal', name=instance.name) }}">Terminal</a>
+  <a class="p-button is-dense u-no-margin--bottom" href="{{ url_for('srv.instance_terminal', name=instance.name) }}">Terminal</a>
   {% endif %}
-  <button class="btn btn-small" name="action" value="restart">Restart</button>
-  <button class="btn btn-small" name="action" value="freeze">Freeze</button>
-  <button class="btn btn-small" name="action" value="stop">Stop</button>
+  <button class="p-button is-dense u-no-margin--bottom" name="action" value="restart">Restart</button>
+  <button class="p-button is-dense u-no-margin--bottom" name="action" value="freeze">Freeze</button>
+  <button class="p-button is-dense u-no-margin--bottom" name="action" value="stop">Stop</button>
   {% endif %}
 </form>
 {% endmacro %}

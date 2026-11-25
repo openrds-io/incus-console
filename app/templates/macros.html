@@ -1,0 +1,25 @@
+{# Small pieces shared by several pages. #}
+
+{% macro status(value) -%}
+{%- set kind = {
+  'running': 'positive', 'success': 'positive', 'created': 'positive',
+  'frozen': 'caution', 'pending': 'caution', 'cancelling': 'caution',
+  'error': 'negative', 'failure': 'negative', 'cancelled': 'negative',
+}.get((value or '')|lower, 'neutral') -%}
+<span class="status-dot is-{{ kind }}" aria-hidden="true"></span>{{ value or '-' }}
+{%- endmacro %}
+
+{% macro csrf() -%}
+<input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+{%- endmacro %}
+
+{% macro crumbs(items) -%}
+{# items: [(label, href or None)]; the last is the page itself. #}
+{%- for label, href in items -%}
+{%- if href %}<a class="p-panel__title-link" href="{{ href }}">{{ label }}</a><span class="crumb-sep" aria-hidden="true">›</span>{% else %}{{ label }}{% endif -%}
+{%- endfor -%}
+{%- endmacro %}
+
+{% macro empty(text) -%}
+<p class="u-text--muted empty-state">{{ text }}</p>
+{%- endmacro %}

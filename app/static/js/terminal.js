@@ -9,7 +9,7 @@
   if (!el) return;
   if (!window.Terminal || !window.FitAddon) {
     state.textContent = "Terminal files did not load";
-    state.className = "badge status-error";
+    state.className = "title-status has-dot is-negative";
     return;
   }
 
@@ -28,7 +28,7 @@
 
   const show = (text, kind) => {
     state.textContent = text;
-    state.className = "badge" + (kind ? " status-" + kind : "");
+    state.className = "title-status has-dot is-" + (kind || "neutral");
   };
   const send = (message) => {
     if (socket && socket.readyState === WebSocket.OPEN) socket.send(JSON.stringify(message));
@@ -36,14 +36,14 @@
 
   function connect() {
     again.hidden = true;
-    show("Connecting", "pending");
+    show("Connecting", "caution");
     const scheme = location.protocol === "https:" ? "wss://" : "ws://";
     const query = "?cols=" + term.cols + "&rows=" + term.rows;
     let ended = false;
     socket = new WebSocket(scheme + location.host + el.dataset.ws + query);
     socket.binaryType = "arraybuffer";
     socket.onopen = () => {
-      show("Connected", "running");
+      show("Connected", "positive");
       term.focus();
     };
     socket.onmessage = (event) => {
@@ -59,18 +59,18 @@
       }
       if (message.t === "x") {
         ended = true;
-        show("Session ended", "");
+        show("Session ended", "neutral");
         term.write("\r\n[session ended]\r\n");
       }
       if (message.t === "e") {
         ended = true;
-        show("Could not connect", "error");
+        show("Could not connect", "negative");
         term.write("\r\n" + message.m + "\r\n");
       }
     };
     socket.onclose = () => {
       if (!ended) {
-        show("Disconnected", "error");
+        show("Disconnected", "negative");
         term.write("\r\n[disconnected]\r\n");
       }
       again.hidden = false;

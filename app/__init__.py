@@ -77,8 +77,9 @@ def create_app(test_config: dict | None = None) -> Flask:
     def _security_headers(response):
         # xterm.js comes from jsDelivr and styles itself at run time; the terminal's
         # websocket goes back to this host.
+        # Vanilla draws its icons as data: images.
         policy = (
-            f"default-src 'self'; script-src 'self' {XTERM_CDN}; "
+            f"default-src 'self'; img-src 'self' data:; script-src 'self' {XTERM_CDN}; "
             f"style-src 'self' 'unsafe-inline' {XTERM_CDN}"
         )
         if HOST.fullmatch(request.host):

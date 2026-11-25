@@ -13,10 +13,21 @@ document.addEventListener("change", (event) => {
 });
 
 document.addEventListener("click", (event) => {
-  const button = event.target.closest("[data-reveal]");
-  if (!button) return;
-  const secret = button.parentElement.querySelector(".secret");
-  const hidden = secret.textContent === "Hidden";
-  secret.textContent = hidden ? secret.dataset.secret : "Hidden";
-  button.textContent = hidden ? "Hide" : "Show";
+  const reveal = event.target.closest("[data-reveal]");
+  if (reveal) {
+    const secret = reveal.parentElement.querySelector(".secret");
+    const hidden = secret.textContent === "Hidden";
+    secret.textContent = hidden ? secret.dataset.secret : "Hidden";
+    reveal.textContent = hidden ? "Hide" : "Show";
+    return;
+  }
+  // The menu button on small screens opens and closes the side navigation.
+  if (event.target.closest(".js-menu-toggle")) {
+    document.querySelector(".l-navigation").classList.toggle("is-collapsed");
+  }
 });
+
+// On small screens the side navigation starts closed.
+if (window.matchMedia("(max-width: 619px)").matches) {
+  document.querySelector(".l-navigation")?.classList.add("is-collapsed");
+}

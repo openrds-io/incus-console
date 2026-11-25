@@ -1,16 +1,16 @@
 {% extends "base.html" %}
+{% from "macros.html" import crumbs, csrf, empty %}
 {% block title %}Buckets in {{ pool }}{% endblock %}
+{% block heading %}{{ crumbs([('Storage', url_for('srv.pools')), (pool, None), ('Buckets', None)]) }}{% endblock %}
 {% block content %}
-<p class="breadcrumb"><a href="{{ url_for('srv.pools') }}">Storage</a> / {{ pool }} /</p>
-<h1>Buckets</h1>
 {% if problem %}
-<p class="flash flash-error">{{ problem }}</p>
+<div class="p-notification--negative"><div class="p-notification__content"><p class="p-notification__message">{{ problem }}</p></div></div>
 {% endif %}
 {% if endpoint == '' %}
-<p class="flash flash-info">Buckets on local pools need an S3 address. Set one with <code>incus config set core.storage_buckets_address :8555</code>.</p>
+<div class="p-notification--caution"><div class="p-notification__content"><p class="p-notification__message">Buckets on local pools need an S3 address. Set one with <code>incus config set core.storage_buckets_address :8555</code>.</p></div></div>
 {% endif %}
 {% if buckets %}
-<table class="list">
+<table aria-label="Buckets">
   <thead><tr><th>Name</th><th>Size limit</th><th>S3 URL</th><th>Description</th></tr></thead>
   <tbody>
   {% for b in buckets %}
@@ -18,23 +18,24 @@
       <td><a href="{{ url_for('srv.bucket', pool=pool, bucket=b.name) }}">{{ b.name }}</a></td>
       <td>{{ (b.config or {}).get('size', '-') }}</td>
       <td>{% if b.s3_url %}<code>{{ b.s3_url }}</code>{% else %}-{% endif %}</td>
-      <td>{{ b.description or '-' }}</td>
+      <td>{{ b.description or '' }}</td>
     </tr>
   {% endfor %}
   </tbody>
 </table>
 {% elif not problem %}
-<p class="empty">No buckets in this pool.</p>
+{{ empty("No buckets in this pool.") }}
 {% endif %}
 
-<form class="card form" method="post">
-  <h2>Create bucket</h2>
-  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+<h2 class="p-heading--4">Create bucket</h2>
+<form class="narrow-form" method="post">
+  {{ csrf() }}
   <div class="row">
-    <label>Name <input name="name" required></label>
-    <label>Size limit <input name="size" placeholder="No limit, e.g. 10GiB"></label>
+    <div class="col-4"><label for="bucket-name">Name</label><input type="text" id="bucket-name" name="name" required></div>
+    <div class="col-4"><label for="bucket-size">Size limit</label><input type="text" id="bucket-size" name="size" placeholder="No limit, e.g. 10GiB"></div>
   </div>
-  <label>Description <input name="description"></label>
-  <button class="btn btn-primary">Create bucket</button>
+  <label for="bucket-description">Description</label>
+  <input type="text" id="bucket-description" name="description">
+  <button class="p-button--positive">Create bucket</button>
 </form>
 {% endblock %}

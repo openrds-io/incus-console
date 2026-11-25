@@ -1,97 +1,117 @@
 {% extends "base.html" %}
 {% from "instances/_actions.html" import actions %}
+{% from "macros.html" import status, crumbs, csrf, empty %}
 {% block title %}{{ instance.name }}{% endblock %}
+{% block heading %}{{ crumbs([('Instances', url_for('srv.instances')), (instance.name, None)]) }} <span class="title-status">{{ status(instance.status) }}</span>{% endblock %}
+{% block controls %}
+{{ actions(instance, 'detail') }}
+<a class="p-button is-dense u-no-margin--bottom" href="{{ url_for('srv.instance_edit', name=instance.name) }}">Edit configuration</a>
+<form class="inline" method="post" action="{{ url_for('srv.instance_delete', name=instance.name) }}" data-confirm="Delete {{ instance.name }} and its snapshots? This cannot be undone.">
+  {{ csrf() }}
+  <button class="p-button--negative is-dense u-no-margin--bottom"{% if instance.status != 'Stopped' %} disabled title="Stop it first"{% endif %}>Delete</button>
+</form>
+{% endblock %}
 {% block content %}
 {% set state = instance.state or {} %}
-<p class="breadcrumb"><a href="{{ url_for('srv.instances') }}">Instances</a> /</p>
-<div class="heading">
-  <h1>{{ instance.name }} <span class="badge status-{{ instance.status|lower }}">{{ instance.status }}</span></h1>
-  {{ actions(instance, 'detail') }}
-  <a class="btn btn-small" href="{{ url_for('srv.instance_edit', name=instance.name) }}">Edit configuration</a>
-  <form method="post" action="{{ url_for('srv.instance_delete', name=instance.name) }}" data-confirm="Delete {{ instance.name }} and its snapshots? This cannot be undone.">
-    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-    <button class="btn btn-small btn-danger"{% if instance.status != 'Stopped' %} disabled title="Stop it first"{% endif %}>Delete</button>
-  </form>
+<div class="row">
+  <div class="col-3"><h2 class="p-heading--5 section-heading">General</h2></div>
+  <div class="col-9">
+    <table class="facts" aria-label="General">
+      <tbody>
+        <tr><th>Type</th><td>{{ 'Virtual machine' if instance.type == 'virtual-machine' else 'System container' }}</td></tr>
+        <tr><th>Description</th><td>{{ instance.description or '-' }}</td></tr>
+        <tr><th>Image</th><td>{{ (instance.config or {}).get('image.description', '-') }}</td></tr>
+        <tr><th>Architecture</th><td>{{ instance.architecture or '-' }}</td></tr>
+        <tr><th>Profiles</th><td>{{ (instance.profiles or [])|join(', ') or '-' }}</td></tr>
+        <tr><th>Created</th><td>{{ instance.created_at|when }}</td></tr>
+        <tr><th>Last used</th><td>{{ instance.last_used_at|when }}</td></tr>
+      </tbody>
+    </table>
+  </div>
 </div>
-
-<section class="card">
-  <h2>Overview</h2>
-  <dl class="facts">
-    <dt>Type</dt><dd>{{ 'Virtual machine' if instance.type == 'virtual-machine' else 'System container' }}</dd>
-    <dt>Description</dt><dd>{{ instance.description or '-' }}</dd>
-    <dt>Image</dt><dd>{{ (instance.config or {}).get('image.description', '-') }}</dd>
-    <dt>Architecture</dt><dd>{{ instance.architecture or '-' }}</dd>
-    <dt>Profiles</dt><dd>{{ (instance.profiles or [])|join(', ') or '-' }}</dd>
-    <dt>Created</dt><dd>{{ instance.created_at|when }}</dd>
-    <dt>Last used</dt><dd>{{ instance.last_used_at|when }}</dd>
-    <dt>IPv4</dt><dd>{{ instance|addresses|join(', ') or '-' }}</dd>
-    <dt>IPv6</dt><dd>{{ instance|addresses('inet6')|join(', ') or '-' }}</dd>
-    <dt>Memory in use</dt><dd>{{ (state.memory or {}).usage|filesize }}</dd>
-    <dt>Processes</dt><dd>{{ state.processes if state.processes and state.processes > 0 else '-' }}</dd>
-  </dl>
-</section>
-
-<section class="card">
-  <h2>Snapshots</h2>
-  {% if instance.snapshots %}
-  <table class="list">
-    <thead><tr><th>Name</th><th>Created</th><th>Expires</th><th></th></tr></thead>
-    <tbody>
-    {% for snap in instance.snapshots %}
-      <tr>
-        <td>{{ snap.name }}</td>
-        <td>{{ snap.created_at|when }}</td>
-        <td>{{ snap.expires_at|when }}</td>
-        <td class="actions">
-          <form method="post" action="{{ url_for('srv.snapshot_restore', name=instance.name, snapshot=snap.name) }}" data-confirm="Restore {{ instance.name }} to {{ snap.name }}? Changes made since then are lost.">
-            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-            <button class="btn btn-small">Restore</button>
-          </form>
-          <form method="post" action="{{ url_for('srv.snapshot_delete', name=instance.name, snapshot=snap.name) }}" data-confirm="Delete snapshot {{ snap.name }}?">
-            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-            <button class="btn btn-small btn-danger">Delete</button>
-          </form>
-        </td>
-      </tr>
-    {% endfor %}
-    </tbody>
-  </table>
-  {% else %}
-  <p class="empty">No snapshots.</p>
-  {% endif %}
-  <form class="inline-row" method="post" action="{{ url_for('srv.snapshot_create', name=instance.name) }}">
-    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-    <input name="snapshot" placeholder="Snapshot name" aria-label="Snapshot name" required>
-    <button class="btn">Take snapshot</button>
-  </form>
-</section>
-
-<section class="card">
-  <h2>Configuration</h2>
-  <table class="list compact">
-    <thead><tr><th>Key</th><th>Value</th></tr></thead>
-    <tbody>
-    {% for key, value in (instance.expanded_config or instance.config or {})|dictsort if not key.startswith(('volatile.', 'image.')) %}
-      <tr><td><code>{{ key }}</code></td><td>{{ value }}</td></tr>
+<hr class="p-rule">
+<div class="row">
+  <div class="col-3"><h2 class="p-heading--5 section-heading">Usage</h2></div>
+  <div class="col-9">
+    <table class="facts" aria-label="Usage">
+      <tbody>
+        <tr><th>IPv4</th><td>{{ instance|addresses|join(', ') or '-' }}</td></tr>
+        <tr><th>IPv6</th><td>{{ instance|addresses('inet6')|join(', ') or '-' }}</td></tr>
+        <tr><th>Memory</th><td>{{ (state.memory or {}).usage|filesize }}</td></tr>
+        <tr><th>Processes</th><td>{{ state.processes if state.processes and state.processes > 0 else '-' }}</td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+<hr class="p-rule">
+<div class="row">
+  <div class="col-3"><h2 class="p-heading--5 section-heading">Snapshots</h2></div>
+  <div class="col-9">
+    {% if instance.snapshots %}
+    <table aria-label="Snapshots">
+      <thead><tr><th>Name</th><th>Created</th><th>Expires</th><th class="u-align--right">Actions</th></tr></thead>
+      <tbody>
+      {% for snap in instance.snapshots %}
+        <tr>
+          <td>{{ snap.name }}</td>
+          <td>{{ snap.created_at|when }}</td>
+          <td>{{ snap.expires_at|when }}</td>
+          <td class="u-align--right">
+            <form class="inline" method="post" action="{{ url_for('srv.snapshot_restore', name=instance.name, snapshot=snap.name) }}" data-confirm="Restore {{ instance.name }} to {{ snap.name }}? Changes made since then are lost.">
+              {{ csrf() }}<button class="p-button is-dense u-no-margin--bottom">Restore</button>
+            </form>
+            <form class="inline" method="post" action="{{ url_for('srv.snapshot_delete', name=instance.name, snapshot=snap.name) }}" data-confirm="Delete snapshot {{ snap.name }}?">
+              {{ csrf() }}<button class="p-button--negative is-dense u-no-margin--bottom">Delete</button>
+            </form>
+          </td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
     {% else %}
-      <tr><td colspan="2" class="empty">Nothing set beyond the defaults.</td></tr>
-    {% endfor %}
-    </tbody>
-  </table>
-  <h3>Devices</h3>
-  <table class="list compact">
-    <thead><tr><th>Name</th><th>Type</th><th>Settings</th></tr></thead>
-    <tbody>
-    {% for name, device in (instance.expanded_devices or instance.devices or {})|dictsort %}
-      <tr>
-        <td><code>{{ name }}</code></td>
-        <td>{{ device.type }}</td>
-        <td>{% for key, value in device|dictsort if key != 'type' %}<code>{{ key }}={{ value }}</code> {% endfor %}</td>
-      </tr>
-    {% else %}
-      <tr><td colspan="3" class="empty">No devices.</td></tr>
-    {% endfor %}
-    </tbody>
-  </table>
-</section>
+    {{ empty("No snapshots.") }}
+    {% endif %}
+    <form class="inline-form" method="post" action="{{ url_for('srv.snapshot_create', name=instance.name) }}">
+      {{ csrf() }}
+      <input type="text" name="snapshot" placeholder="Snapshot name" aria-label="Snapshot name" required>
+      <button class="p-button">Take snapshot</button>
+    </form>
+  </div>
+</div>
+<hr class="p-rule">
+<div class="row">
+  <div class="col-3"><h2 class="p-heading--5 section-heading">Configuration</h2></div>
+  <div class="col-9">
+    <table aria-label="Configuration">
+      <thead><tr><th>Key</th><th>Value</th></tr></thead>
+      <tbody>
+      {% for key, value in (instance.expanded_config or instance.config or {})|dictsort if not key.startswith(('volatile.', 'image.')) %}
+        <tr><td><code>{{ key }}</code></td><td>{{ value }}</td></tr>
+      {% else %}
+        <tr><td colspan="2" class="u-text--muted">Nothing set beyond the defaults.</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+<hr class="p-rule">
+<div class="row">
+  <div class="col-3"><h2 class="p-heading--5 section-heading">Devices</h2></div>
+  <div class="col-9">
+    <table aria-label="Devices">
+      <thead><tr><th>Name</th><th>Type</th><th>Settings</th></tr></thead>
+      <tbody>
+      {% for name, device in (instance.expanded_devices or instance.devices or {})|dictsort %}
+        <tr>
+          <td><code>{{ name }}</code></td>
+          <td>{{ device.type }}</td>
+          <td>{% for key, value in device|dictsort if key != 'type' %}<code>{{ key }}={{ value }}</code> {% endfor %}</td>
+        </tr>
+      {% else %}
+        <tr><td colspan="3" class="u-text--muted">No devices.</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
 {% endblock %}

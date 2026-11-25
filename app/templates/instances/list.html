@@ -1,29 +1,28 @@
 {% extends "base.html" %}
 {% from "instances/_actions.html" import actions %}
+{% from "macros.html" import status, empty %}
 {% block title %}Instances{% endblock %}
+{% block controls %}<a class="p-button--positive u-no-margin--bottom" href="{{ url_for('srv.instance_create') }}">Create container</a>{% endblock %}
 {% block content %}
-<div class="heading">
-  <h1>Instances</h1>
-  <a class="btn btn-primary" href="{{ url_for('srv.instance_create') }}">Create container</a>
-</div>
 {% if instances %}
-<table class="list">
-  <thead><tr><th>Name</th><th>Status</th><th>Type</th><th>IPv4</th><th>Image</th><th>Snapshots</th><th></th></tr></thead>
+<p class="u-text--muted">Showing all {{ instances|length }} instance{{ '' if instances|length == 1 else 's' }}</p>
+<table aria-label="Instances">
+  <thead><tr><th>Name</th><th>Type</th><th>Description</th><th>IPv4</th><th>Snapshots</th><th>Status</th><th class="u-align--right">Actions</th></tr></thead>
   <tbody>
   {% for i in instances %}
     <tr>
       <td><a href="{{ url_for('srv.instance', name=i.name) }}">{{ i.name }}</a></td>
-      <td><span class="badge status-{{ i.status|lower }}">{{ i.status }}</span></td>
       <td>{{ 'VM' if i.type == 'virtual-machine' else 'Container' }}</td>
-      <td>{{ i|addresses|join(', ') or '-' }}</td>
-      <td>{{ (i.config or {}).get('image.description', '-') }}</td>
+      <td>{{ i.description or (i.config or {}).get('image.description', '') }}</td>
+      <td>{{ i|addresses|join(', ') }}</td>
       <td>{{ (i.snapshots or [])|length }}</td>
-      <td class="actions">{{ actions(i, 'list') }}</td>
+      <td>{{ status(i.status) }}</td>
+      <td class="u-align--right">{{ actions(i, 'list') }}</td>
     </tr>
   {% endfor %}
   </tbody>
 </table>
 {% else %}
-<p class="empty">No instances in project {{ project }}.</p>
+{{ empty("No instances in project " ~ project ~ ".") }}
 {% endif %}
 {% endblock %}
