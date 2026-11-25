@@ -4,26 +4,35 @@ A web and desktop console for [Incus](https://linuxcontainers.org/incus/).
 It is a front end to the Incus REST API: a small Python 3.13 / Flask app that
 renders pages on the server and talks to Incus over a local unix socket or HTTPS.
 
-It covers much the same ground as the Incus web UIs.
-System containers come first, object storage second.
+It manages all three kinds of Incus instances: **system containers**,
+**virtual machines** and **OCI application containers**, side by side in one
+list and with the same pages. It also covers storage (including S3-compatible
+object storage), networks, profiles, images, projects, and users with roles.
 
 ## Status
 
-Early scaffold. Working today:
+Working today:
 
 - Servers: register a local socket, or a remote server with a trust token
-- System containers: list, create, start, stop, restart, freeze, delete,
-  rename, copy, snapshots (by hand or on a schedule, with expiry), logs (console and Incus log files), a settings form
-  for limits and common options, adding and removing devices, and full
-  configuration editing as YAML; creating from the image server's catalog,
-  with a storage pool and cloud-init user data
-- Virtual machines: create from the image server's VM images (or a local one)
-  with CPUs, memory, root disk size, Secure Boot and cloud-init; VM settings
-  (Secure Boot, legacy BIOS); a text console in the browser that works from
-  boot, without the Incus agent. Terminal and files work once the Incus agent
-  runs in the VM
-- Consoles: every running instance has a text console page beside its
-  terminal
+- Instances, whichever kind: list, start, stop, restart, freeze, delete,
+  rename, copy, snapshots (by hand or on a schedule, with expiry), logs
+  (console and Incus log files), a settings form for limits and common
+  options, adding and removing devices, full configuration editing as YAML,
+  and publishing a stopped instance as an image
+- Creating: one form with a tab per kind. Instances that wait on a large
+  image download show that they are working, and carry on under Operations
+  when they outlast the page
+- System containers: create from the image server's catalog, an alias or a
+  local image, with a storage pool and cloud-init user data; settings for
+  nesting, privileged mode and process limits
+- Virtual machines: first-class, next to containers. Create from the image
+  server's VM images (only those with a VM build for the server's CPU are
+  offered) or a local VM image, with CPUs, memory, root disk size, Secure Boot
+  and cloud-init; VM settings (CPUs, memory, Secure Boot, legacy BIOS,
+  autostart, scheduled snapshots); a text console that works from the first
+  line of boot, without the Incus agent; and, once the agent runs, a terminal
+  and the file browser just as for containers. Custom volumes attach to VMs,
+  and port forwards reach them
 - Application containers (OCI): create from Docker Hub, ghcr.io, quay.io or
   another registry (the Incus server pulls the image), with environment
   variables; the command, working directory, user and environment are
@@ -31,21 +40,25 @@ Early scaffold. Working today:
   hidden from Viewers and Operators, since they often hold passwords. Needs
   Incus 6.3 or later with `skopeo` and `umoci` on the Incus server; the console
   offers it only where the server supports it
-- Files: browse a container's folders, view and edit text files, download,
-  upload, create folders and delete
+- Consoles: a text console for every running instance (boot messages, then
+  the login prompt), opening with what the instance printed before you
+  attached
+- Terminal: a root shell in a running instance (xterm.js over a websocket);
+  in a VM it goes through the Incus agent
+- Files: browse an instance's folders, view and edit text files, download,
+  upload, create folders and delete (in a VM, through the Incus agent)
 - Profiles: list, create (empty or as a copy), settings form, devices, YAML,
   rename, delete
-- Images: list, details, aliases, delete, and publishing a stopped container as
-  an image
+- Images: list, details (container or VM image), aliases, delete, and
+  creating an instance of the right kind from an image
 - Networks: list, create bridges, settings, YAML, rename, delete, DHCP leases,
-  and port forwards from a host address to containers
+  and port forwards from a host address to instances
 - Volumes: custom storage volumes across pools; create, resize, rename, delete,
-  attach to and detach from containers, and snapshots (also scheduled)
+  attach to and detach from instances, and snapshots (also scheduled)
 - Object storage: storage pools; buckets across all pools or per pool;
   create (credentials shown once), edit size and description, delete; access
   keys with admin or read-only roles, custom or generated access and secret
   keys, edit and delete
-- Terminal: a root login shell in a running container (xterm.js over a websocket)
 - Operations: list and cancel; actions that outlast the page are watched in the
   background and their outcome is reported, even after Incus forgets them
 - Projects: list, create and configure (features, resource limits, restrictions),
