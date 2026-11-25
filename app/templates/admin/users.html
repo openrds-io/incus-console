@@ -10,7 +10,7 @@
     <tr>
       <td><a href="{{ url_for('admin.user', user_id=u.id) }}">{{ u.username }}</a>{% if u.id == g.user.id %} <span class="u-text--muted">(you)</span>{% endif %}</td>
       <td>{{ 'Console admin' if u.is_admin else 'User' }}</td>
-      <td>{% if u.is_admin %}Everything{% else %}{{ u.grant_count }} grant{{ '' if u.grant_count == 1 else 's' }}{% endif %}</td>
+      <td>{% if u.is_admin %}Everything{% else %}{{ u.grant_count }} grant{{ '' if u.grant_count == 1 else 's' }}{% if u.group_count %}, {{ u.group_count }} group{{ '' if u.group_count == 1 else 's' }}{% endif %}{% endif %}</td>
       <td>{{ 'Disabled' if u.disabled else 'Active' }}</td>
       <td>{{ u.created_at|when }}</td>
     </tr>

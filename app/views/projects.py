@@ -175,9 +175,14 @@ def _grants_follow(old: str, new: str | None) -> None:
     db = get_db()
     if new is None:
         db.execute("DELETE FROM grants WHERE server_id = ? AND project = ?", (g.sid, old))
+        db.execute("DELETE FROM group_grants WHERE server_id = ? AND project = ?", (g.sid, old))
     else:
         db.execute(
             "UPDATE OR REPLACE grants SET project = ? WHERE server_id = ? AND project = ?",
+            (new, g.sid, old),
+        )
+        db.execute(
+            "UPDATE OR REPLACE group_grants SET project = ? WHERE server_id = ? AND project = ?",
             (new, g.sid, old),
         )
     db.commit()

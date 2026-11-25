@@ -1,0 +1,16 @@
+{% extends "base.html" %}
+{% from "macros.html" import crumbs, csrf %}
+{% block title %}Create group{% endblock %}
+{% block heading %}{{ crumbs([('Groups', url_for('admin.groups')), ('Create group', None)]) }}{% endblock %}
+{% block content %}
+<form method="post" class="narrow-form">
+  {{ csrf() }}
+  <label for="name">Name</label>
+  <input type="text" id="name" name="name" value="{{ form.name or '' }}" autocomplete="off" required autofocus>
+  <label for="description">Description</label>
+  <input type="text" id="description" name="description" value="{{ form.description or '' }}">
+  <button class="p-button--positive">Create group</button>
+  <a class="p-button--base" href="{{ url_for('admin.groups') }}">Cancel</a>
+</form>
+<p class="u-text--muted">Add members and give the group access on the next page.</p>
+{% endblock %}

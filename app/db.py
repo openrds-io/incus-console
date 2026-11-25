@@ -44,6 +44,28 @@ CREATE TABLE IF NOT EXISTS grants (
     role TEXT NOT NULL CHECK (role IN ('viewer', 'operator', 'project_admin')),
     UNIQUE (user_id, server_id, project)
 );
+CREATE TABLE IF NOT EXISTS user_groups (
+    id INTEGER PRIMARY KEY,
+    name TEXT NOT NULL UNIQUE COLLATE NOCASE,
+    description TEXT NOT NULL DEFAULT '',
+    -- The identity provider's name for this group, for mapping at sign-in (unused yet).
+    external_name TEXT UNIQUE,
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+CREATE TABLE IF NOT EXISTS group_members (
+    group_id INTEGER NOT NULL REFERENCES user_groups (id) ON DELETE CASCADE,
+    user_id INTEGER NOT NULL REFERENCES users (id) ON DELETE CASCADE,
+    PRIMARY KEY (group_id, user_id)
+);
+CREATE INDEX IF NOT EXISTS group_members_user ON group_members (user_id);
+CREATE TABLE IF NOT EXISTS group_grants (
+    id INTEGER PRIMARY KEY,
+    group_id INTEGER NOT NULL REFERENCES user_groups (id) ON DELETE CASCADE,
+    server_id INTEGER NOT NULL REFERENCES servers (id) ON DELETE CASCADE,
+    project TEXT NOT NULL,
+    role TEXT NOT NULL CHECK (role IN ('viewer', 'operator', 'project_admin')),
+    UNIQUE (group_id, server_id, project)
+);
 CREATE TABLE IF NOT EXISTS user_certs (
     user_id INTEGER NOT NULL REFERENCES users (id) ON DELETE CASCADE,
     server_id INTEGER NOT NULL REFERENCES servers (id) ON DELETE CASCADE,
