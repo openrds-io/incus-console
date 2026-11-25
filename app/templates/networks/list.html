@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+{% from "macros.html" import status, empty %}
+{% block title %}Networks{% endblock %}
+{% block controls %}<a class="p-button--positive u-no-margin--bottom" href="{{ url_for('srv.network_create') }}">Create network</a>{% endblock %}
+{% block content %}
+{% if networks %}
+<table aria-label="Networks">
+  <thead><tr><th>Name</th><th>Type</th><th>Managed</th><th>IPv4</th><th>IPv6</th><th>Description</th><th>Used by</th><th>Status</th></tr></thead>
+  <tbody>
+  {% for n in networks %}
+    {% set cfg = n.config or {} %}
+    <tr>
+      <td><a href="{{ url_for('srv.network', name=n.name) }}">{{ n.name }}</a></td>
+      <td>{{ n.type }}</td>
+      <td>{{ 'Yes' if n.managed else 'No' }}</td>
+      <td>{{ cfg.get('ipv4.address', '') }}</td>
+      <td>{{ cfg.get('ipv6.address', '') }}</td>
+      <td>{{ n.description or '' }}</td>
+      <td>{{ n.users.instances|length }}</td>
+      <td>{{ status(n.status) if n.managed else '' }}</td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% else %}
+{{ empty("No networks.") }}
+{% endif %}
+{% endblock %}

@@ -1,26 +1,15 @@
 {% extends "base.html" %}
 {% from "macros.html" import crumbs as crumb_links, csrf %}
+{% from "config/_fields.html" import settings_inputs %}
 {% block title %}{{ title }}{% endblock %}
 {% block heading %}{{ crumb_links(crumbs) }}{% endblock %}
 {% block content %}
-<p class="p-form-help-text">{% if inherits %}Leave a field empty to use the value from the instance's profiles, shown as a placeholder, or Incus's default.{% else %}Leave a field empty to use Incus's default, or what the instance's other profiles set.{% endif %} Some limits take effect only after a restart. Everything else is in <a href="{{ yaml_href }}">Edit YAML</a>.</p>
+<p class="p-form-help-text">{% if intro %}{{ intro }}{% elif inherits %}Leave a field empty to use the value from the instance's profiles, shown as a placeholder, or Incus's default.{% else %}Leave a field empty to use Incus's default, or what the instance's other profiles set.{% endif %}{% if not intro %} Some limits take effect only after a restart.{% endif %} Everything else is in <a href="{{ yaml_href }}">Edit YAML</a>.</p>
 <form class="narrow-form" method="post">
   {{ csrf() }}
   <label for="description">Description</label>
   <input type="text" id="description" name="description" value="{{ description }}">
-  {% for f in fields %}
-  <label for="cfg-{{ loop.index }}">{{ f.label }} <code class="key-name">{{ f.key }}</code></label>
-  {% if f.kind == 'bool' %}
-  <select id="cfg-{{ loop.index }}" name="cfg:{{ f.key }}">
-    <option value=""{% if not f.value %} selected{% endif %}>{% if f.inherited %}From profile ({{ 'yes' if f.inherited == 'true' else 'no' }}){% else %}Default{% endif %}</option>
-    <option value="true"{% if f.value == 'true' %} selected{% endif %}>Yes</option>
-    <option value="false"{% if f.value == 'false' %} selected{% endif %}>No</option>
-  </select>
-  {% else %}
-  <input type="text" id="cfg-{{ loop.index }}" name="cfg:{{ f.key }}" value="{{ f.value }}" placeholder="{{ ('From profile: ' ~ f.inherited) if f.inherited else 'No limit' }}">
-  {% endif %}
-  {% if f.help %}<p class="p-form-help-text">{{ f.help }}</p>{% endif %}
-  {% endfor %}
+  {{ settings_inputs(fields) }}
   <div class="form-buttons">
     <a class="p-button--base" href="{{ back }}">Cancel</a>
     <button class="p-button--positive">Save</button>

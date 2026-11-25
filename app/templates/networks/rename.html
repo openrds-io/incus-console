@@ -1,0 +1,16 @@
+{% extends "base.html" %}
+{% from "macros.html" import crumbs, csrf %}
+{% block title %}Rename {{ name }}{% endblock %}
+{% block heading %}{{ crumbs([('Networks', url_for('srv.networks')), (name, url_for('srv.network', name=name)), ('Rename', None)]) }}{% endblock %}
+{% block content %}
+<p class="p-form-help-text">Incus renames only networks that nothing uses.</p>
+<form class="narrow-form" method="post">
+  {{ csrf() }}
+  <label for="new_name">New name</label>
+  <input type="text" id="new_name" name="new_name" value="{{ form.get('new_name', name) }}" required autofocus maxlength="15">
+  <div class="form-buttons">
+    <a class="p-button--base" href="{{ url_for('srv.network', name=name) }}">Cancel</a>
+    <button class="p-button--positive">Rename</button>
+  </div>
+</form>
+{% endblock %}

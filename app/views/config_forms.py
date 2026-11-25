@@ -37,10 +37,10 @@ DEVICE_TYPES = {
 }
 
 
-def apply_settings(config: dict, form) -> dict:
+def apply_settings(config: dict, form, settings: list = SETTINGS) -> dict:
     """The config with the settings form's values; an empty field removes the key."""
     config = dict(config or {})
-    for key, _label, kind, _help in SETTINGS:
+    for key, _label, kind, _help in settings:
         value = form.get(f"cfg:{key}", "").strip()
         if kind == "bool" and value not in ("", "true", "false"):
             value = ""
@@ -51,10 +51,16 @@ def apply_settings(config: dict, form) -> dict:
     return config
 
 
-def settings_fields(local: dict, inherited: dict | None = None) -> list[dict]:
+def settings_fields(
+    local: dict,
+    inherited: dict | None = None,
+    settings: list = SETTINGS,
+    empty: str = "No limit",
+) -> list[dict]:
     local, inherited = local or {}, inherited or {}
     return [
         {
+            "empty": empty,
             "key": key,
             "label": label,
             "kind": kind,
@@ -62,7 +68,7 @@ def settings_fields(local: dict, inherited: dict | None = None) -> list[dict]:
             "value": local.get(key, ""),
             "inherited": "" if key in local else inherited.get(key, ""),
         }
-        for key, label, kind, help_text in SETTINGS
+        for key, label, kind, help_text in settings
     ]
 
 

@@ -1,0 +1,50 @@
+{% extends "base.html" %}
+{% from "macros.html" import crumbs as crumb_links, csrf %}
+{% block title %}{% if listen %}Forward {{ listen }}{% else %}Add port forward{% endif %}{% endblock %}
+{% block heading %}{{ crumb_links(crumbs) }}{% endblock %}
+{% block content %}
+<p class="p-form-help-text">Traffic arriving at the listen address goes to containers on {{ name }}. The listen address must be one of the host's own addresses (not the bridge's). Inside a VM such as Colima, use the VM's address.</p>
+<form method="post">
+  {{ csrf() }}
+  <div class="row">
+    <div class="col-4">
+      <label for="listen_address">Listen address</label>
+      {% if listen %}
+      <input type="text" id="listen_address" value="{{ listen }}" disabled>
+      {% else %}
+      <input type="text" id="listen_address" name="listen_address" value="{{ form.get('listen_address', '') }}" placeholder="e.g. 192.168.1.20" required autofocus>
+      {% endif %}
+    </div>
+    <div class="col-4">
+      <label for="target_address">Default target</label>
+      <input type="text" id="target_address" name="target_address" list="addresses" value="{{ form.get('target_address', (forward.config or {}).get('target_address', '')) }}" placeholder="Optional: everything else goes here">
+    </div>
+    <div class="col-4">
+      <label for="description">Description</label>
+      <input type="text" id="description" name="description" value="{{ form.get('description', forward.description or '') }}">
+    </div>
+  </div>
+  <datalist id="addresses">{% for a in addresses %}<option value="{{ a }}">{% endfor %}</datalist>
+  <h2 class="p-heading--5">Ports</h2>
+  <table class="port-rows" aria-label="Ports">
+    <thead><tr><th>Protocol</th><th>Listen port</th><th>Target address</th><th>Target port</th><th>Description</th></tr></thead>
+    <tbody>
+    {% for r in rows %}
+      {% set i = loop.index0 %}
+      <tr>
+        <td><select name="protocol_{{ i }}" aria-label="Protocol, row {{ loop.index }}"><option value="tcp"{% if r.protocol == 'tcp' %} selected{% endif %}>TCP</option><option value="udp"{% if r.protocol == 'udp' %} selected{% endif %}>UDP</option></select></td>
+        <td><input type="text" name="listen_port_{{ i }}" value="{{ r.listen_port }}" placeholder="{{ '443' if i == 0 else '' }}" aria-label="Listen port, row {{ loop.index }}"></td>
+        <td><input type="text" name="target_address_{{ i }}" list="addresses" value="{{ r.target_address }}" placeholder="Default target" aria-label="Target address, row {{ loop.index }}"></td>
+        <td><input type="text" name="target_port_{{ i }}" value="{{ r.target_port }}" placeholder="Same port" aria-label="Target port, row {{ loop.index }}"></td>
+        <td><input type="text" name="port_description_{{ i }}" value="{{ r.description }}" aria-label="Description, row {{ loop.index }}"></td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  <p class="p-form-help-text">Ports can be single (443), ranges (8000-8010) or lists (80,443). Empty rows are ignored. Target addresses are suggested from the network's DHCP leases.</p>
+  <div class="form-buttons wide">
+    <a class="p-button--base" href="{{ url_for('srv.network', name=name) }}">Cancel</a>
+    <button class="p-button--positive">{% if listen %}Save{% else %}Add port forward{% endif %}</button>
+  </div>
+</form>
+{% endblock %}

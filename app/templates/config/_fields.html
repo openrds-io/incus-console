@@ -1,0 +1,16 @@
+{# The inputs for settings_fields(); used by the settings form and create forms. #}
+{% macro settings_inputs(fields) %}
+{% for f in fields %}
+<label for="cfg-{{ loop.index }}">{{ f.label }} <code class="key-name">{{ f.key }}</code></label>
+{% if f.kind == 'bool' %}
+<select id="cfg-{{ loop.index }}" name="cfg:{{ f.key }}">
+  <option value=""{% if not f.value %} selected{% endif %}>{% if f.inherited %}From profile ({{ 'yes' if f.inherited == 'true' else 'no' }}){% else %}Default{% endif %}</option>
+  <option value="true"{% if f.value == 'true' %} selected{% endif %}>Yes</option>
+  <option value="false"{% if f.value == 'false' %} selected{% endif %}>No</option>
+</select>
+{% else %}
+<input type="text" id="cfg-{{ loop.index }}" name="cfg:{{ f.key }}" value="{{ f.value }}" placeholder="{{ ('From profile: ' ~ f.inherited) if f.inherited else f.empty }}">
+{% endif %}
+{% if f.help %}<p class="p-form-help-text">{{ f.help }}</p>{% endif %}
+{% endfor %}
+{% endmacro %}

@@ -48,6 +48,25 @@ class FakeIncus:
         self.sessions: dict[str, dict] = {}  # terminal sessions by operation id
         self.calls: list[tuple[str, str]] = []
         self.images: dict[str, dict] = {}
+        self.forwards: dict[str, dict] = {"incusbr0": {}}
+        self.networks = {
+            "incusbr0": {
+                "name": "incusbr0",
+                "type": "bridge",
+                "managed": True,
+                "description": "",
+                "config": {"ipv4.address": "10.0.3.1/24", "ipv4.nat": "true"},
+                "status": "Created",
+            },
+            "eth0": {
+                "name": "eth0",
+                "type": "physical",
+                "managed": False,
+                "description": "",
+                "config": {},
+                "status": "",
+            },
+        }
         self.created: list[dict] = []  # bodies of instance creations from images
         self.published: list[dict] = []
         self.profiles = {
@@ -306,6 +325,32 @@ class FakeIncus:
                 if instance is None:
                     return self.error(404, f'Instance "{name}" not found')
                 return self._instance(method, instance, rest, body)
+            case ("GET", ["networks"]):
+                return self.sync([self._network(n) for n in self.networks])
+            case ("POST", ["networks"]):
+                name = body.get("name", "")
+                if name in self.networks:
+                    return self.error(409, "Network already exists")
+                if len(name) > 15:
+                    return self.error(400, "Network name too long")
+                config = dict(body.get("config") or {})
+                for key in ("ipv4.address", "ipv6.address"):
+                    if config.get(key) == "auto":
+                        config[key] = "10.99.0.1/24" if key.startswith("ipv4") else "fd42:99::1/64"
+                self.networks[name] = {
+                    "name": name,
+                    "type": body.get("type", "bridge"),
+                    "managed": True,
+                    "description": body.get("description", ""),
+                    "config": config,
+                    "status": "Created",
+                }
+                self.forwards[name] = {}
+                return self.sync()
+            case (_, ["networks", name, *rest]):
+                if name not in self.networks:
+                    return self.error(404, "Network not found")
+                return self._network_op(method, name, rest, body)
             case ("GET", ["storage-pools"]):
                 return self.sync(list(self.pools.values()))
             case (_, ["storage-pools", pool, "buckets", *rest]):
@@ -331,6 +376,95 @@ class FakeIncus:
             "update_source": None,
         }
         return fingerprint
+
+    def _addresses(self, instance):
+        if instance["status"] != "Running":
+            return []
+        return [f"10.0.3.{sorted(self.instances).index(instance['name']) + 10}"]
+
+    def _network(self, name):
+        used_by = [
+            f"/1.0/instances/{i['name']}"
+            for i in self.instances.values()
+            if any(
+                d.get("network") == name
+                for d in {**i["expanded_devices"], **(i.get("devices") or {})}.values()
+            )
+        ]
+        used_by += [
+            f"/1.0/profiles/{p['name']}"
+            for p in self.profiles.values()
+            if any(d.get("network") == name for d in (p.get("devices") or {}).values())
+        ]
+        return {**self.networks[name], "used_by": used_by}
+
+    def _network_op(self, method, name, rest, body):
+        network = self.networks[name]
+        managed = network.get("managed")
+        forwards = self.forwards.setdefault(name, {})
+        match (method, rest):
+            case ("GET", []):
+                return self.sync(self._network(name))
+            case ("GET", ["state"]):
+                return self.sync({"hwaddr": "10:66:6a:aa:bb:cc", "state": "up", "mtu": 1500})
+            case ("GET", ["leases"]):
+                if not managed:
+                    return self.error(400, "Network is not managed")
+                leases = [
+                    {
+                        "hostname": i["name"],
+                        "address": a,
+                        "hwaddr": "10:66:6a:00:00:01",
+                        "type": "dynamic",
+                    }
+                    for i in self.instances.values()
+                    for a in self._addresses(i)
+                ]
+                return self.sync(leases)
+            case ("GET", ["forwards"]):
+                return self.sync(list(forwards.values()))
+            case ("POST", ["forwards"]):
+                listen = body.get("listen_address", "")
+                if listen in forwards:
+                    return self.error(409, "A forward for that address exists")
+                if listen.startswith("10.0.3."):
+                    return self.error(400, "Listen address cannot be in the network's subnet")
+                forwards[listen] = {**body, "location": ""}
+                return self.sync()
+            case ("GET", ["forwards", listen]):
+                found = forwards.get(listen)
+                return self.sync(found) if found else self.error(404, "Forward not found")
+            case ("PUT", ["forwards", listen]):
+                if listen not in forwards:
+                    return self.error(404, "Forward not found")
+                forwards[listen] = {**body, "listen_address": listen, "location": ""}
+                return self.sync()
+            case ("DELETE", ["forwards", listen]):
+                if forwards.pop(listen, None) is None:
+                    return self.error(404, "Forward not found")
+                return self.sync()
+        if not managed:
+            return self.error(400, "Only managed networks can be modified")
+        match (method, rest):
+            case ("PUT", []):
+                network["config"] = body.get("config") or {}
+                network["description"] = body.get("description", "")
+                return self.sync()
+            case ("POST", []):
+                new_name = body.get("name", "")
+                if self._network(name)["used_by"]:
+                    return self.error(400, "Network is currently in use")
+                if new_name in self.networks:
+                    return self.error(409, "Name already in use")
+                self.networks[new_name] = {**self.networks.pop(name), "name": new_name}
+                self.forwards[new_name] = self.forwards.pop(name, {})
+                return self.sync()
+            case ("DELETE", []):
+                if self._network(name)["used_by"]:
+                    return self.error(400, "The network is currently in use")
+                del self.networks[name]
+                return self.sync()
+        return self.error(404, "not found")
 
     def _profile(self, name):
         used_by = [

@@ -324,3 +324,23 @@ td.nowrap {
 table.credentials code {
   word-break: break-all;
 }
+
+/* The port forward form's rows of inputs. */
+.port-rows td {
+  padding-top: 0.25rem;
+  padding-bottom: 0.25rem;
+}
+.port-rows input,
+.port-rows select {
+  margin-bottom: 0;
+}
+.form-buttons.wide {
+  max-width: none;
+}
+.port-line {
+  line-height: 1.75;
+}
+.port-line code {
+  padding: 0;
+  background: none;
+}

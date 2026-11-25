@@ -1,0 +1,113 @@
+{% extends "base.html" %}
+{% from "macros.html" import crumbs, csrf, status, empty %}
+{% block title %}{{ network.name }}{% endblock %}
+{% block heading %}{{ crumbs([('Networks', url_for('srv.networks')), (network.name, None)]) }}{% if network.managed %} <span class="title-status">{{ status(network.status) }}</span>{% endif %}{% endblock %}
+{% block controls %}
+{% if network.managed %}
+<a class="p-button is-dense u-no-margin--bottom" href="{{ url_for('srv.network_rename', name=network.name) }}">Rename</a>
+<form class="inline" method="post" action="{{ url_for('srv.network_delete', name=network.name) }}" data-confirm="Delete network {{ network.name }}?">
+  {{ csrf() }}
+  <button class="p-button--negative is-dense u-no-margin--bottom"{% if users.instances or users.profiles %} disabled title="Instances or profiles still use it"{% endif %}>Delete</button>
+</form>
+{% endif %}
+{% endblock %}
+{% block content %}
+{% set cfg = network.config or {} %}
+{% if not network.managed %}
+<div class="p-notification--information"><div class="p-notification__content"><p class="p-notification__message">{{ network.name }} is one of the host's own interfaces, not managed by Incus. It is shown here so you can see what uses it.</p></div></div>
+{% endif %}
+<div class="row">
+  <div class="col-3"><h2 class="p-heading--5 section-heading">General</h2></div>
+  <div class="col-9">
+    <table class="facts" aria-label="General">
+      <tbody>
+        <tr><th>Type</th><td>{{ network.type }}</td></tr>
+        <tr><th>Description</th><td>{{ network.description or '-' }}</td></tr>
+        {% if network.managed %}
+        <tr><th>IPv4</th><td>{{ cfg.get('ipv4.address', '-') }}{% if cfg.get('ipv4.nat') == 'true' %} (NAT){% endif %}</td></tr>
+        <tr><th>IPv6</th><td>{{ cfg.get('ipv6.address', '-') }}{% if cfg.get('ipv6.nat') == 'true' %} (NAT){% endif %}</td></tr>
+        <tr><th>DNS domain</th><td>{{ cfg.get('dns.domain', 'incus') }}</td></tr>
+        {% endif %}
+        {% if state.hwaddr %}<tr><th>MAC address</th><td><code>{{ state.hwaddr }}</code></td></tr>{% endif %}
+        <tr><th>Instances</th><td>{% for name in users.instances %}<a href="{{ url_for('srv.instance', name=name) }}">{{ name }}</a>{% if not loop.last %}, {% endif %}{% else %}None{% endfor %}</td></tr>
+        <tr><th>Profiles</th><td>{% for name in users.profiles %}<a href="{{ url_for('srv.profile', name=name) }}">{{ name }}</a>{% if not loop.last %}, {% endif %}{% else %}None{% endfor %}</td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+{% if network.managed %}
+<hr class="p-rule">
+<div class="row">
+  <div class="col-3">
+    <h2 class="p-heading--5 section-heading">Configuration</h2>
+    <a class="p-button is-dense" href="{{ url_for('srv.network_settings', name=network.name) }}">Edit settings</a>
+    <a class="p-button--base is-dense" href="{{ url_for('srv.network_edit', name=network.name) }}">Edit YAML</a>
+  </div>
+  <div class="col-9">
+    <table aria-label="Configuration">
+      <thead><tr><th>Key</th><th>Value</th></tr></thead>
+      <tbody>
+      {% for key, value in cfg|dictsort if not key.startswith('volatile.') %}
+        <tr><td><code>{{ key }}</code></td><td>{{ value }}</td></tr>
+      {% else %}
+        <tr><td colspan="2" class="u-text--muted">Nothing set.</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+<hr class="p-rule">
+<div class="row">
+  <div class="col-3">
+    <h2 class="p-heading--5 section-heading">Port forwards</h2>
+    <a class="p-button is-dense" href="{{ url_for('srv.forward_create', name=network.name) }}">Add port forward</a>
+  </div>
+  <div class="col-9">
+    {% if forwards %}
+    <table aria-label="Port forwards">
+      <thead><tr><th>Listen address</th><th>Ports</th><th>Description</th><th class="u-align--right">Actions</th></tr></thead>
+      <tbody>
+      {% for f in forwards %}
+        {% set default = (f.config or {}).get('target_address') %}
+        <tr>
+          <td><code>{{ f.listen_address }}</code></td>
+          <td>
+            {% for p in f.ports or [] %}<div class="port-line"><code>{{ p.protocol }} {{ p.listen_port }} → {{ p.target_address }}{% if p.target_port %}:{{ p.target_port }}{% endif %}</code></div>{% endfor %}
+            {% if default %}<div class="port-line u-text--muted">Everything else → <code>{{ default }}</code></div>{% endif %}
+          </td>
+          <td>{{ f.description or '' }}</td>
+          <td class="u-align--right">
+            <a class="p-button is-dense u-no-margin--bottom" href="{{ url_for('srv.forward_edit', name=network.name, listen=f.listen_address) }}">Edit</a>
+            <form class="inline" method="post" action="{{ url_for('srv.forward_delete', name=network.name, listen=f.listen_address) }}" data-confirm="Remove the forward on {{ f.listen_address }}?">
+              {{ csrf() }}<button class="p-button--negative is-dense u-no-margin--bottom">Delete</button>
+            </form>
+          </td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    {{ empty("No port forwards. A forward sends traffic arriving on one of the host's addresses to containers on this network.") }}
+    {% endif %}
+  </div>
+</div>
+<hr class="p-rule">
+<div class="row">
+  <div class="col-3"><h2 class="p-heading--5 section-heading">DHCP leases</h2></div>
+  <div class="col-9">
+    {% if leases %}
+    <table aria-label="DHCP leases">
+      <thead><tr><th>Host name</th><th>Address</th><th>MAC address</th><th>Type</th></tr></thead>
+      <tbody>
+      {% for lease in leases %}
+        <tr><td>{{ lease.hostname or '' }}</td><td><code>{{ lease.address }}</code></td><td><code>{{ lease.hwaddr or '' }}</code></td><td>{{ lease.type or '' }}</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    {{ empty("No leases.") }}
+    {% endif %}
+  </div>
+</div>
+{% endif %}
+{% endblock %}

@@ -379,6 +379,47 @@ class IncusClient:
         sock.settimeout(None)  # an idle terminal must not time out
         return ws
 
+    # -- networks ----------------------------------------------------------
+
+    def networks(self) -> list:
+        return self.get("networks", recursion=1) or []
+
+    def network(self, name: str) -> dict:
+        return self.get("networks", name)
+
+    def network_state(self, name: str) -> dict:
+        return self.get("networks", name, "state") or {}
+
+    def network_leases(self, name: str) -> list:
+        return self.get("networks", name, "leases") or []
+
+    def create_network(self, payload: dict) -> dict:
+        return self.request("POST", path("networks"), body=payload)
+
+    def update_network(self, name: str, payload: dict) -> dict:
+        return self.request("PUT", path("networks", name), body=payload)
+
+    def rename_network(self, name: str, new_name: str) -> dict:
+        return self.request("POST", path("networks", name), body={"name": new_name})
+
+    def delete_network(self, name: str) -> dict:
+        return self.request("DELETE", path("networks", name))
+
+    def network_forwards(self, name: str) -> list:
+        return self.get("networks", name, "forwards", recursion=1) or []
+
+    def network_forward(self, name: str, listen: str) -> dict:
+        return self.get("networks", name, "forwards", listen)
+
+    def create_network_forward(self, name: str, payload: dict) -> dict:
+        return self.request("POST", path("networks", name, "forwards"), body=payload)
+
+    def update_network_forward(self, name: str, listen: str, payload: dict) -> dict:
+        return self.request("PUT", path("networks", name, "forwards", listen), body=payload)
+
+    def delete_network_forward(self, name: str, listen: str) -> dict:
+        return self.request("DELETE", path("networks", name, "forwards", listen))
+
     # -- storage -----------------------------------------------------------
 
     def pools(self) -> list:

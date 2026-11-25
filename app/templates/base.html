@@ -54,6 +54,7 @@
                 ('srv.instances', 'Instances', ('instance' in here or 'snapshot' in here or here.startswith('srv.device')) and not here.startswith('srv.image')),
                 ('srv.profiles', 'Profiles', 'profile' in here),
                 ('srv.images', 'Images', here.startswith('srv.image')),
+                ('srv.networks', 'Networks', 'network' in here or 'forward' in here),
                 ('srv.pools', 'Storage pools', here == 'srv.pools'),
                 ('srv.all_buckets', 'Buckets', 'bucket' in here),
                 ('srv.operations', 'Operations', 'operation' in here),
