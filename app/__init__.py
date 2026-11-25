@@ -15,8 +15,7 @@ from flask import Flask, g, render_template, request
 
 from . import access, audit, auth, db, filters
 from .incus import IncusConnectionError, IncusError
-
-__version__ = "0.1.0.dev0"
+from .version import __version__, build
 
 HOST = re.compile(r"[A-Za-z0-9.\-:\[\]]+")
 
@@ -57,6 +56,7 @@ def create_app(test_config: dict | None = None) -> Flask:
     filters.init_app(app)
 
     from .views import (  # noqa: F401
+        about,
         admin,
         events,
         files,
@@ -73,6 +73,7 @@ def create_app(test_config: dict | None = None) -> Flask:
     from .views import servers as servers_view
 
     app.register_blueprint(servers_view.bp)
+    app.register_blueprint(about.bp)
     app.register_blueprint(admin.bp)
     app.register_blueprint(admin.account_bp)
     app.register_blueprint(scoped.bp)
@@ -87,7 +88,11 @@ def create_app(test_config: dict | None = None) -> Flask:
 
     @app.context_processor
     def _globals():
-        return {"server_mode": app.config["SERVER_MODE"], "version": __version__}
+        return {
+            "server_mode": app.config["SERVER_MODE"],
+            "version": __version__,
+            "build": build(),
+        }
 
     @app.after_request
     def _security_headers(response):

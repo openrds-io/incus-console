@@ -72,6 +72,9 @@
               <li class="p-side-navigation__item">
                 <a class="p-side-navigation__link" href="{{ url_for('servers.index') }}"{% if here.startswith('servers.') %} aria-current="page"{% endif %}>Servers</a>
               </li>
+              <li class="p-side-navigation__item">
+                <a class="p-side-navigation__link" href="{{ url_for('about.about', sid=g.sid) if server else url_for('about.about') }}" data-dialog{% if here == 'about.about' %} aria-current="page"{% endif %}>About</a>
+              </li>
               {% if server_mode and g.user %}
               {% if is_admin() %}
               <li class="p-side-navigation__item">
@@ -116,9 +119,10 @@
         </div>
       </div>
     </div>
-    {% if not bare %}<footer class="status-bar"><span class="u-text--muted">Version {{ version }}</span></footer>{% endif %}
+    {% if not bare %}<footer class="status-bar"><a class="status-bar__version" href="{{ url_for('about.about', sid=g.sid) if server else url_for('about.about') }}" data-dialog title="About Incus Console">Version {{ build.label }}</a></footer>{% endif %}
   </main>
 </div>
+<dialog class="about-dialog" aria-labelledby="about-title"></dialog>
 <script src="{{ url_for('static', filename='js/app.js') }}" defer></script>
 </body>
 </html>

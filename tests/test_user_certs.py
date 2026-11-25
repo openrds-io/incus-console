@@ -8,9 +8,9 @@ from app.certs import ensure_client_cert, fingerprint, generate_self_signed
 from app.db import get_db
 from app.incus import IncusClient, IncusError
 
+from .conftest import PASSWORD, login, user_id
 from .fake_incus import serve_tls
 from .test_app import text
-from .test_permissions import PASSWORD, login, user_id
 
 
 @pytest.fixture

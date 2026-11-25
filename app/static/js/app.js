@@ -121,3 +121,88 @@ if (window.matchMedia("(max-width: 619px)").matches) {
   window.addEventListener("pagehide", stop);
   if (!document.hidden) listen();
 })();
+
+// About: open in a dialog instead of a page, fill in the browser, copy the details.
+(() => {
+  function browserName() {
+    const ua = navigator.userAgent;
+    const pick = (name) => (ua.match(new RegExp(`${name}/([\\d.]+)`)) || [])[1];
+    if (pick("Electron")) return `Electron ${pick("Electron")} (Chromium ${pick("Chrome")})`;
+    for (const [name, label] of [
+      ["Edg", "Edge"],
+      ["Firefox", "Firefox"],
+      ["Chrome", "Chrome"],
+    ]) {
+      if (pick(name)) return `${label} ${pick(name)}`;
+    }
+    if (pick("Version") && ua.includes("Safari")) return `Safari ${pick("Version")}`;
+    return ua;
+  }
+
+  function fill(root) {
+    root.querySelectorAll("[data-about-browser]").forEach((cell) => {
+      cell.textContent = browserName();
+    });
+  }
+
+  function details(root) {
+    const lines = ["Incus Console"];
+    root.querySelectorAll(".about__facts tr").forEach((row) => {
+      const label = row.querySelector("th")?.textContent.trim();
+      const value = row.querySelector("td")?.textContent.trim();
+      if (label) lines.push(`${label}: ${value}`);
+    });
+    return lines.join("\n");
+  }
+
+  async function copy(button) {
+    const text = details(button.closest("[data-about]"));
+    try {
+      await navigator.clipboard.writeText(text);
+    } catch {
+      const area = document.createElement("textarea");
+      area.value = text;
+      button.after(area);
+      area.select();
+      document.execCommand("copy");
+      area.remove();
+    }
+    const label = button.textContent;
+    button.textContent = "Copied";
+    setTimeout(() => (button.textContent = label), 1500);
+  }
+
+  fill(document);
+  const dialog = document.querySelector("dialog.about-dialog");
+
+  document.addEventListener("click", async (event) => {
+    const copyButton = event.target.closest("[data-about-copy]");
+    if (copyButton) {
+      copy(copyButton);
+      return;
+    }
+    if (event.target.closest("[data-dialog-close]") || event.target === dialog) {
+      dialog.close();
+      return;
+    }
+    const link = event.target.closest("a[data-dialog]");
+    if (!link || !dialog?.showModal || event.metaKey || event.ctrlKey || event.shiftKey) return;
+    event.preventDefault();
+    let response;
+    try {
+      response = await fetch(link.href, { headers: { "X-Partial": "1" }, credentials: "same-origin" });
+    } catch {
+      location.href = link.href;
+      return;
+    }
+    if (!response.ok || response.redirected) {
+      location.href = link.href;
+      return;
+    }
+    dialog.innerHTML = await response.text();
+    fill(dialog);
+    dialog.showModal();
+    dialog.scrollTop = 0;
+    dialog.querySelector("[data-dialog-close]")?.focus({ preventScroll: true });
+  });
+})();

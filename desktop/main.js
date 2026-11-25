@@ -138,9 +138,32 @@ function createWindow() {
   return win;
 }
 
+function showAbout() {
+  // The console's own About page (version, commit, server details), like pgAdmin.
+  if (mainWindow && origin) mainWindow.loadURL(`${origin}/about`);
+}
+
 function buildMenu() {
+  const about = { label: "About Incus Console", click: showAbout };
   const template = [
-    ...(process.platform === "darwin" ? [{ role: "appMenu" }] : []),
+    ...(process.platform === "darwin"
+      ? [
+          {
+            label: app.name,
+            submenu: [
+              about,
+              { type: "separator" },
+              { role: "services" },
+              { type: "separator" },
+              { role: "hide" },
+              { role: "hideOthers" },
+              { role: "unhide" },
+              { type: "separator" },
+              { role: "quit" },
+            ],
+          },
+        ]
+      : []),
     {
       label: "File",
       submenu: [
@@ -176,6 +199,7 @@ function buildMenu() {
           label: "Incus documentation",
           click: () => shell.openExternal("https://linuxcontainers.org/incus/docs/main/"),
         },
+        ...(process.platform === "darwin" ? [] : [{ type: "separator" }, about]),
       ],
     },
   ];

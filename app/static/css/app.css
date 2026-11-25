@@ -375,3 +375,44 @@ table.credentials code {
 .file-name.is-folder {
   font-weight: 550;
 }
+
+/* About, shown as a dialog (or a page without JavaScript). */
+.about-dialog {
+  width: min(40rem, calc(100vw - 2rem));
+  max-height: calc(100vh - 4rem);
+  padding: 1.5rem;
+  border: 0;
+  box-shadow: 0 1px 12px rgb(0 0 0 / 30%);
+}
+.about-dialog::backdrop {
+  background: rgb(17 17 17 / 60%);
+}
+.about__brand {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+}
+.about__facts th {
+  width: 12rem;
+}
+.about__facts td {
+  overflow-wrap: anywhere;
+}
+.about__legal {
+  margin-top: 1rem;
+}
+.about__buttons {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 0.5rem;
+}
+.status-bar__version {
+  color: inherit;
+}
+.about-dialog .about__facts th,
+.about-dialog .about__facts td {
+  padding-top: 0.3rem;
+  padding-bottom: 0.3rem;
+}

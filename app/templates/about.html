@@ -1,0 +1,50 @@
+{% extends "_partial.html" if partial else "base.html" %}
+{% block title %}About{% endblock %}
+{% block heading %}About Incus Console{% endblock %}
+{% block content %}
+<div class="about" data-about>
+  <div class="about__brand">
+    <img src="{{ url_for('static', filename='img/incus-logo.svg') }}" alt="" width="52" height="48">
+    <div>
+      <h2 class="p-heading--3 u-no-margin--bottom" id="about-title">Incus Console</h2>
+      <p class="u-text--muted u-no-margin--bottom">A lean console for Incus</p>
+    </div>
+  </div>
+  <table class="facts about__facts" aria-label="Version">
+    <tbody>
+      <tr><th>Version</th><td>{{ build.label }}</td></tr>
+      <tr><th>Commit</th><td>{% if build.commit %}<code>{{ build.commit }}</code>{% else %}-{% endif %}</td></tr>
+      <tr><th>Mode</th><td>{{ mode }}</td></tr>
+      {% if user %}<tr><th>Signed in as</th><td>{{ user }} ({{ role }})</td></tr>{% endif %}
+      <tr><th>Browser</th><td data-about-browser>-</td></tr>
+    </tbody>
+  </table>
+  {% if incus %}
+  <h3 class="p-heading--5">Incus</h3>
+  <table class="facts about__facts" aria-label="Incus">
+    <tbody>
+      {% for label, value in incus %}<tr><th>{{ label }}</th><td>{{ value }}</td></tr>{% endfor %}
+    </tbody>
+  </table>
+  {% endif %}
+  {% if admin %}
+  <h3 class="p-heading--5">This installation</h3>
+  <table class="facts about__facts" aria-label="This installation">
+    <tbody>
+      {% for label, value in admin %}<tr><th>{{ label }}</th><td>{{ value }}</td></tr>{% endfor %}
+    </tbody>
+  </table>
+  {% endif %}
+  <p class="p-text--small about__legal">
+    Copyright © 2026 openrds-io contributors. Free software under the
+    <a href="{{ home }}/blob/main/LICENSE">GNU General Public License v3.0 only</a>.
+    Logo and look from <a href="https://github.com/zabbly/incus-ui-canonical">incus-ui-canonical</a>;
+    see the <a href="{{ home }}/blob/main/NOTICE.md">third-party notices</a>.
+  </p>
+  <div class="about__buttons">
+    <a class="p-button--base u-no-margin--bottom" href="{{ home }}">Project page</a>
+    <button type="button" class="p-button u-no-margin--bottom" data-about-copy>Copy details</button>
+    {% if partial %}<button type="button" class="p-button--positive u-no-margin--bottom" data-dialog-close>Close</button>{% endif %}
+  </div>
+</div>
+{% endblock %}

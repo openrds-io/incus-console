@@ -1,7 +1,7 @@
 {
   "name": "incus-console-desktop",
   "productName": "Incus Console",
-  "version": "0.1.0",
+  "version": "26.11.1",
   "description": "Desktop app for incus-console: a lean console for Incus",
   "license": "GPL-3.0-only",
   "author": "OpenRDS",
@@ -12,8 +12,9 @@
     "start": "electron .",
     "python": "node scripts/bundle-python.mjs",
     "vendor-xterm": "node scripts/vendor-xterm.mjs",
-    "dist": "npm run python && electron-builder --publish never",
-    "dist:dir": "npm run python && electron-builder --dir --publish never"
+    "stamp": "node scripts/stamp-commit.mjs",
+    "dist": "npm run python && npm run stamp && electron-builder --publish never",
+    "dist:dir": "npm run python && npm run stamp && electron-builder --dir --publish never"
   },
   "devDependencies": {
     "@xterm/addon-fit": "0.10.0",

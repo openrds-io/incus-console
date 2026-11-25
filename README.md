@@ -204,6 +204,21 @@ cp vanilla.css <repo>/app/static/vendor/vanilla-framework-4.61.0.min.css
 
 `app/static/css/app.css` holds this console's own additions.
 
+## Versions and About
+
+Versions follow Ubuntu's style, `YY.MM.N`: the year and month of the release
+series, then the release within it (26.11.1, 26.11.2, ...). A new feature
+release takes the month it ships in. The number lives in `app/version.py` and
+`desktop/package.json` (a test keeps them equal); releases are tagged
+`v<version>`. Anything else shows as `<version>-dev` with its commit.
+Packaging records the commit in `app/COMMIT` (`npm run stamp` for the desktop
+app), since installs have no git checkout.
+
+**About** (sidebar, the footer's version, or Help → About in the desktop app)
+shows the version, commit, mode, signed-in user, browser and the current Incus
+server, with **Copy details** for bug reports. Admins also see the
+installation's paths, certificate fingerprint and software versions.
+
 ## Configuration
 
 Defaults are in `app/config.py`. Override them in
@@ -239,14 +254,13 @@ wsgi.py           entry point for gunicorn
 
 ## Roadmap
 
-1. About box; Ubuntu-style versions (YY.MM.N)
-2. Virtual machines: create, VGA console, VM-specific settings
-3. OCI application containers: create from OCI registries
-4. Test the desktop installers (`npm run dist`); code signing and a build
+1. Virtual machines: create, VGA console, VM-specific settings
+2. OCI application containers: create from OCI registries
+3. Test the desktop installers (`npm run dist`); code signing and a build
    workflow for all three platforms
-5. deb (Debian 13, Ubuntu 26.04) and rpm (EL10) packages with nginx and systemd
+4. deb (Debian 13, Ubuntu 26.04) and rpm (EL10) packages with nginx and systemd
    units; container image
-6. Later: OIDC sign-in, Incus-enforced viewer and operator roles (authorization
+5. Later: OIDC sign-in, Incus-enforced viewer and operator roles (authorization
    scriptlet), per-instance access, cluster
 
 ## License
