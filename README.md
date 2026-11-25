@@ -34,7 +34,8 @@ Early scaffold. Working today:
 - Terminal: a root login shell in a running container (xterm.js over a websocket)
 - Operations: list and cancel; actions that outlast the page are watched in the
   background and their outcome is reported, even after Incus forgets them
-- Projects: switch project per server
+- Projects: list, create and configure (features, resource limits, restrictions),
+  usage against limits, YAML, rename, delete, and switch project per server
 - Live updates: lists, detail pages and Operations refresh themselves when
   something changes on the server (Incus's event stream, relayed as
   server-sent events), but never while you are typing in a form

@@ -354,6 +354,24 @@ class IncusClient:
     def projects(self) -> list:
         return self.get("projects", recursion=1) or []
 
+    def project_details(self, name: str) -> dict:
+        return self.get("projects", name)
+
+    def project_state(self, name: str) -> dict:
+        return self.get("projects", name, "state") or {}
+
+    def create_project(self, payload: dict) -> dict:
+        return self.request("POST", path("projects"), body=payload)
+
+    def update_project(self, name: str, payload: dict) -> dict:
+        return self.request("PUT", path("projects", name), body=payload)
+
+    def rename_project(self, name: str, new_name: str) -> dict:
+        return self.request("POST", path("projects", name), body={"name": new_name})
+
+    def delete_project(self, name: str) -> dict:
+        return self.request("DELETE", path("projects", name))
+
     def profiles(self) -> list:
         return self.get("profiles", recursion=1) or []
 

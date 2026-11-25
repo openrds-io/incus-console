@@ -1,0 +1,16 @@
+{% extends "base.html" %}
+{% from "macros.html" import crumbs as crumb_links, csrf %}
+{% block title %}Rename {{ name }}{% endblock %}
+{% block heading %}{{ crumb_links(crumbs) }}{% endblock %}
+{% block content %}
+<p class="p-form-help-text">Incus renames only empty projects.</p>
+<form class="narrow-form" method="post">
+  {{ csrf() }}
+  <label for="new_name">New name</label>
+  <input type="text" id="new_name" name="new_name" value="{{ form.get('new_name', name) }}" required autofocus>
+  <div class="form-buttons">
+    <a class="p-button--base" href="{{ url_for('srv.project_detail', name=name) }}">Cancel</a>
+    <button class="p-button--positive">Rename</button>
+  </div>
+</form>
+{% endblock %}

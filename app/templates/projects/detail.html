@@ -1,0 +1,81 @@
+{% extends "base.html" %}
+{% set live = true %}
+{% from "macros.html" import crumbs, csrf, empty %}
+{% block title %}{{ project.name }}{% endblock %}
+{% block heading %}{{ crumbs([('Projects', url_for('srv.projects')), (project.name, None)]) }}{% if is_current %} <span class="title-status">current</span>{% endif %}{% endblock %}
+{% block controls %}
+{% if not is_current %}
+<form class="inline" method="post" action="{{ url_for('srv.project_use', name=project.name) }}">
+  {{ csrf() }}<button class="p-button is-dense u-no-margin--bottom">Switch to</button>
+</form>
+{% endif %}
+<a class="p-button is-dense u-no-margin--bottom" href="{{ url_for('srv.project_edit', name=project.name) }}">Configure</a>
+{% if not is_default %}
+<a class="p-button is-dense u-no-margin--bottom" href="{{ url_for('srv.project_rename', name=project.name) }}">Rename</a>
+<form class="inline" method="post" action="{{ url_for('srv.project_delete', name=project.name) }}" data-confirm="Delete project {{ project.name }}?">
+  {{ csrf() }}
+  <button class="p-button--negative is-dense u-no-margin--bottom"{% if counts.get('instances') %} disabled title="It still has instances"{% endif %}>Delete</button>
+</form>
+{% endif %}
+{% endblock %}
+{% block content %}
+<div class="row">
+  <div class="col-3"><h2 class="p-heading--5 section-heading">General</h2></div>
+  <div class="col-9">
+    <table class="facts" aria-label="General">
+      <tbody>
+        <tr><th>Description</th><td>{{ project.description or '-' }}</td></tr>
+        <tr><th>Holds</th><td>{% for kind, count in counts|dictsort %}{{ count }} {{ kind|replace('-', ' ') }}{% if not loop.last %}, {% endif %}{% else %}Nothing yet{% endfor %}</td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+<hr class="p-rule">
+<div class="row">
+  <div class="col-3"><h2 class="p-heading--5 section-heading">Usage</h2></div>
+  <div class="col-9">
+    {% if usage %}
+    <table aria-label="Usage">
+      <thead><tr><th>Resource</th><th>Used</th><th>Limit</th></tr></thead>
+      <tbody>
+      {% for u in usage %}
+        <tr>
+          <td>{{ u.label }}</td>
+          <td>{{ u.usage|filesize if u.bytes else u.usage }}</td>
+          <td>{% if u.limit is none or u.limit < 0 %}No limit{% else %}{{ u.limit|filesize if u.bytes else u.limit }}{% endif %}</td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    {{ empty("Incus did not report usage for this project.") }}
+    {% endif %}
+  </div>
+</div>
+{% set restricted = (project.config or {}).get('restricted') == 'true' %}
+{% for section in sections %}
+<hr class="p-rule">
+<div class="row">
+  <div class="col-3">
+    <h2 class="p-heading--5 section-heading">{{ section.title }}</h2>
+    {% if loop.first %}<a class="p-button is-dense" href="{{ url_for('srv.project_edit', name=project.name) }}">Configure</a>
+    <a class="p-button--base is-dense" href="{{ url_for('srv.project_yaml', name=project.name) }}">Edit YAML</a>{% endif %}
+  </div>
+  <div class="col-9">
+    {% if section.title == 'Restrictions' and not restricted %}
+    <p class="snapshot-schedule">Not restricted: instances in this project may use any option and device.</p>
+    {% elif section.rows %}
+    <table class="facts" aria-label="{{ section.title }}">
+      <tbody>
+      {% for label, value in section.rows %}<tr><th>{{ label }}</th><td>{{ value }}</td></tr>{% endfor %}
+      </tbody>
+    </table>
+    {% elif section.title == 'Restrictions' %}
+    <p class="snapshot-schedule">Restricted, with Incus's defaults: nesting, privileged containers and most devices are blocked.</p>
+    {% else %}
+    <p class="snapshot-schedule">No limits.</p>
+    {% endif %}
+  </div>
+</div>
+{% endfor %}
+{% endblock %}

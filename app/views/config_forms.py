@@ -95,15 +95,28 @@ DEVICE_TYPES = {
 }
 
 
-def apply_settings(config: dict, form, settings: list = SETTINGS, check: bool = True) -> dict:
+def apply_settings(
+    config: dict,
+    form,
+    settings: list = SETTINGS,
+    check: bool = True,
+    choices: dict | None = None,
+) -> dict:
     """The config with the settings form's values; an empty field removes the key.
 
+    Kinds: text, bool (default/yes/no), choice (one of ``choices[key]``), and
+    feature (a checkbox that is always written as true or false).
     Raises IncusError for a value Incus would refuse less clearly.
     """
     config = dict(config or {})
     for key, _label, kind, _help in settings:
         value = form.get(f"cfg:{key}", "").strip()
+        if kind == "feature":
+            config[key] = "true" if value else "false"
+            continue
         if kind == "bool" and value not in ("", "true", "false"):
+            value = ""
+        if kind == "choice" and value not in (choices or {}).get(key, ()):
             value = ""
         if check and value and key in CHECKS:
             CHECKS[key](value)
@@ -119,11 +132,19 @@ def settings_fields(
     inherited: dict | None = None,
     settings: list = SETTINGS,
     empty: str = "No limit",
+    *,
+    groups: dict | None = None,
+    choices: dict | None = None,
+    defaults: dict | None = None,
 ) -> list[dict]:
     local, inherited = local or {}, inherited or {}
+    if groups is None:
+        groups = GROUPS if settings is SETTINGS else {}
     return [
         {
-            "group": GROUPS.get(key) if settings is SETTINGS else None,
+            "group": groups.get(key),
+            "options": (choices or {}).get(key, ()),
+            "default": (defaults or {}).get(key, ""),
             "empty": PLACEHOLDERS.get(key, empty),
             "key": key,
             "label": label,

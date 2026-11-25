@@ -50,6 +50,10 @@ class FakeIncus:
         self.images: dict[str, dict] = {}
         self.op_done: dict[str, threading.Event] = {}
         self.subscribers: list = []  # /1.0/events websockets
+        self.projects = {
+            "default": {"name": "default", "description": "Default Incus project", "config": {}}
+        }
+        self.project_used_by: dict[str, list] = {}  # extra used_by entries for tests
         self.fs: dict[str, dict] = {}  # instance files, by instance
         self.writes: list = []  # (path, headers) of file writes
         self.volumes: dict[str, dict[str, dict]] = {}
@@ -321,7 +325,21 @@ class FakeIncus:
                 self.trusted.append(hashlib.sha256(peer_cert).hexdigest())
                 return self.sync()
             case ("GET", ["projects"]):
-                return self.sync([{"name": "default", "description": "Default project"}])
+                return self.sync([self._project(n) for n in self.projects])
+            case ("POST", ["projects"]):
+                name = body.get("name", "")
+                if name in self.projects:
+                    return self.error(409, "Project already exists")
+                self.projects[name] = {
+                    "name": name,
+                    "description": body.get("description", ""),
+                    "config": body.get("config") or {},
+                }
+                return self.sync()
+            case (_, ["projects", name, *rest]):
+                if name not in self.projects:
+                    return self.error(404, "Project not found")
+                return self._project_op(method, name, rest, body)
             case ("GET", ["profiles"]):
                 return self.sync([self._profile(name) for name in self.profiles])
             case ("POST", ["profiles"]):
@@ -694,6 +712,67 @@ class FakeIncus:
                 if self._network(name)["used_by"]:
                     return self.error(400, "The network is currently in use")
                 del self.networks[name]
+                return self.sync()
+        return self.error(404, "not found")
+
+    def _project(self, name):
+        used_by = []
+        if name == "default":
+            used_by += [f"/1.0/instances/{i}" for i in self.instances]
+            used_by += [f"/1.0/profiles/{p}" for p in self.profiles]
+            used_by += [f"/1.0/images/{f}" for f in self.images]
+        used_by += self.project_used_by.get(name, [])
+        return {**self.projects[name], "used_by": used_by}
+
+    def _project_op(self, method, name, rest, body):
+        project = self.projects[name]
+        match (method, rest):
+            case ("GET", []):
+                return self.sync(self._project(name))
+            case ("GET", ["state"]):
+                limits = project.get("config") or {}
+                instances = len(self._project(name)["used_by"]) if name == "default" else 0
+
+                def limit(key):
+                    value = limits.get(f"limits.{key}")
+                    return int(value) if value and value.isdigit() else -1
+
+                return self.sync(
+                    {
+                        "resources": {
+                            "instances": {"Limit": limit("instances"), "Usage": instances},
+                            "containers": {"Limit": limit("containers"), "Usage": instances},
+                            "memory": {"Limit": -1, "Usage": 2 * 1024**3},
+                            "processes": {"Limit": limit("processes"), "Usage": 40},
+                        }
+                    }
+                )
+            case ("PUT", []):
+                changed = {
+                    k
+                    for k in set(project["config"]) | set(body.get("config") or {})
+                    if k.startswith("features.")
+                    and project["config"].get(k) != (body.get("config") or {}).get(k)
+                }
+                if changed and self._project(name)["used_by"]:
+                    return self.error(400, "Features can only be changed on empty projects")
+                project["config"] = body.get("config") or {}
+                project["description"] = body.get("description", "")
+                return self.sync()
+            case ("POST", []):
+                if name == "default":
+                    return self.error(403, "The 'default' project cannot be renamed")
+                if self._project(name)["used_by"]:
+                    return self.error(400, "Only empty projects can be renamed")
+                new_name = body.get("name", "")
+                self.projects[new_name] = {**self.projects.pop(name), "name": new_name}
+                return self.sync()
+            case ("DELETE", []):
+                if name == "default":
+                    return self.error(403, "The 'default' project cannot be deleted")
+                if self._project(name)["used_by"]:
+                    return self.error(400, "Only empty projects can be removed")
+                del self.projects[name]
                 return self.sync()
         return self.error(404, "not found")
 

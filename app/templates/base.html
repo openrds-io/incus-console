@@ -59,6 +59,7 @@
                 ('srv.volumes', 'Volumes', 'volume' in here),
                 ('srv.all_buckets', 'Buckets', 'bucket' in here),
                 ('srv.operations', 'Operations', 'operation' in here),
+                ('srv.projects', 'Projects', here.startswith('srv.project_') or here == 'srv.projects'),
               ] %}
               {% for endpoint, label, active in nav %}
               <li class="p-side-navigation__item">

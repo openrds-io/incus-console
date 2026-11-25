@@ -62,6 +62,7 @@ def create_app(test_config: dict | None = None) -> Flask:
         networks,
         operations,
         profiles,
+        projects,
         scoped,
         storage,
         volumes,

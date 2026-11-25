@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+{% from "macros.html" import crumbs as crumb_links, csrf %}
+{% from "config/_fields.html" import settings_inputs %}
+{% block title %}{% if creating %}Create project{% else %}Configure {{ name }}{% endif %}{% endblock %}
+{% block heading %}{% if creating %}{{ crumb_links([('Projects', url_for('srv.projects')), ('Create project', None)]) }}{% else %}{{ crumb_links(crumbs) }}{% endif %}{% endblock %}
+{% block content %}
+<p class="p-form-help-text">A project keeps its instances apart. With a feature on, the project has its own images, profiles, volumes, buckets or networks; with it off, it uses the default project's.{% if not creating %} Incus changes features only while a project is empty. Everything else is in <a href="{{ url_for('srv.project_yaml', name=name) }}">Edit YAML</a>.{% endif %}</p>
+<form class="narrow-form" method="post">
+  {{ csrf() }}
+  {% if creating %}
+  <label for="name">Name</label>
+  <input type="text" id="name" name="name" value="{{ form.get('name', '') }}" required autofocus>
+  {% endif %}
+  <label for="description">Description</label>
+  <input type="text" id="description" name="description" value="{{ form.get('description', description if not creating else '') }}">
+  {{ settings_inputs(fields) }}
+  <div class="form-buttons">
+    <a class="p-button--base" href="{{ url_for('srv.projects') if creating else url_for('srv.project_detail', name=name) }}">Cancel</a>
+    <button class="p-button--positive">{% if creating %}Create{% else %}Save{% endif %}</button>
+  </div>
+</form>
+{% endblock %}

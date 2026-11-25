@@ -2,10 +2,26 @@
 {% macro settings_inputs(fields) %}
 {% for f in fields %}
 {% if f.group %}<h3 class="p-heading--5 settings-group">{{ f.group }}</h3>{% endif %}
+{% if f.kind == 'feature' %}
+{% set on = f.value == 'true' or (not f.value and f.default == 'true') %}
+<label class="p-checkbox">
+  <input type="checkbox" class="p-checkbox__input" name="cfg:{{ f.key }}" value="true"{% if on %} checked{% endif %}>
+  <span class="p-checkbox__label">{{ f.label }} <code class="key-name">{{ f.key }}</code></span>
+</label>
+{% else %}
 <label for="cfg-{{ loop.index }}">{{ f.label }} <code class="key-name">{{ f.key }}</code></label>
-{% if f.kind == 'bool' %}
+{% endif %}
+{% if f.kind == 'feature' %}
+{% elif f.kind == 'choice' %}
 <select id="cfg-{{ loop.index }}" name="cfg:{{ f.key }}">
-  <option value=""{% if not f.value %} selected{% endif %}>{% if f.inherited %}From profile ({{ 'yes' if f.inherited == 'true' else 'no' }}){% else %}Default{% endif %}</option>
+  <option value=""{% if not f.value %} selected{% endif %}>Default{% if f.default %} ({{ f.default }}){% endif %}</option>
+  {% for option in f.options %}
+  <option value="{{ option }}"{% if f.value == option %} selected{% endif %}>{{ option }}</option>
+  {% endfor %}
+</select>
+{% elif f.kind == 'bool' %}
+<select id="cfg-{{ loop.index }}" name="cfg:{{ f.key }}">
+  <option value=""{% if not f.value %} selected{% endif %}>{% if f.inherited %}From profile ({{ 'yes' if f.inherited == 'true' else 'no' }}){% else %}Default{% if f.default %} ({{ 'yes' if f.default == 'true' else 'no' }}){% endif %}{% endif %}</option>
   <option value="true"{% if f.value == 'true' %} selected{% endif %}>Yes</option>
   <option value="false"{% if f.value == 'false' %} selected{% endif %}>No</option>
 </select>

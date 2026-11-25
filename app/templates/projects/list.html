@@ -1,0 +1,37 @@
+{% extends "base.html" %}
+{% set live = true %}
+{% from "macros.html" import empty %}
+{% block title %}Projects{% endblock %}
+{% block controls %}<a class="p-button--positive u-no-margin--bottom" href="{{ url_for('srv.project_create') }}">Create project</a>{% endblock %}
+{% block content %}
+{% if rows %}
+<table aria-label="Projects">
+  <thead><tr><th>Name</th><th>Description</th><th>Instances</th><th>Images</th><th>Profiles</th><th>Volumes</th><th>Networks</th><th class="u-align--right">Actions</th></tr></thead>
+  <tbody>
+  {% for p in rows %}
+    {% set cfg = {'features.images': 'true', 'features.profiles': 'true', 'features.storage.volumes': 'true', 'features.networks': 'true'} if p.name == 'default' else (p.config or {}) %}
+    <tr>
+      <td><a href="{{ url_for('srv.project_detail', name=p.name) }}">{{ p.name }}</a>{% if p.name == project %} <span class="u-text--muted">(current)</span>{% endif %}</td>
+      <td>{{ p.description or '' }}</td>
+      <td>{{ p.counts.get('instances', 0) }}</td>
+      <td>{{ p.counts.get('images', 0) if cfg.get('features.images', 'true') == 'true' else 'Shared' }}</td>
+      <td>{{ p.counts.get('profiles', 0) if cfg.get('features.profiles', 'true') == 'true' else 'Shared' }}</td>
+      <td>{{ p.counts.get('storage-pools', 0) if cfg.get('features.storage.volumes', 'true') == 'true' else 'Shared' }}</td>
+      <td>{{ p.counts.get('networks', 0) if cfg.get('features.networks', 'false') == 'true' else 'Shared' }}</td>
+      <td class="u-align--right">
+        {% if p.name != project %}
+        <form class="inline" method="post" action="{{ url_for('srv.project_use', name=p.name) }}">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <button class="p-button is-dense u-no-margin--bottom">Switch to</button>
+        </form>
+        {% endif %}
+      </td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+<p class="p-form-help-text">"Shared" means the project uses the default project's images, profiles, volumes or networks instead of having its own.</p>
+{% else %}
+{{ empty("No projects.") }}
+{% endif %}
+{% endblock %}
