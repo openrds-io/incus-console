@@ -1,10 +1,9 @@
 """The browser terminal: xterm.js <-> this app <-> an Incus exec session.
 
-Same approach and wire format as openrds-io/ui's console. The browser sends
-``{"t": "i", "d": keys}`` and ``{"t": "r", "c": cols, "r": rows}``; output goes
-back as binary frames, then ``{"t": "x"}`` when the shell ends, or
-``{"t": "e", "m": message}`` if it could not start (a browser cannot read a
-failed websocket handshake).
+The browser sends ``{"t": "i", "d": keys}`` and
+``{"t": "r", "c": cols, "r": rows}``; output goes back as binary frames, then
+``{"t": "x"}`` when the shell ends, or ``{"t": "e", "m": message}`` if it could
+not start (a browser cannot read a failed websocket handshake).
 """
 
 from __future__ import annotations

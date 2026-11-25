@@ -1,8 +1,8 @@
-# incus-console
+# Incus Console
 
-A lean web and desktop console for [Incus](https://linuxcontainers.org/incus/).
-It is a front end to the Incus REST API: a small Python 3.13 / Flask app (the same
-stack as openrds-io/ui) that renders pages on the server and talks to Incus over a local unix socket or HTTPS.
+A web and desktop console for [Incus](https://linuxcontainers.org/incus/).
+It is a front end to the Incus REST API: a small Python 3.13 / Flask app that
+renders pages on the server and talks to Incus over a local unix socket or HTTPS.
 
 It covers much the same ground as the Incus web UIs.
 System containers come first, object storage second.
