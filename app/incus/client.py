@@ -220,8 +220,46 @@ class IncusClient:
     def profiles(self) -> list:
         return self.get("profiles", recursion=1) or []
 
+    def profile(self, name: str) -> dict:
+        return self.get("profiles", name)
+
+    def create_profile(self, payload: dict) -> dict:
+        return self.request("POST", path("profiles"), body=payload)
+
+    def update_profile(self, name: str, payload: dict) -> dict:
+        return self.request("PUT", path("profiles", name), body=payload)
+
+    def rename_profile(self, name: str, new_name: str) -> dict:
+        return self.request("POST", path("profiles", name), body={"name": new_name})
+
+    def delete_profile(self, name: str) -> dict:
+        return self.request("DELETE", path("profiles", name))
+
     def images(self) -> list:
         return self.get("images", recursion=1) or []
+
+    def image(self, fingerprint: str) -> dict:
+        return self.get("images", fingerprint)
+
+    def delete_image(self, fingerprint: str) -> dict:
+        return self.request("DELETE", path("images", fingerprint))
+
+    def add_image_alias(self, fingerprint: str, alias: str, description: str = "") -> dict:
+        body = {"name": alias, "target": fingerprint, "description": description}
+        return self.request("POST", path("images", "aliases"), body=body)
+
+    def delete_image_alias(self, alias: str) -> dict:
+        return self.request("DELETE", path("images", "aliases", alias))
+
+    def publish_instance(self, name: str, alias: str = "", description: str = "") -> dict:
+        """Make an image from a stopped instance."""
+        body = {
+            "source": {"type": "instance", "name": name},
+            "public": False,
+            "properties": {"description": description} if description else {},
+            "aliases": [{"name": alias}] if alias else [],
+        }
+        return self.request("POST", path("images"), body=body)
 
     def operations(self) -> list:
         """All operations of the project as one list, newest first."""

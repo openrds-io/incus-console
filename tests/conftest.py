@@ -41,6 +41,7 @@ def app(tmp_path):
             "DATA_DIR": str(tmp_path / "data"),
             "LOCAL_SOCKETS": [],
             "ACTION_WAIT": 1,
+            "IMAGE_CATALOG": False,
             "INCUS_TIMEOUT": 5,
         }
     )

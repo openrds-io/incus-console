@@ -15,7 +15,12 @@ Early scaffold. Working today:
 - System containers: list, create, start, stop, restart, freeze, delete,
   rename, copy, snapshots, logs (console and Incus log files), a settings form
   for limits and common options, adding and removing devices, and full
-  configuration editing as YAML
+  configuration editing as YAML; creating from the image server's catalog,
+  with a storage pool and cloud-init user data
+- Profiles: list, create (empty or as a copy), settings form, devices, YAML,
+  rename, delete
+- Images: list, details, aliases, delete, and publishing a stopped container as
+  an image
 - Object storage: storage pools; buckets across all pools or per pool;
   create (credentials shown once), edit size and description, delete; access
   keys with admin or read-only roles, custom or generated access and secret

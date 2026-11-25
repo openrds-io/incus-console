@@ -1,0 +1,16 @@
+{% extends "base.html" %}
+{% from "macros.html" import crumbs, csrf %}
+{% block title %}Rename {{ name }}{% endblock %}
+{% block heading %}{{ crumbs([('Profiles', url_for('srv.profiles')), (name, url_for('srv.profile', name=name)), ('Rename', None)]) }}{% endblock %}
+{% block content %}
+<p class="p-form-help-text">Instances using this profile keep using it under its new name.</p>
+<form class="narrow-form" method="post">
+  {{ csrf() }}
+  <label for="new_name">New name</label>
+  <input type="text" id="new_name" name="new_name" value="{{ form.get('new_name', name) }}" required autofocus>
+  <div class="form-buttons">
+    <a class="p-button--base" href="{{ url_for('srv.profile', name=name) }}">Cancel</a>
+    <button class="p-button--positive">Rename</button>
+  </div>
+</form>
+{% endblock %}

@@ -7,6 +7,7 @@
 {{ actions(instance, 'detail') }}
 <a class="p-button is-dense u-no-margin--bottom" href="{{ url_for('srv.instance_logs', name=instance.name) }}">Logs</a>
 <a class="p-button is-dense u-no-margin--bottom" href="{{ url_for('srv.instance_copy', name=instance.name) }}">Copy</a>
+<a class="p-button is-dense u-no-margin--bottom" href="{{ url_for('srv.instance_publish', name=instance.name) }}">Publish</a>
 <a class="p-button is-dense u-no-margin--bottom" href="{{ url_for('srv.instance_rename', name=instance.name) }}">Rename</a>
 <form class="inline" method="post" action="{{ url_for('srv.instance_delete', name=instance.name) }}" data-confirm="Delete {{ instance.name }} and its snapshots? This cannot be undone.">
   {{ csrf() }}

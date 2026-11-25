@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+{% from "macros.html" import crumbs, csrf %}
+{% block title %}Create profile{% endblock %}
+{% block heading %}{{ crumbs([('Profiles', url_for('srv.profiles')), ('Create profile', None)]) }}{% endblock %}
+{% block content %}
+<form class="narrow-form" method="post">
+  {{ csrf() }}
+  <label for="name">Name</label>
+  <input type="text" id="name" name="name" value="{{ form.get('name', '') }}" required autofocus>
+  <label for="description">Description</label>
+  <input type="text" id="description" name="description" value="{{ form.get('description', '') }}">
+  <label for="copy_from">Start from</label>
+  <select id="copy_from" name="copy_from">
+    <option value="">An empty profile</option>
+    {% for name in existing %}
+    <option value="{{ name }}"{% if name == source %} selected{% endif %}>A copy of {{ name }}</option>
+    {% endfor %}
+  </select>
+  <p class="p-form-help-text">A copy takes the other profile's settings and devices. You can change them after creating it.</p>
+  <div class="form-buttons">
+    <a class="p-button--base" href="{{ url_for('srv.profiles') }}">Cancel</a>
+    <button class="p-button--positive">Create</button>
+  </div>
+</form>
+{% endblock %}

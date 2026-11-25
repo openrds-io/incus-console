@@ -1,0 +1,77 @@
+{% extends "base.html" %}
+{% from "macros.html" import crumbs, csrf, empty %}
+{% block title %}{{ profile.name }}{% endblock %}
+{% block heading %}{{ crumbs([('Profiles', url_for('srv.profiles')), (profile.name, None)]) }}{% endblock %}
+{% block controls %}
+<a class="p-button is-dense u-no-margin--bottom" href="{{ url_for('srv.profile_create', copy_from=profile.name) }}">Copy</a>
+{% if not is_default %}
+<a class="p-button is-dense u-no-margin--bottom" href="{{ url_for('srv.profile_rename', name=profile.name) }}">Rename</a>
+<form class="inline" method="post" action="{{ url_for('srv.profile_delete', name=profile.name) }}" data-confirm="Delete profile {{ profile.name }}?">
+  {{ csrf() }}
+  <button class="p-button--negative is-dense u-no-margin--bottom"{% if instances %} disabled title="Instances still use it"{% endif %}>Delete</button>
+</form>
+{% endif %}
+{% endblock %}
+{% block content %}
+<div class="row">
+  <div class="col-3"><h2 class="p-heading--5 section-heading">General</h2></div>
+  <div class="col-9">
+    <table class="facts" aria-label="General">
+      <tbody>
+        <tr><th>Description</th><td>{{ profile.description or '-' }}</td></tr>
+        <tr><th>Used by</th><td>
+          {% for name in instances %}<a href="{{ url_for('srv.instance', name=name) }}">{{ name }}</a>{% if not loop.last %}, {% endif %}{% else %}No instances{% endfor %}
+        </td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+<hr class="p-rule">
+<div class="row">
+  <div class="col-3">
+    <h2 class="p-heading--5 section-heading">Configuration</h2>
+    <a class="p-button is-dense" href="{{ url_for('srv.profile_settings', name=profile.name) }}">Edit settings</a>
+    <a class="p-button--base is-dense" href="{{ url_for('srv.profile_edit', name=profile.name) }}">Edit YAML</a>
+  </div>
+  <div class="col-9">
+    <table aria-label="Configuration">
+      <thead><tr><th>Key</th><th>Value</th></tr></thead>
+      <tbody>
+      {% for key, value in (profile.config or {})|dictsort %}
+        <tr><td><code>{{ key }}</code></td><td>{{ value }}</td></tr>
+      {% else %}
+        <tr><td colspan="2" class="u-text--muted">Nothing set.</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+<hr class="p-rule">
+<div class="row">
+  <div class="col-3">
+    <h2 class="p-heading--5 section-heading">Devices</h2>
+    <a class="p-button is-dense" href="{{ url_for('srv.profile_device_create', name=profile.name) }}">Add device</a>
+  </div>
+  <div class="col-9">
+    <table aria-label="Devices">
+      <thead><tr><th>Name</th><th>Type</th><th>Settings</th><th class="u-align--right">Actions</th></tr></thead>
+      <tbody>
+      {% for name, device in (profile.devices or {})|dictsort %}
+        <tr>
+          <td><code>{{ name }}</code></td>
+          <td>{{ device.type }}</td>
+          <td>{% for key, value in device|dictsort if key != 'type' %}<code>{{ key }}={{ value }}</code> {% endfor %}</td>
+          <td class="u-align--right">
+            <form class="inline" method="post" action="{{ url_for('srv.profile_device_delete', name=profile.name, device=name) }}" data-confirm="Remove device {{ name }} from profile {{ profile.name }}? Every instance using the profile loses it.">
+              {{ csrf() }}<button class="p-button--negative is-dense u-no-margin--bottom">Remove</button>
+            </form>
+          </td>
+        </tr>
+      {% else %}
+        <tr><td colspan="4" class="u-text--muted">No devices.</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

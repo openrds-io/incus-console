@@ -54,7 +54,7 @@ def create_app(test_config: dict | None = None) -> Flask:
     auth.init_app(app)
     filters.init_app(app)
 
-    from .views import instances, operations, scoped, storage  # noqa: F401
+    from .views import images, instances, operations, profiles, scoped, storage  # noqa: F401
     from .views import servers as servers_view
 
     app.register_blueprint(servers_view.bp)

@@ -26,6 +26,10 @@ INCUS_TIMEOUT = 30
 ACTION_WAIT = 30
 
 DEFAULT_IMAGE_SERVER = "https://images.linuxcontainers.org"
+
+# Offer the default image server's catalog on the create form. The console
+# fetches the server's index (several MB) and keeps it for an hour.
+IMAGE_CATALOG = True
 IMAGE_SUGGESTIONS = ["debian/13", "debian/12", "ubuntu/26.04", "ubuntu/24.04", "almalinux/10"]
 
 # What the browser terminal runs in a container: a login shell as root.

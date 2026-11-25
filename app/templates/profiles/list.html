@@ -1,0 +1,24 @@
+{% extends "base.html" %}
+{% from "macros.html" import empty %}
+{% block title %}Profiles{% endblock %}
+{% block controls %}<a class="p-button--positive u-no-margin--bottom" href="{{ url_for('srv.profile_create') }}">Create profile</a>{% endblock %}
+{% block content %}
+{% if profiles %}
+<table aria-label="Profiles">
+  <thead><tr><th>Name</th><th>Description</th><th>Settings</th><th>Devices</th><th>Used by</th></tr></thead>
+  <tbody>
+  {% for p in profiles %}
+    <tr>
+      <td><a href="{{ url_for('srv.profile', name=p.name) }}">{{ p.name }}</a></td>
+      <td>{{ p.description or '' }}</td>
+      <td>{{ (p.config or {})|length }}</td>
+      <td>{{ (p.devices or {})|length }}</td>
+      <td>{{ p.instances|length }} instance{{ '' if p.instances|length == 1 else 's' }}</td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% else %}
+{{ empty("No profiles in project " ~ project ~ ".") }}
+{% endif %}
+{% endblock %}

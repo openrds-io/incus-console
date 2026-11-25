@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+{% from "macros.html" import crumbs, csrf %}
+{% block title %}Publish {{ instance.name }}{% endblock %}
+{% block heading %}{{ crumbs([('Instances', url_for('srv.instances')), (instance.name, url_for('srv.instance', name=instance.name)), ('Publish as image', None)]) }}{% endblock %}
+{% block content %}
+{% if instance.status != 'Stopped' %}
+<div class="p-notification--caution">
+  <div class="p-notification__content"><p class="p-notification__message">Incus publishes only stopped instances. Stop {{ instance.name }} first.</p></div>
+</div>
+{% endif %}
+<p class="p-form-help-text">Makes an image of {{ instance.name }}'s filesystem, so you can create more containers like it. This can take a while for large containers.</p>
+<form class="narrow-form" method="post">
+  {{ csrf() }}
+  <label for="alias">Alias</label>
+  <input type="text" id="alias" name="alias" value="{{ form.get('alias', '') }}" placeholder="Optional, e.g. web-base" autofocus>
+  <label for="description">Description</label>
+  <input type="text" id="description" name="description" value="{{ form.get('description', default_description) }}">
+  <div class="form-buttons">
+    <a class="p-button--base" href="{{ url_for('srv.instance', name=instance.name) }}">Cancel</a>
+    <button class="p-button--positive"{% if instance.status != 'Stopped' %} disabled{% endif %}>Publish</button>
+  </div>
+</form>
+{% endblock %}

@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+{% from "macros.html" import empty %}
+{% block title %}Images{% endblock %}
+{% block content %}
+{% if images %}
+<table aria-label="Images">
+  <thead><tr><th>Description</th><th>Aliases</th><th>Type</th><th>Architecture</th><th>Size</th><th>Uploaded</th></tr></thead>
+  <tbody>
+  {% for i in images %}
+    <tr>
+      <td><a href="{{ url_for('srv.image', fingerprint=i.fingerprint) }}">{{ label(i) }}</a>{% if i.cached %} <span class="u-text--muted">(cached)</span>{% endif %}</td>
+      <td>{% for a in i.aliases or [] %}<code>{{ a.name }}</code> {% else %}-{% endfor %}</td>
+      <td>{{ 'VM' if i.type == 'virtual-machine' else 'Container' }}</td>
+      <td>{{ i.architecture or '-' }}</td>
+      <td>{{ i.size|filesize }}</td>
+      <td>{{ i.uploaded_at|when }}</td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+<p class="p-form-help-text">Images downloaded to create an instance are cached and removed by Incus when unused. Publish an instance (from its page) to keep your own.</p>
+{% else %}
+{{ empty("No images on this server yet. Creating a container downloads one; publishing a container makes one.") }}
+{% endif %}
+{% endblock %}

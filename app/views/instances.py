@@ -3,11 +3,18 @@ from __future__ import annotations
 import re
 from urllib.parse import urlsplit
 
-import yaml
 from flask import current_app, flash, g, redirect, render_template, request, url_for
 
-from .. import terminal
+from .. import catalog, terminal
 from ..incus import IncusError
+from .config_forms import (
+    DEVICE_TYPES,
+    apply_settings,
+    dump_yaml,
+    load_yaml,
+    new_device,
+    settings_fields,
+)
 from .scoped import bp, run
 
 ACTIONS = {
@@ -27,46 +34,76 @@ def instances():
     return render_template("instances/list.html", instances=rows)
 
 
+def _catalog() -> tuple[list, str | None]:
+    """The image server's container images for this host, or a reason there are none."""
+    if not current_app.config["IMAGE_CATALOG"]:
+        return [], None
+    environment = g.incus.server_info().get("environment") or {}
+    try:
+        groups = catalog.for_server(
+            current_app.config["DEFAULT_IMAGE_SERVER"], environment.get("architectures") or []
+        )
+    except Exception as error:  # noqa: BLE001 - offline, blocked, or a bad index
+        current_app.logger.warning("image catalog unavailable: %s", error)
+        return [], "The image server's catalog could not be loaded. Type an alias instead."
+    return groups, None
+
+
 @bp.route("/create-instance", methods=["GET", "POST"])
 def instance_create():
     config = current_app.config
+    groups, catalog_problem = _catalog()
+    form = request.form
     if request.method == "POST":
-        form = request.form
         name = form.get("name", "").strip()
         source = {"type": "image"}
-        if form.get("source") == "local":
+        chosen = form.get("source", "catalog")
+        if chosen == "local":
             source["fingerprint"] = form.get("fingerprint", "")
         else:
-            source.update(
-                mode="pull",
-                protocol="simplestreams",
-                server=form.get("image_server", "").strip() or config["DEFAULT_IMAGE_SERVER"],
-                alias=form.get("alias", "").strip(),
-            )
-        limits = {
-            key: form.get(field, "").strip()
-            for key, field in (("limits.cpu", "cpu"), ("limits.memory", "memory"))
+            alias = form.get("catalog_alias" if chosen == "catalog" else "alias", "").strip()
+            server = config["DEFAULT_IMAGE_SERVER"]
+            if chosen == "remote":
+                server = form.get("image_server", "").strip() or server
+            source.update(mode="pull", protocol="simplestreams", server=server, alias=alias)
+        settings = {
+            "limits.cpu": form.get("cpu", "").strip(),
+            "limits.memory": form.get("memory", "").strip(),
+            "cloud-init.user-data": form.get("user_data", "").strip(),
         }
         payload = {
             "name": name,
             "type": "container",
             "description": form.get("description", "").strip(),
             "profiles": form.getlist("profiles") or ["default"],
-            "config": {key: value for key, value in limits.items() if value},
+            "config": {key: value for key, value in settings.items() if value},
             "source": source,
             "start": bool(form.get("start")),
         }
-        if not name:
-            flash("Give the container a name.", "error")
+        pool = form.get("pool", "").strip()
+        if pool:
+            payload["devices"] = {"root": {"type": "disk", "path": "/", "pool": pool}}
+        if not NAME.fullmatch(name):
+            flash(NAME_RULE, "error")
+        elif chosen != "local" and not source["alias"]:
+            flash("Choose an image.", "error")
         elif run(lambda: g.incus.create_instance(payload), f"Container {name} created."):
-            return redirect(url_for("srv.instances"))
+            return redirect(url_for("srv.instance", name=name))
+    image = request.args.get("image", "")
+    default_source = "local" if image else ("catalog" if groups else "remote")
     return render_template(
         "instances/new.html",
         profiles=[p["name"] for p in g.incus.profiles()],
+        pools=[p["name"] for p in g.incus.pools()],
         images=g.incus.images(),
+        groups=groups,
+        catalog_problem=catalog_problem,
         image_server=config["DEFAULT_IMAGE_SERVER"],
         suggestions=config["IMAGE_SUGGESTIONS"],
-        form=request.form,
+        default_source=default_source,
+        default_alias=config["IMAGE_SUGGESTIONS"][0],
+        default_image=image,
+        form=form,
     )
 
 
@@ -104,22 +141,23 @@ def instance_edit(name):
     if request.method == "POST":
         text = request.form.get("yaml", "")
         try:
-            data = yaml.safe_load(text)
-            if not isinstance(data, dict):
-                raise IncusError(400, "The configuration must be a YAML mapping.")
-            payload = {key: data[key] for key in EDITABLE if key in data}
-        except yaml.YAMLError as error:
-            flash(f"Invalid YAML: {error}", "error")
+            payload = load_yaml(text, EDITABLE)
         except IncusError as error:
             flash(error.message, "error")
         else:
             if run(lambda: g.incus.update_instance(name, payload), f"{name} updated."):
                 return redirect(url_for("srv.instance", name=name))
     else:
-        current = g.incus.instance(name)
-        editable = {key: current[key] for key in EDITABLE if key in current}
-        text = yaml.safe_dump(editable, sort_keys=False, default_flow_style=False)
-    return render_template("instances/edit.html", name=name, text=text)
+        text = dump_yaml(g.incus.instance(name), EDITABLE)
+    return render_template(
+        "config/yaml.html",
+        title=f"Edit {name}",
+        crumbs=_crumbs({"name": name}, "Edit YAML"),
+        back=url_for("srv.instance", name=name),
+        command=f"incus config edit {name}",
+        volatile=True,
+        text=text,
+    )
 
 
 @bp.post("/instances/<name>/snapshots")
@@ -237,36 +275,6 @@ def instance_logs(name):
 
 # -- settings and devices -------------------------------------------------
 
-# (key, label, kind, help). Empty means "not set here": the value comes from
-# the instance's profiles, or Incus's default.
-SETTINGS = [
-    ("limits.cpu", "CPUs", "text", "A number of CPUs, or CPU ids such as 0-3."),
-    ("limits.memory", "Memory", "text", "Such as 2GiB, or 50% of the host."),
-    ("limits.processes", "Processes", "text", "The most processes it may run."),
-    ("boot.autostart", "Start when the host starts", "bool", ""),
-    (
-        "security.nesting",
-        "Allow nested containers",
-        "bool",
-        "Needed to run Docker or Incus inside.",
-    ),
-    (
-        "security.privileged",
-        "Privileged",
-        "bool",
-        "Root in the container is root on the host. Avoid unless you need it.",
-    ),
-]
-DEVICE_TYPES = {
-    "disk": "source=/srv/data\npath=/data",
-    "proxy": "listen=tcp:0.0.0.0:8080\nconnect=tcp:127.0.0.1:80",
-    "nic": "network=incusbr0\nname=eth1",
-    "unix-char": "source=/dev/fuse\npath=/dev/fuse",
-    "unix-block": "source=/dev/sdb\npath=/dev/sdb",
-    "usb": "vendorid=0403\nproductid=6001",
-    "gpu": "gputype=physical",
-}
-
 
 def _editable(instance: dict) -> dict:
     return {key: instance[key] for key in EDITABLE if key in instance}
@@ -276,80 +284,57 @@ def _save(name: str, payload: dict, done: str) -> bool:
     return run(lambda: g.incus.update_instance(name, payload), done)
 
 
+def _crumbs(instance: dict, last: str) -> list:
+    return [
+        ("Instances", url_for("srv.instances")),
+        (instance["name"], url_for("srv.instance", name=instance["name"])),
+        (last, None),
+    ]
+
+
 @bp.route("/instances/<name>/settings", methods=["GET", "POST"])
 def instance_settings(name):
     instance = g.incus.instance(name)
     if request.method == "POST":
         payload = _editable(instance)
-        config = dict(payload.get("config") or {})
-        for key, _label, kind, _help in SETTINGS:
-            value = request.form.get(f"cfg:{key}", "").strip()
-            if kind == "bool" and value not in ("", "true", "false"):
-                value = ""
-            if value:
-                config[key] = value
-            else:
-                config.pop(key, None)
-        payload["config"] = config
+        payload["config"] = apply_settings(payload.get("config"), request.form)
         payload["description"] = request.form.get("description", "").strip()
         if _save(name, payload, f"{name} updated."):
             return redirect(url_for("srv.instance", name=name))
-        instance = {**instance, "config": config, "description": payload["description"]}
-    local = instance.get("config") or {}
-    expanded = instance.get("expanded_config") or {}
-    fields = [
-        {
-            "key": key,
-            "label": label,
-            "kind": kind,
-            "help": help_text,
-            "value": local.get(key, ""),
-            "inherited": "" if key in local else expanded.get(key, ""),
-        }
-        for key, label, kind, help_text in SETTINGS
-    ]
-    return render_template("instances/settings.html", instance=instance, fields=fields)
-
-
-def _parse_settings(text: str) -> dict:
-    settings = {}
-    for number, line in enumerate(text.splitlines(), 1):
-        line = line.strip()
-        if not line or line.startswith("#"):
-            continue
-        key, sep, value = line.partition("=")
-        if not sep or not key.strip():
-            raise IncusError(400, f"Line {number}: write each setting as key=value.")
-        settings[key.strip()] = value.strip()
-    return settings
+        instance = {**instance, **payload}
+    return render_template(
+        "config/settings.html",
+        title=f"Settings - {name}",
+        crumbs=_crumbs(instance, "Settings"),
+        back=url_for("srv.instance", name=name),
+        yaml_href=url_for("srv.instance_edit", name=name),
+        description=instance.get("description") or "",
+        fields=settings_fields(instance.get("config"), instance.get("expanded_config")),
+        inherits=True,
+    )
 
 
 @bp.route("/instances/<name>/devices/new", methods=["GET", "POST"])
 def device_create(name):
     instance = g.incus.instance(name)
-    form = request.form
     if request.method == "POST":
-        device = form.get("device", "").strip()
-        kind = form.get("type", "")
         try:
-            if not device:
-                raise IncusError(400, "Give the device a name.")
-            if kind not in DEVICE_TYPES:
-                raise IncusError(400, "Choose a device type.")
-            if device in (instance.get("devices") or {}):
-                raise IncusError(400, f"{name} already has a device named {device}.")
-            settings = _parse_settings(form.get("settings", ""))
+            device, settings = new_device(request.form, name, instance.get("devices"))
         except IncusError as error:
             flash(error.message, "error")
         else:
             payload = _editable(instance)
-            devices = dict(payload.get("devices") or {})
-            devices[device] = {**settings, "type": kind}
-            payload["devices"] = devices
+            payload["devices"] = {**(payload.get("devices") or {}), device: settings}
             if _save(name, payload, f"Device {device} added."):
                 return redirect(url_for("srv.instance", name=name))
     return render_template(
-        "instances/device_new.html", instance=instance, types=DEVICE_TYPES, form=form
+        "config/device_new.html",
+        title=f"Add device - {name}",
+        crumbs=_crumbs(instance, "Add device"),
+        back=url_for("srv.instance", name=name),
+        types=DEVICE_TYPES,
+        form=request.form,
+        inherits=True,
     )
 
 

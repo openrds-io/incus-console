@@ -1,0 +1,15 @@
+{% extends "base.html" %}
+{% from "macros.html" import crumbs as crumb_links, csrf %}
+{% block title %}{{ title }}{% endblock %}
+{% block heading %}{{ crumb_links(crumbs) }}{% endblock %}
+{% block content %}
+<p class="p-form-help-text">The same document as <code>{{ command }}</code>.{% if volatile %} Leave the <code>volatile.*</code> keys alone unless you mean to change them.{% endif %}</p>
+<form method="post">
+  {{ csrf() }}
+  <textarea class="code-editor" name="yaml" rows="28" spellcheck="false" aria-label="Configuration as YAML">{{ text }}</textarea>
+  <div class="form-buttons">
+    <a class="p-button--base" href="{{ back }}">Cancel</a>
+    <button class="p-button--positive">Save</button>
+  </div>
+</form>
+{% endblock %}

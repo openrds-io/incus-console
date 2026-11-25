@@ -131,10 +131,13 @@ def test_create_container(browser, sid, fake):
 
 
 def test_create_error_keeps_the_form(browser, sid, fake):
-    response = browser.post(f"/servers/{sid}/create-instance", {"name": "9bad", "alias": "x"})
-    page = text(response)
-    assert "Invalid instance name" in page
+    form = {"name": "9bad", "source": "remote", "alias": "x"}
+    page = text(browser.post(f"/servers/{sid}/create-instance", form))
+    assert "Use letters, digits and dashes" in page
     assert 'value="9bad"' in page
+    form = {"name": "taken", "source": "remote", "alias": "x"}
+    fake.add_instance("taken")
+    assert "already exists" in text(browser.post(f"/servers/{sid}/create-instance", form))
 
 
 def test_instance_actions(browser, sid, fake):

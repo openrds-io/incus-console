@@ -1,0 +1,79 @@
+{% extends "base.html" %}
+{% from "macros.html" import crumbs, csrf %}
+{% block title %}{{ label }}{% endblock %}
+{% block heading %}{{ crumbs([('Images', url_for('srv.images')), (label, None)]) }}{% endblock %}
+{% block controls %}
+{% if image.type != 'virtual-machine' %}
+<a class="p-button--positive is-dense u-no-margin--bottom" href="{{ url_for('srv.instance_create', image=image.fingerprint) }}">Create container</a>
+{% endif %}
+<form class="inline" method="post" action="{{ url_for('srv.image_delete', fingerprint=image.fingerprint) }}" data-confirm="Delete this image? Instances already made from it are not affected.">
+  {{ csrf() }}<button class="p-button--negative is-dense u-no-margin--bottom">Delete</button>
+</form>
+{% endblock %}
+{% block content %}
+<div class="row">
+  <div class="col-3"><h2 class="p-heading--5 section-heading">General</h2></div>
+  <div class="col-9">
+    <table class="facts" aria-label="General">
+      <tbody>
+        <tr><th>Fingerprint</th><td><code>{{ image.fingerprint }}</code></td></tr>
+        <tr><th>Type</th><td>{{ 'Virtual machine' if image.type == 'virtual-machine' else 'Container' }}</td></tr>
+        <tr><th>Architecture</th><td>{{ image.architecture or '-' }}</td></tr>
+        <tr><th>Size</th><td>{{ image.size|filesize }}</td></tr>
+        <tr><th>Created</th><td>{{ image.created_at|when }}</td></tr>
+        <tr><th>Uploaded</th><td>{{ image.uploaded_at|when }}</td></tr>
+        <tr><th>Last used</th><td>{{ image.last_used_at|when }}</td></tr>
+        <tr><th>Cached</th><td>{{ 'Yes, removed when unused' if image.cached else 'No' }}</td></tr>
+        <tr><th>Source</th><td>{% if image.update_source %}{{ image.update_source.alias }} from {{ image.update_source.server }}{% else %}-{% endif %}</td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+<hr class="p-rule">
+<div class="row">
+  <div class="col-3"><h2 class="p-heading--5 section-heading">Aliases</h2></div>
+  <div class="col-9">
+    {% if image.aliases %}
+    <table aria-label="Aliases">
+      <thead><tr><th>Alias</th><th>Description</th><th class="u-align--right">Actions</th></tr></thead>
+      <tbody>
+      {% for a in image.aliases %}
+        <tr>
+          <td><code>{{ a.name }}</code></td>
+          <td>{{ a.description or '' }}</td>
+          <td class="u-align--right">
+            <form class="inline" method="post" action="{{ url_for('srv.image_alias_delete', fingerprint=image.fingerprint, alias=a.name) }}">
+              {{ csrf() }}<button class="p-button--negative is-dense u-no-margin--bottom">Remove</button>
+            </form>
+          </td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <p class="u-text--muted empty-state">No aliases. An alias lets you create containers from this image by name.</p>
+    {% endif %}
+    <form class="inline-form" method="post" action="{{ url_for('srv.image_alias_create', fingerprint=image.fingerprint) }}">
+      {{ csrf() }}
+      <input type="text" name="alias" placeholder="Alias, e.g. web-base" aria-label="Alias" required>
+      <input type="text" name="description" placeholder="Description" aria-label="Description">
+      <button class="p-button">Add alias</button>
+    </form>
+  </div>
+</div>
+<hr class="p-rule">
+<div class="row">
+  <div class="col-3"><h2 class="p-heading--5 section-heading">Properties</h2></div>
+  <div class="col-9">
+    <table aria-label="Properties">
+      <tbody>
+      {% for key, value in (image.properties or {})|dictsort %}
+        <tr><td><code>{{ key }}</code></td><td>{{ value }}</td></tr>
+      {% else %}
+        <tr><td class="u-text--muted">None.</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

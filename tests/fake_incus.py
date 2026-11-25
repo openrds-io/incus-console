@@ -47,6 +47,26 @@ class FakeIncus:
         self.trusted: list[str] = []  # fingerprints enrolled with a token
         self.sessions: dict[str, dict] = {}  # terminal sessions by operation id
         self.calls: list[tuple[str, str]] = []
+        self.images: dict[str, dict] = {}
+        self.created: list[dict] = []  # bodies of instance creations from images
+        self.published: list[dict] = []
+        self.profiles = {
+            "default": {
+                "name": "default",
+                "description": "Default Incus profile",
+                "config": {},
+                "devices": {
+                    "eth0": {"type": "nic", "network": "incusbr0", "name": "eth0"},
+                    "root": {"type": "disk", "path": "/", "pool": "default"},
+                },
+            },
+            "big": {
+                "name": "big",
+                "description": "",
+                "config": {"limits.cpu": "4"},
+                "devices": {},
+            },
+        }
         self.puts: list[dict] = []  # bodies of instance, bucket and key PUTs
         self.no_bucket_drivers: set[str] = set()
         self.pending_ops = False  # True: operations stay Running
@@ -165,7 +185,11 @@ class FakeIncus:
                         "api_version": "1.0",
                         "auth": "trusted",
                         "config": {"core.storage_buckets_address": ":8555"},
-                        "environment": {"server_name": "fake", "server_version": "6.0"},
+                        "environment": {
+                            "server_name": "fake",
+                            "server_version": "6.0",
+                            "architectures": ["aarch64"],
+                        },
                     }
                 )
             case ("POST", ["certificates"]):
@@ -178,9 +202,63 @@ class FakeIncus:
             case ("GET", ["projects"]):
                 return self.sync([{"name": "default", "description": "Default project"}])
             case ("GET", ["profiles"]):
-                return self.sync([{"name": "default"}, {"name": "big"}])
+                return self.sync([self._profile(name) for name in self.profiles])
+            case ("POST", ["profiles"]):
+                name = body.get("name", "")
+                if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_.-]*", name):
+                    return self.error(400, f'Invalid profile name "{name}"')
+                if name in self.profiles:
+                    return self.error(409, "Profile already exists")
+                self.profiles[name] = {
+                    "name": name,
+                    "description": body.get("description", ""),
+                    "config": body.get("config") or {},
+                    "devices": body.get("devices") or {},
+                }
+                return self.sync()
+            case (_, ["profiles", name]):
+                return self._profile_op(method, name, body)
             case ("GET", ["images"]):
-                return self.sync([])
+                return self.sync(list(self.images.values()))
+            case ("POST", ["images"]):
+                source = body.get("source") or {}
+                instance = self.instances.get(source.get("name"))
+                if source.get("type") != "instance" or instance is None:
+                    return self.error(404, "Instance not found")
+                if instance["status"] != "Stopped":
+                    return self.error(400, "The instance is running, stop it first")
+                fingerprint = self.add_image(
+                    (body.get("properties") or {}).get("description", ""),
+                    [a["name"] for a in body.get("aliases") or []],
+                )
+                self.images[fingerprint]["cached"] = False
+                self.published.append(json.loads(json.dumps(body)))
+                return self.start_op(f"Publishing instance {instance['name']}")
+            case ("POST", ["images", "aliases"]):
+                name, target = body.get("name", ""), body.get("target", "")
+                if target not in self.images:
+                    return self.error(404, "Image not found")
+                if any(a["name"] == name for i in self.images.values() for a in i["aliases"]):
+                    return self.error(409, "Alias already exists")
+                self.images[target]["aliases"].append(
+                    {"name": name, "description": body.get("description", "")}
+                )
+                return self.sync()
+            case ("DELETE", ["images", "aliases", *alias]):
+                name = "/".join(alias)
+                for image in self.images.values():
+                    for entry in image["aliases"]:
+                        if entry["name"] == name:
+                            image["aliases"].remove(entry)
+                            return self.sync()
+                return self.error(404, "Alias not found")
+            case ("GET", ["images", fingerprint]):
+                image = self.images.get(fingerprint)
+                return self.sync(image) if image else self.error(404, "Image not found")
+            case ("DELETE", ["images", fingerprint]):
+                if self.images.pop(fingerprint, None) is None:
+                    return self.error(404, "Image not found")
+                return self.start_op("Deleting image")
             case ("GET", ["operations"]):
                 groups: dict[str, list] = {}
                 for op in self.operations.values():
@@ -215,6 +293,7 @@ class FakeIncus:
                         copied["snapshots"] = []
                     self.instances[name] = copied
                     return self.start_op(f"Creating instance {name}")
+                self.created.append(json.loads(json.dumps(body)))
                 alias = body.get("source", {}).get("alias") or "local image"
                 self.add_instance(name, "Running" if body.get("start") else "Stopped", image=alias)
                 created = self.instances[name]
@@ -233,6 +312,66 @@ class FakeIncus:
                 if pool not in self.pools:
                     return self.error(404, "Storage pool not found")
                 return self._buckets(method, pool, rest, body)
+        return self.error(404, "not found")
+
+    def add_image(self, description="", aliases=(), kind="container"):
+        fingerprint = secrets.token_hex(32)
+        self.images[fingerprint] = {
+            "fingerprint": fingerprint,
+            "type": kind,
+            "architecture": "aarch64",
+            "size": 123 * 1024 * 1024,
+            "cached": True,
+            "public": False,
+            "created_at": _now(),
+            "uploaded_at": _now(),
+            "last_used_at": "0001-01-01T00:00:00Z",
+            "properties": {"description": description, "os": "Debian", "release": "13"},
+            "aliases": [{"name": a, "description": ""} for a in aliases],
+            "update_source": None,
+        }
+        return fingerprint
+
+    def _profile(self, name):
+        used_by = [
+            f"/1.0/instances/{i['name']}"
+            for i in self.instances.values()
+            if name in (i.get("profiles") or [])
+        ]
+        return {**self.profiles[name], "used_by": used_by}
+
+    def _profile_op(self, method, name, body):
+        if name not in self.profiles:
+            return self.error(404, "Profile not found")
+        match method:
+            case "GET":
+                return self.sync(self._profile(name))
+            case "PUT":
+                profile = self.profiles[name]
+                for key in ("config", "description", "devices"):
+                    profile[key] = body.get(key, {} if key != "description" else "")
+                return self.sync()
+            case "POST":
+                new_name = body.get("name", "")
+                if name == "default":
+                    return self.error(403, "The 'default' profile cannot be renamed")
+                if new_name in self.profiles:
+                    return self.error(409, "Name already in use")
+                profile = self.profiles.pop(name)
+                profile["name"] = new_name
+                self.profiles[new_name] = profile
+                for instance in self.instances.values():
+                    instance["profiles"] = [
+                        new_name if p == name else p for p in instance.get("profiles") or []
+                    ]
+                return self.sync()
+            case "DELETE":
+                if name == "default":
+                    return self.error(403, "The 'default' profile cannot be deleted")
+                if self._profile(name)["used_by"]:
+                    return self.error(400, "Profile is currently in use")
+                del self.profiles[name]
+                return self.sync()
         return self.error(404, "not found")
 
     def _instance(self, method, instance, rest, body):
@@ -569,6 +708,7 @@ def demo() -> FakeIncus:
     fake.add_instance("db-1", image="Ubuntu 26.04")
     fake.add_instance("scratch", status="Stopped")
     fake.add_pool("archive", "dir")
+    fake.add_image("Web base (Debian 13)", ["web-base"])
     fake.add_bucket("default", "media", config={"size": "10GiB"}, description="Photos and video")
     fake.add_bucket("archive", "backups")
     return fake
