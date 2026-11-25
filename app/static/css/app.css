@@ -299,3 +299,28 @@ label code {
   padding: 0.5rem;
   background: #0b1220;
 }
+
+/* Buckets: long S3 URLs and secrets stay on one line and scroll with the table. */
+td.s3-url code,
+td.nowrap code,
+.secret-cell code {
+  white-space: nowrap;
+  word-break: normal;
+}
+.secret-cell,
+td.nowrap {
+  white-space: nowrap;
+}
+.section-bar {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  margin-bottom: 0.5rem;
+}
+.section-bar .section-heading {
+  margin: 0;
+  padding: 0;
+}
+table.credentials code {
+  word-break: break-all;
+}

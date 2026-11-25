@@ -1,0 +1,36 @@
+{% extends "base.html" %}
+{% from "macros.html" import crumbs, csrf %}
+{% block title %}{{ ('Edit key ' ~ key.name) if key else 'Create key' }}{% endblock %}
+{% block heading %}{{ crumbs([('Buckets', url_for('srv.all_buckets')), (bucket.name, url_for('srv.bucket', pool=pool, bucket=bucket.name)), (('Edit key ' ~ key.name) if key else 'Create key', None)]) }}{% endblock %}
+{% block content %}
+{% set values = form if form else {} %}
+<form class="narrow-form" method="post">
+  {{ csrf() }}
+  <label for="name">Name</label>
+  {% if key %}
+  <input type="text" id="name" value="{{ key.name }}" disabled>
+  {% else %}
+  <input type="text" id="name" name="name" value="{{ values.get('name', '') }}" required autofocus>
+  {% endif %}
+  <label for="role">Role</label>
+  {% set chosen = values.get('role', key.role if key else 'read-only') %}
+  <select id="role" name="role">
+    {% for value, label in roles.items() %}
+    <option value="{{ value }}"{% if chosen == value %} selected{% endif %}>{{ label }}</option>
+    {% endfor %}
+  </select>
+  <p class="p-form-help-text">Admin can read and write; read-only can only read.</p>
+  <label for="description">Description</label>
+  <input type="text" id="description" name="description" value="{{ values.get('description', key.description if key else '') }}">
+  <label for="access_key">Access key</label>
+  <input type="text" id="access_key" name="access_key" value="{{ values.get('access_key', '') }}" autocomplete="off" placeholder="{{ key['access-key'] if key else 'Generated' }}">
+  <p class="p-form-help-text">{{ 'Leave empty to keep the current access key.' if key else 'Leave empty to generate an access key automatically.' }}</p>
+  <label for="secret_key">Secret key</label>
+  <input type="password" id="secret_key" name="secret_key" autocomplete="new-password" placeholder="{{ 'Unchanged' if key else 'Generated' }}">
+  <p class="p-form-help-text">{{ 'Leave empty to keep the current secret key.' if key else 'Leave empty to generate a secret key automatically.' }}</p>
+  <div class="form-buttons">
+    <a class="p-button--base" href="{{ url_for('srv.bucket', pool=pool, bucket=bucket.name) }}">Cancel</a>
+    <button class="p-button--positive">{{ 'Save' if key else 'Create key' }}</button>
+  </div>
+</form>
+{% endblock %}

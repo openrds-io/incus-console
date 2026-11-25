@@ -1,0 +1,9 @@
+{# The S3 address notice for bucket pages. `endpoint`: the address, "" when unset, None when unknown. #}
+{% if endpoint == '' %}
+<div class="p-notification--caution">
+  <div class="p-notification__content">
+    <h5 class="p-notification__title">No S3 address set</h5>
+    <p class="p-notification__message">Buckets on local pools (dir, btrfs, lvm, zfs) are served over S3 at the server's bucket address. Set one with <code>incus config set core.storage_buckets_address :8555</code>. Pools using the cephobject driver are served by their own gateway.</p>
+  </div>
+</div>
+{% endif %}

@@ -1,0 +1,48 @@
+{% extends "base.html" %}
+{% from "macros.html" import crumbs, csrf %}
+{% if bucket %}
+  {% set page = 'Edit bucket' %}
+{% else %}
+  {% set page = 'Create bucket' %}
+{% endif %}
+{% block title %}{{ page }}{% endblock %}
+{% block heading %}
+{%- if bucket -%}
+{{ crumbs([('Buckets', url_for('srv.all_buckets')), (bucket.name, url_for('srv.bucket', pool=pool, bucket=bucket.name)), ('Edit', None)]) }}
+{%- else -%}
+{{ crumbs([('Buckets', url_for('srv.all_buckets')), ('Create bucket', None)]) }}
+{%- endif -%}
+{% endblock %}
+{% block content %}
+{% set values = form if form else {} %}
+<form class="narrow-form" method="post">
+  {{ csrf() }}
+  {% if bucket %}
+  <label for="pool">Pool</label>
+  <input type="text" id="pool" value="{{ pool }}" disabled>
+  <p class="p-form-help-text">A bucket's pool can't be changed.</p>
+  <label for="name">Name</label>
+  <input type="text" id="name" value="{{ bucket.name }}" disabled>
+  <p class="p-form-help-text">A bucket's name can't be changed.</p>
+  {% else %}
+  <label for="pool">Pool</label>
+  <select id="pool" name="pool" required>
+    {% for p in pools %}
+    <option value="{{ p }}"{% if values.get('pool') == p %} selected{% endif %}>{{ p }}</option>
+    {% endfor %}
+  </select>
+  <label for="name">Name</label>
+  <input type="text" id="name" name="name" value="{{ values.get('name', '') }}" required autofocus pattern="[a-z0-9][a-z0-9.\-]{1,61}[a-z0-9]" title="3 to 63 lowercase letters, digits, dots and dashes">
+  <p class="p-form-help-text">3 to 63 lowercase letters, digits, dots and dashes, as for S3.</p>
+  {% endif %}
+  <label for="size">Size limit</label>
+  <input type="text" id="size" name="size" value="{{ values.get('size', (bucket.config or {}).get('size', '') if bucket else '') }}" placeholder="No limit">
+  <p class="p-form-help-text">Such as 10GiB. Empty for no limit.</p>
+  <label for="description">Description</label>
+  <input type="text" id="description" name="description" value="{{ values.get('description', bucket.description if bucket else '') }}">
+  <div class="form-buttons">
+    <a class="p-button--base" href="{{ url_for('srv.bucket', pool=pool, bucket=bucket.name) if bucket else url_for('srv.all_buckets') }}">Cancel</a>
+    <button class="p-button--positive">{{ 'Save' if bucket else 'Create bucket' }}</button>
+  </div>
+</form>
+{% endblock %}

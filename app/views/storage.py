@@ -1,9 +1,21 @@
+"""Storage pools and object storage: buckets and their access keys."""
+
 from __future__ import annotations
 
-from flask import flash, g, redirect, render_template, request, url_for
+import re
+
+from flask import flash, g, make_response, redirect, render_template, request, url_for
 
 from ..incus import IncusError
 from .scoped import bp, run
+
+# Incus follows S3's rules for bucket names.
+BUCKET_NAME = re.compile(r"[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]")
+BUCKET_RULE = (
+    "Use 3 to 63 lowercase letters, digits, dots and dashes, "
+    "starting and ending with a letter or digit."
+)
+ROLES = {"read-only": "Read-only", "admin": "Admin"}
 
 
 @bp.get("/storage")
@@ -11,34 +23,104 @@ def pools():
     return render_template("storage/pools.html", pools=g.incus.pools())
 
 
-@bp.route("/storage/<pool>/buckets", methods=["GET", "POST"])
-def buckets(pool):
-    if request.method == "POST":
-        name = request.form.get("name", "").strip()
-        size = request.form.get("size", "").strip()
-        payload = {
-            "name": name,
-            "description": request.form.get("description", "").strip(),
-            "config": {"size": size} if size else {},
-        }
-        if not name:
-            flash("Give the bucket a name.", "error")
-        elif run(lambda: g.incus.create_bucket(pool, payload), f"Bucket {name} created."):
-            return redirect(url_for("srv.bucket", pool=pool, bucket=name))
-        return redirect(url_for("srv.buckets", pool=pool))
+def _endpoint():
+    """The server's S3 address: a string, "" when unset, None when we may not read it."""
+    return (g.incus.server_info().get("config") or {}).get("core.storage_buckets_address")
 
-    rows, problem = [], None
+
+def _with_key_counts(pool: str, rows: list) -> list:
+    for bucket in rows:
+        bucket["pool"] = pool
+        try:
+            bucket["key_count"] = len(g.incus.bucket_keys(pool, bucket["name"]))
+        except IncusError as error:
+            if error.status == 0:
+                raise
+            bucket["key_count"] = None
+    return rows
+
+
+@bp.get("/buckets")
+def all_buckets():
+    """Every bucket in the project, across all pools."""
+    rows, problems = [], []
+    for pool in g.incus.pools():
+        try:
+            rows += _with_key_counts(pool["name"], g.incus.buckets(pool["name"]))
+        except IncusError as error:
+            if error.status == 0:
+                raise
+            problems.append(f"{pool['name']}: {error.message}")
+    rows.sort(key=lambda b: (b["name"], b["pool"]))
+    return render_template(
+        "storage/buckets.html",
+        pool=None,
+        buckets=rows,
+        problems=problems,
+        endpoint=_endpoint(),
+    )
+
+
+@bp.get("/storage/<pool>/buckets")
+def buckets(pool):
+    rows, problems = [], []
     try:
-        rows = g.incus.buckets(pool)
+        rows = _with_key_counts(pool, g.incus.buckets(pool))
     except IncusError as error:
         if error.status == 0:
             raise
-        problem = error.message
-    # Only administrators can read the server config; None means "unknown".
-    endpoint = (g.incus.server_info().get("config") or {}).get("core.storage_buckets_address")
+        problems.append(error.message)
     return render_template(
-        "storage/buckets.html", pool=pool, buckets=rows, problem=problem, endpoint=endpoint
+        "storage/buckets.html",
+        pool=pool,
+        buckets=rows,
+        problems=problems,
+        endpoint=_endpoint(),
     )
+
+
+def _bucket_form(form) -> tuple[str, dict]:
+    """Validate the create-bucket form; return (pool, payload)."""
+    name = form.get("name", "").strip()
+    pool = form.get("pool", "").strip()
+    size = form.get("size", "").strip()
+    if not pool:
+        raise IncusError(400, "Choose a storage pool.")
+    if not BUCKET_NAME.fullmatch(name) or ".." in name:
+        raise IncusError(400, BUCKET_RULE)
+    payload = {
+        "name": name,
+        "description": form.get("description", "").strip(),
+        "config": {"size": size} if size else {},
+    }
+    return pool, payload
+
+
+@bp.route("/buckets/new", methods=["GET", "POST"])
+def bucket_create():
+    pools = [p["name"] for p in g.incus.pools()]
+    form = request.form if request.method == "POST" else request.args
+    if request.method == "POST":
+        try:
+            pool, payload = _bucket_form(form)
+            admin_key = g.incus.create_bucket(pool, payload)
+        except IncusError as error:
+            if error.status == 0:
+                raise
+            flash(error.message, "error")
+        else:
+            bucket = g.incus.bucket(pool, payload["name"])
+            # Shown once: the page is not cached and the key is not kept anywhere else.
+            return _no_store(
+                render_template(
+                    "storage/credentials.html",
+                    pool=pool,
+                    bucket=bucket,
+                    key=admin_key,
+                    created="bucket",
+                )
+            )
+    return render_template("storage/bucket_form.html", pools=pools, form=form, bucket=None)
 
 
 @bp.get("/storage/<pool>/buckets/<bucket>")
@@ -48,31 +130,115 @@ def bucket(pool, bucket):
         pool=pool,
         bucket=g.incus.bucket(pool, bucket),
         keys=g.incus.bucket_keys(pool, bucket),
+        roles=ROLES,
+    )
+
+
+@bp.route("/storage/<pool>/buckets/<bucket>/edit", methods=["GET", "POST"])
+def bucket_edit(pool, bucket):
+    current = g.incus.bucket(pool, bucket)
+    form = request.form if request.method == "POST" else {}
+    if request.method == "POST":
+        config = dict(current.get("config") or {})
+        size = form.get("size", "").strip()
+        if size:
+            config["size"] = size
+        else:
+            config.pop("size", None)
+        payload = {"description": form.get("description", "").strip(), "config": config}
+        if run(lambda: g.incus.update_bucket(pool, bucket, payload), f"Bucket {bucket} updated."):
+            return redirect(url_for("srv.bucket", pool=pool, bucket=bucket))
+    return render_template(
+        "storage/bucket_form.html", pools=[pool], form=form, bucket=current, pool=pool
     )
 
 
 @bp.post("/storage/<pool>/buckets/<bucket>/delete")
 def bucket_delete(pool, bucket):
     if run(lambda: g.incus.delete_bucket(pool, bucket), f"Bucket {bucket} deleted."):
-        return redirect(url_for("srv.buckets", pool=pool))
+        return redirect(url_for("srv.all_buckets"))
     return redirect(url_for("srv.bucket", pool=pool, bucket=bucket))
 
 
-@bp.post("/storage/<pool>/buckets/<bucket>/keys")
+# -- keys -----------------------------------------------------------------
+
+
+def _key_form(form, *, editing: dict | None = None) -> dict:
+    role = form.get("role", "read-only")
+    if role not in ROLES:
+        raise IncusError(400, "Unknown role.")
+    payload = {"role": role, "description": form.get("description", "").strip()}
+    access = form.get("access_key", "").strip()
+    secret = form.get("secret_key", "").strip()
+    if editing is not None:
+        # Empty means "keep": Incus would otherwise make new ones.
+        access = access or editing.get("access-key", "")
+        secret = secret or editing.get("secret-key", "")
+    if access:
+        payload["access-key"] = access
+    if secret:
+        payload["secret-key"] = secret
+    return payload
+
+
+@bp.route("/storage/<pool>/buckets/<bucket>/keys", methods=["GET", "POST"])
 def bucket_key_create(pool, bucket):
-    name = request.form.get("name", "").strip()
-    role = request.form.get("role", "read-only")
-    if not name:
-        flash("Give the key a name.", "error")
-    elif role not in ("admin", "read-only"):
-        flash("Unknown role.", "error")
-    else:
-        payload = {"name": name, "role": role}
-        run(lambda: g.incus.create_bucket_key(pool, bucket, payload), f"Key {name} created.")
-    return redirect(url_for("srv.bucket", pool=pool, bucket=bucket))
+    current = g.incus.bucket(pool, bucket)
+    form = request.form if request.method == "POST" else {}
+    if request.method == "POST":
+        name = form.get("name", "").strip()
+        try:
+            if not name:
+                raise IncusError(400, "Give the key a name.")
+            payload = {"name": name, **_key_form(form)}
+            created = g.incus.create_bucket_key(pool, bucket, payload)
+        except IncusError as error:
+            if error.status == 0:
+                raise
+            flash(error.message, "error")
+        else:
+            return _no_store(
+                render_template(
+                    "storage/credentials.html",
+                    pool=pool,
+                    bucket=current,
+                    key=created,
+                    created="key",
+                )
+            )
+    return render_template(
+        "storage/key_form.html", pool=pool, bucket=current, key=None, form=form, roles=ROLES
+    )
+
+
+@bp.route("/storage/<pool>/buckets/<bucket>/keys/<key>/edit", methods=["GET", "POST"])
+def bucket_key_edit(pool, bucket, key):
+    current = g.incus.bucket(pool, bucket)
+    existing = g.incus.bucket_key(pool, bucket, key)
+    form = request.form if request.method == "POST" else {}
+    if request.method == "POST":
+        try:
+            payload = _key_form(form, editing=existing)
+        except IncusError as error:
+            flash(error.message, "error")
+        else:
+            if run(
+                lambda: g.incus.update_bucket_key(pool, bucket, key, payload),
+                f"Key {key} updated.",
+            ):
+                return redirect(url_for("srv.bucket", pool=pool, bucket=bucket))
+    return render_template(
+        "storage/key_form.html", pool=pool, bucket=current, key=existing, form=form, roles=ROLES
+    )
 
 
 @bp.post("/storage/<pool>/buckets/<bucket>/keys/<key>/delete")
 def bucket_key_delete(pool, bucket, key):
     run(lambda: g.incus.delete_bucket_key(pool, bucket, key), f"Key {key} deleted.")
     return redirect(url_for("srv.bucket", pool=pool, bucket=bucket))
+
+
+def _no_store(body: str):
+    response = make_response(body)
+    response.headers["Cache-Control"] = "no-store"
+    return response

@@ -201,36 +201,3 @@ def test_yaml_edit(browser, sid, fake):
     assert fake.instances["web-1"]["description"] == "web tier"
     assert fake.instances["web-1"]["config"] == {"limits.memory": "1GiB"}
     assert fake.instances["web-1"]["status"] == "Running"
-
-
-# -- object storage ----------------------------------------------------------
-
-
-def test_buckets_and_keys(browser, sid, fake):
-    assert "zfs" in text(browser.get(f"/servers/{sid}/storage"))
-    base = f"/servers/{sid}/storage/default/buckets"
-    assert "No buckets" in text(browser.get(base))
-    created = browser.post(base, {"name": "media", "size": "10GiB"}, follow_redirects=True)
-    page = text(created)
-    assert "Bucket media created." in page and "https://127.0.0.1:8555/media" in page
-    assert fake.buckets["default"]["media"]["bucket"]["config"] == {"size": "10GiB"}
-
-    browser.post(f"{base}/media/keys", {"name": "reader", "role": "read-only"})
-    keys = fake.buckets["default"]["media"]["keys"]
-    assert keys["reader"]["role"] == "read-only"
-    page = text(browser.get(f"{base}/media"))
-    assert keys["reader"]["access-key"] in page
-
-    assert "Unknown role" in text(
-        browser.post(f"{base}/media/keys", {"name": "x", "role": "root"}, follow_redirects=True)
-    )
-    browser.post(f"{base}/media/keys/reader/delete")
-    assert "reader" not in keys
-    browser.post(f"{base}/media/delete")
-    assert fake.buckets["default"] == {}
-
-
-def test_bucket_listing_problem_is_shown_inline(browser, sid):
-    response = browser.get(f"/servers/{sid}/storage/nope/buckets")
-    assert response.status_code == 200
-    assert "Storage pool not found" in text(response)

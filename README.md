@@ -16,7 +16,10 @@ Early scaffold. Working today:
   rename, copy, snapshots, logs (console and Incus log files), a settings form
   for limits and common options, adding and removing devices, and full
   configuration editing as YAML
-- Object storage: pools, buckets, and bucket access keys
+- Object storage: storage pools; buckets across all pools or per pool;
+  create (credentials shown once), edit size and description, delete; access
+  keys with admin or read-only roles, custom or generated access and secret
+  keys, edit and delete
 - Terminal: a root login shell in a running container (xterm.js over a websocket)
 - Operations: list and cancel
 - Projects: switch project per server

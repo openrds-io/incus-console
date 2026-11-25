@@ -52,7 +52,8 @@
             <ul class="p-side-navigation__list">
               {% set nav = [
                 ('srv.instances', 'Instances', 'instance' in here or 'snapshot' in here),
-                ('srv.pools', 'Storage', 'pool' in here or 'bucket' in here),
+                ('srv.pools', 'Storage pools', here == 'srv.pools'),
+                ('srv.all_buckets', 'Buckets', 'bucket' in here),
                 ('srv.operations', 'Operations', 'operation' in here),
               ] %}
               {% for endpoint, label, active in nav %}

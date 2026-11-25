@@ -1,10 +1,11 @@
 {% extends "base.html" %}
 {% from "macros.html" import crumbs, csrf, empty %}
 {% block title %}{{ bucket.name }}{% endblock %}
-{% block heading %}{{ crumbs([('Storage', url_for('srv.pools')), (pool, url_for('srv.buckets', pool=pool)), (bucket.name, None)]) }}{% endblock %}
+{% block heading %}{{ crumbs([('Buckets', url_for('srv.all_buckets')), (bucket.name, None)]) }}{% endblock %}
 {% block controls %}
+<a class="p-button is-dense u-no-margin--bottom" href="{{ url_for('srv.bucket_edit', pool=pool, bucket=bucket.name) }}">Edit</a>
 <form class="inline" method="post" action="{{ url_for('srv.bucket_delete', pool=pool, bucket=bucket.name) }}" data-confirm="Delete bucket {{ bucket.name }} and everything in it? This cannot be undone.">
-  {{ csrf() }}<button class="p-button--negative is-dense u-no-margin--bottom">Delete bucket</button>
+  {{ csrf() }}<button class="p-button--negative is-dense u-no-margin--bottom">Delete</button>
 </form>
 {% endblock %}
 {% block content %}
@@ -13,49 +14,42 @@
   <div class="col-9">
     <table class="facts" aria-label="General">
       <tbody>
+        <tr><th>Pool</th><td><a href="{{ url_for('srv.buckets', pool=pool) }}">{{ pool }}</a></td></tr>
         <tr><th>S3 URL</th><td>{% if bucket.s3_url %}<code>{{ bucket.s3_url }}</code>{% else %}-{% endif %}</td></tr>
-        <tr><th>Size limit</th><td>{{ (bucket.config or {}).get('size', '-') }}</td></tr>
+        <tr><th>Size limit</th><td>{{ (bucket.config or {}).get('size') or 'No limit' }}</td></tr>
         <tr><th>Description</th><td>{{ bucket.description or '-' }}</td></tr>
-        <tr><th>Location</th><td>{{ bucket.location or '-' }}</td></tr>
+        {% if bucket.location and bucket.location != 'none' %}<tr><th>Location</th><td>{{ bucket.location }}</td></tr>{% endif %}
       </tbody>
     </table>
   </div>
 </div>
 <hr class="p-rule">
-<div class="row">
-  <div class="col-3"><h2 class="p-heading--5 section-heading">Access keys</h2></div>
-  <div class="col-9">
-    {% if keys %}
-    <table aria-label="Access keys">
-      <thead><tr><th>Name</th><th>Role</th><th>Access key</th><th>Secret key</th><th class="u-align--right">Actions</th></tr></thead>
-      <tbody>
-      {% for key in keys %}
-        <tr>
-          <td>{{ key.name }}</td>
-          <td>{{ key.role }}</td>
-          <td><code>{{ key['access-key'] }}</code></td>
-          <td><code class="secret" data-secret="{{ key['secret-key'] }}">Hidden</code> <button type="button" class="p-button--base is-dense u-no-margin--bottom" data-reveal>Show</button></td>
-          <td class="u-align--right">
-            <form class="inline" method="post" action="{{ url_for('srv.bucket_key_delete', pool=pool, bucket=bucket.name, key=key.name) }}" data-confirm="Delete key {{ key.name }}? Clients using it lose access.">
-              {{ csrf() }}<button class="p-button--negative is-dense u-no-margin--bottom">Delete</button>
-            </form>
-          </td>
-        </tr>
-      {% endfor %}
-      </tbody>
-    </table>
-    {% else %}
-    {{ empty("No access keys.") }}
-    {% endif %}
-    <form class="inline-form" method="post" action="{{ url_for('srv.bucket_key_create', pool=pool, bucket=bucket.name) }}">
-      {{ csrf() }}
-      <input type="text" name="name" placeholder="Key name" aria-label="Key name" required>
-      <select name="role" aria-label="Role">
-        <option value="read-only">Read only</option>
-        <option value="admin">Admin (read and write)</option>
-      </select>
-      <button class="p-button">Create key</button>
-    </form>
-  </div>
+<div class="section-bar">
+  <h2 class="p-heading--5 section-heading">Access keys</h2>
+  <a class="p-button is-dense u-no-margin--bottom" href="{{ url_for('srv.bucket_key_create', pool=pool, bucket=bucket.name) }}">Create key</a>
 </div>
+{% if keys %}
+<table aria-label="Access keys">
+  <thead><tr><th>Name</th><th>Role</th><th>Description</th><th>Access key</th><th>Secret key</th><th class="u-align--right">Actions</th></tr></thead>
+  <tbody>
+  {% for key in keys|sort(attribute='name') %}
+    <tr>
+      <td>{{ key.name }}</td>
+      <td>{{ roles.get(key.role, key.role) }}</td>
+      <td>{{ key.description or '-' }}</td>
+      <td class="nowrap"><code>{{ key['access-key'] }}</code></td>
+      <td class="secret-cell"><code class="secret" data-secret="{{ key['secret-key'] }}">Hidden</code> <button type="button" class="p-button--base is-dense u-no-margin--bottom" data-reveal>Show</button></td>
+      <td class="u-align--right">
+        <a class="p-button is-dense u-no-margin--bottom" href="{{ url_for('srv.bucket_key_edit', pool=pool, bucket=bucket.name, key=key.name) }}">Edit</a>
+        <form class="inline" method="post" action="{{ url_for('srv.bucket_key_delete', pool=pool, bucket=bucket.name, key=key.name) }}" data-confirm="Delete key {{ key.name }}? Clients using it lose access.">
+          {{ csrf() }}<button class="p-button--negative is-dense u-no-margin--bottom">Delete</button>
+        </form>
+      </td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% else %}
+{{ empty("No access keys. Create one to read or write this bucket over S3.") }}
+{% endif %}
 {% endblock %}

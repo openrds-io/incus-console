@@ -353,7 +353,13 @@ class IncusClient:
         return self.get("storage-pools", pool, "buckets", name)
 
     def create_bucket(self, pool: str, payload: dict) -> dict:
-        return self.request("POST", path("storage-pools", pool, "buckets"), body=payload)
+        """Create a bucket. Incus answers with its admin key, the one time it shows it."""
+        url = path("storage-pools", pool, "buckets")
+        return self.request("POST", url, body=payload).get("metadata") or {}
+
+    def update_bucket(self, pool: str, name: str, payload: dict) -> dict:
+        """Replace a bucket's description and config (``size``)."""
+        return self.request("PUT", path("storage-pools", pool, "buckets", name), body=payload)
 
     def delete_bucket(self, pool: str, name: str) -> dict:
         return self.request("DELETE", path("storage-pools", pool, "buckets", name))
@@ -361,9 +367,18 @@ class IncusClient:
     def bucket_keys(self, pool: str, bucket: str) -> list:
         return self.get("storage-pools", pool, "buckets", bucket, "keys", recursion=1) or []
 
+    def bucket_key(self, pool: str, bucket: str, key: str) -> dict:
+        return self.get("storage-pools", pool, "buckets", bucket, "keys", key)
+
     def create_bucket_key(self, pool: str, bucket: str, payload: dict) -> dict:
+        """Create a key; returns it with its access and secret keys."""
         url = path("storage-pools", pool, "buckets", bucket, "keys")
-        return self.request("POST", url, body=payload)
+        return self.request("POST", url, body=payload).get("metadata") or {}
+
+    def update_bucket_key(self, pool: str, bucket: str, key: str, payload: dict) -> dict:
+        """Replace a key's role, description, access key and secret key."""
+        url = path("storage-pools", pool, "buckets", bucket, "keys", key)
+        return self.request("PUT", url, body=payload)
 
     def delete_bucket_key(self, pool: str, bucket: str, key: str) -> dict:
         return self.request("DELETE", path("storage-pools", pool, "buckets", bucket, "keys", key))

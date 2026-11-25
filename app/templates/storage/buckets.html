@@ -1,41 +1,31 @@
 {% extends "base.html" %}
-{% from "macros.html" import crumbs, csrf, empty %}
-{% block title %}Buckets in {{ pool }}{% endblock %}
-{% block heading %}{{ crumbs([('Storage', url_for('srv.pools')), (pool, None), ('Buckets', None)]) }}{% endblock %}
+{% from "macros.html" import crumbs, empty %}
+{% block title %}{% if pool %}Buckets in {{ pool }}{% else %}Buckets{% endif %}{% endblock %}
+{% block heading %}{% if pool %}{{ crumbs([('Buckets', url_for('srv.all_buckets')), ('Pool ' ~ pool, None)]) }}{% else %}Buckets{% endif %}{% endblock %}
+{% block controls %}<a class="p-button--positive u-no-margin--bottom" href="{{ url_for('srv.bucket_create', pool=pool) if pool else url_for('srv.bucket_create') }}">Create bucket</a>{% endblock %}
 {% block content %}
-{% if problem %}
+{% for problem in problems %}
 <div class="p-notification--negative"><div class="p-notification__content"><p class="p-notification__message">{{ problem }}</p></div></div>
-{% endif %}
-{% if endpoint == '' %}
-<div class="p-notification--caution"><div class="p-notification__content"><p class="p-notification__message">Buckets on local pools need an S3 address. Set one with <code>incus config set core.storage_buckets_address :8555</code>.</p></div></div>
-{% endif %}
+{% endfor %}
+{% include "storage/_endpoint.html" %}
 {% if buckets %}
+<p class="u-text--muted">Showing {{ buckets|length }} bucket{{ '' if buckets|length == 1 else 's' }}{% if pool %} in pool {{ pool }}{% else %} in project {{ project }}{% endif %}</p>
 <table aria-label="Buckets">
-  <thead><tr><th>Name</th><th>Size limit</th><th>S3 URL</th><th>Description</th></tr></thead>
+  <thead><tr><th>Name</th>{% if not pool %}<th>Pool</th>{% endif %}<th>Size limit</th><th>Description</th><th>S3 URL</th><th>Keys</th></tr></thead>
   <tbody>
   {% for b in buckets %}
     <tr>
-      <td><a href="{{ url_for('srv.bucket', pool=pool, bucket=b.name) }}">{{ b.name }}</a></td>
-      <td>{{ (b.config or {}).get('size', '-') }}</td>
-      <td>{% if b.s3_url %}<code>{{ b.s3_url }}</code>{% else %}-{% endif %}</td>
-      <td>{{ b.description or '' }}</td>
+      <td><a href="{{ url_for('srv.bucket', pool=b.pool, bucket=b.name) }}">{{ b.name }}</a></td>
+      {% if not pool %}<td><a href="{{ url_for('srv.buckets', pool=b.pool) }}">{{ b.pool }}</a></td>{% endif %}
+      <td>{{ (b.config or {}).get('size') or '-' }}</td>
+      <td>{{ b.description or '-' }}</td>
+      <td class="s3-url">{% if b.s3_url %}<code title="{{ b.s3_url }}">{{ b.s3_url }}</code>{% else %}-{% endif %}</td>
+      <td>{{ '-' if b.key_count is none else b.key_count }}</td>
     </tr>
   {% endfor %}
   </tbody>
 </table>
-{% elif not problem %}
-{{ empty("No buckets in this pool.") }}
+{% elif not problems %}
+{{ empty("No buckets in pool " ~ pool ~ "." if pool else "No buckets in project " ~ project ~ ".") }}
 {% endif %}
-
-<h2 class="p-heading--4">Create bucket</h2>
-<form class="narrow-form" method="post">
-  {{ csrf() }}
-  <div class="row">
-    <div class="col-4"><label for="bucket-name">Name</label><input type="text" id="bucket-name" name="name" required></div>
-    <div class="col-4"><label for="bucket-size">Size limit</label><input type="text" id="bucket-size" name="size" placeholder="No limit, e.g. 10GiB"></div>
-  </div>
-  <label for="bucket-description">Description</label>
-  <input type="text" id="bucket-description" name="description">
-  <button class="p-button--positive">Create bucket</button>
-</form>
 {% endblock %}

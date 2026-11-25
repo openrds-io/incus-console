@@ -47,7 +47,8 @@ class FakeIncus:
         self.trusted: list[str] = []  # fingerprints enrolled with a token
         self.sessions: dict[str, dict] = {}  # terminal sessions by operation id
         self.calls: list[tuple[str, str]] = []
-        self.puts: list[dict] = []  # bodies of instance PUTs
+        self.puts: list[dict] = []  # bodies of instance, bucket and key PUTs
+        self.no_bucket_drivers: set[str] = set()
         self.pending_ops = False  # True: operations stay Running
 
     # -- helpers -----------------------------------------------------------
@@ -83,6 +84,18 @@ class FakeIncus:
             "metadata": op,
         }
         return 202, body
+
+    def add_pool(self, name, driver="dir"):
+        self.pools[name] = {
+            "name": name,
+            "driver": driver,
+            "status": "Created",
+            "description": "",
+            "used_by": [],
+        }
+
+    def add_bucket(self, pool, name, **body):
+        return self._buckets("POST", pool, [], {"name": name, **body})
 
     def add_instance(self, name, status="Running", kind="container", image="Debian 13"):
         running = status == "Running"
@@ -313,24 +326,30 @@ class FakeIncus:
                 return self.start_op(f"Deleting snapshot {snap}")
         return self.error(404, "not found")
 
-    def _new_key(self, name, role):
+    def _new_key(self, name, body):
         return {
             "name": name,
-            "role": role,
-            "description": "",
-            "access-key": secrets.token_hex(10).upper(),
-            "secret-key": secrets.token_urlsafe(30),
+            "role": body.get("role") or "read-only",
+            "description": body.get("description", ""),
+            "access-key": body.get("access-key") or secrets.token_hex(10).upper(),
+            "secret-key": body.get("secret-key") or secrets.token_urlsafe(30),
         }
+
+    BUCKET_NAME = re.compile(r"[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]")
 
     def _buckets(self, method, pool, rest, body):
         buckets = self.buckets.setdefault(pool, {})
+        if self.pools[pool]["driver"] in self.no_bucket_drivers:
+            return self.error(400, f"Storage pool does not support buckets ({pool})")
         match (method, rest):
             case ("GET", []):
                 return self.sync([b["bucket"] for b in buckets.values()])
             case ("POST", []):
                 name = body.get("name", "")
+                if not self.BUCKET_NAME.fullmatch(name):
+                    return self.error(400, f"Invalid bucket name {name!r}")
                 if name in buckets:
-                    return self.error(409, "Bucket already exists")
+                    return self.error(409, "A bucket for that name already exists")
                 bucket = {
                     "name": name,
                     "description": body.get("description", ""),
@@ -338,7 +357,7 @@ class FakeIncus:
                     "s3_url": f"https://127.0.0.1:8555/{name}",
                     "location": "none",
                 }
-                admin = self._new_key("admin", "admin")
+                admin = self._new_key("admin", {"role": "admin"})
                 buckets[name] = {"bucket": bucket, "keys": {"admin": admin}}
                 return self.sync(admin)
             case (_, [name, *more]):
@@ -348,6 +367,11 @@ class FakeIncus:
                 match (method, more):
                     case ("GET", []):
                         return self.sync(entry["bucket"])
+                    case ("PUT", []):
+                        self.puts.append(json.loads(json.dumps(body)))
+                        entry["bucket"]["description"] = body.get("description", "")
+                        entry["bucket"]["config"] = body.get("config") or {}
+                        return self.sync()
                     case ("DELETE", []):
                         del buckets[name]
                         return self.sync()
@@ -356,14 +380,24 @@ class FakeIncus:
                     case ("POST", ["keys"]):
                         key_name = body.get("name", "")
                         if key_name in entry["keys"]:
-                            return self.error(409, "Key already exists")
-                        key = self._new_key(key_name, body.get("role", "read-only"))
+                            return self.error(409, "A bucket key for that name already exists")
+                        key = self._new_key(key_name, body)
                         entry["keys"][key_name] = key
                         return self.sync(key)
-                    case ("DELETE", ["keys", key_name]):
-                        if entry["keys"].pop(key_name, None) is None:
-                            return self.error(404, "Key not found")
-                        return self.sync()
+                    case (_, ["keys", key_name]):
+                        key = entry["keys"].get(key_name)
+                        if key is None:
+                            return self.error(404, "Storage bucket key not found")
+                        if method == "GET":
+                            return self.sync(key)
+                        if method == "PUT":
+                            self.puts.append(json.loads(json.dumps(body)))
+                            # Like Incus: anything left out is generated anew.
+                            entry["keys"][key_name] = self._new_key(key_name, body)
+                            return self.sync()
+                        if method == "DELETE":
+                            del entry["keys"][key_name]
+                            return self.sync()
         return self.error(404, "not found")
 
     # -- terminal websockets ----------------------------------------------
@@ -534,6 +568,9 @@ def demo() -> FakeIncus:
     fake.add_instance("web-1")
     fake.add_instance("db-1", image="Ubuntu 26.04")
     fake.add_instance("scratch", status="Stopped")
+    fake.add_pool("archive", "dir")
+    fake.add_bucket("default", "media", config={"size": "10GiB"}, description="Photos and video")
+    fake.add_bucket("archive", "backups")
     return fake
 
 
