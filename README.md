@@ -4,7 +4,7 @@ A lean web and desktop console for [Incus](https://linuxcontainers.org/incus/).
 It is a front end to the Incus REST API: a small Python 3.13 / Flask app (the same
 stack as openrds-io/ui) that renders pages on the server and talks to Incus over a local unix socket or HTTPS.
 
-The feature set follows [incus-ui-canonical](https://github.com/zabbly/incus-ui-canonical).
+It covers much the same ground as the Incus web UIs.
 System containers come first, object storage second.
 
 ## Status
@@ -115,6 +115,36 @@ What this does not cover:
 Set `PER_USER_CERTIFICATES = False` to act on every server with the console's
 certificate alone.
 
+### Permissions: still to do
+
+Pending work, roughly in the order planned:
+
+- [ ] **Groups:** bundles of grants (server, project, role) given to many users
+  at once; a user's access is their own grants plus their groups'
+- [ ] **OIDC sign-in:** log in with the organisation's identity provider
+  (Keycloak, Entra ID, Okta, ...); map identity-provider groups to console
+  groups; local accounts stay available
+- [ ] **Incus-enforced roles inside a project:** an authorization scriptlet
+  shipped with the console, so Incus also refuses a Viewer's or Operator's
+  changes, not just the console
+- [ ] **Per-instance access:** grant a role on one instance (needs the
+  scriptlet or OpenFGA)
+- [ ] **Access tab:** show who can reach a project or instance, from Incus's
+  `/1.0/projects/<name>/access` and `/1.0/instances/<name>/access`
+- [ ] **Sign-in hardening:** rate-limit and temporarily lock out repeated
+  failed logins; optional TOTP second factor for local accounts
+- [ ] **Sessions:** a password change or reset signs out the user's other
+  sessions; admins can sign a user out everywhere
+- [ ] **Per-user certificates:** rotate them before they expire (today they
+  last 10 years); a "re-sync" button per user and per server; tidy up trust
+  entries left behind when a server was unreachable
+- [ ] **Audit log:** filter by date, server and action; export as CSV; optionally
+  also send entries to syslog or the journal
+- [ ] **Later, if needed:** OIDC tokens passed through to Incus (Incus sees the
+  real user, with OpenFGA syncing grants); LDAP or a trusted proxy header
+  (`X-Remote-User`) for single sign-on at nginx; letting non-admins create
+  projects (decided against for now)
+
 The audit log (**Audit log**, admins only) records every change made through
 the console with its outcome, sign-ins, failed sign-ins and opened terminals.
 `AUDIT_KEEP_DAYS` (default 365) sets how long entries are kept. Sessions end
@@ -185,8 +215,8 @@ location / {
 
 ## Look and feel
 
-The pages use Canonical's Vanilla Framework, as incus-ui-canonical does, with
-the Incus logo from that project (see `NOTICE.md`). The compiled CSS is checked
+The pages use Canonical's Vanilla Framework (LGPL-3.0) with the Incus logo from
+[lxc/incus-ui](https://github.com/lxc/incus-ui) (Apache-2.0); see `NOTICE.md`. The compiled CSS is checked
 in at `app/static/vendor/`. To rebuild it (Node needed):
 
 ```bash
@@ -197,7 +227,7 @@ printf '@import "vanilla-framework";\n@include vanilla;\n' > vanilla.scss
 npx sass --load-path=node_modules --style=compressed --no-source-map --quiet-deps \
   vanilla.scss vanilla.css
 # Drop the @font-face rules that load fonts from assets.ubuntu.com; app.css
-# uses local fonts first, like incus-ui-canonical.
+# uses fonts installed on the machine.
 python3 -c "import re,sys; p=sys.argv[1]; s=open(p,encoding='utf-8-sig').read(); open(p,'w').write(re.sub(r'@font-face\{[^}]*assets\.ubuntu\.com[^}]*\}','',s))" vanilla.css
 cp vanilla.css <repo>/app/static/vendor/vanilla-framework-4.61.0.min.css
 ```
@@ -260,9 +290,10 @@ wsgi.py           entry point for gunicorn
    workflow for all three platforms
 4. deb (Debian 13, Ubuntu 26.04) and rpm (EL10) packages with nginx and systemd
    units; container image
-5. Later: OIDC sign-in, Incus-enforced viewer and operator roles (authorization
-   scriptlet), per-instance access, cluster
+5. More permissions work: see [Permissions: still to do](#permissions-still-to-do)
+6. Later: cluster support
 
 ## License
 
-GPL-3.0-only. See `LICENSE` and `NOTICE.md`.
+Apache-2.0. Copyright 2026 Contributors to Incus Console. See `LICENSE` and
+`NOTICE.md`; per-file licensing is recorded in `REUSE.toml`.

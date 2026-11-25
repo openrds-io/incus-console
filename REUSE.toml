@@ -1,0 +1,25 @@
+version = 1
+
+[[annotations]]
+path = "**"
+SPDX-FileCopyrightText = "2026 Contributors to Incus Console"
+SPDX-License-Identifier = "Apache-2.0"
+
+# app/static/img/logo.svg carries its own SPDX header; the icon is drawn from it.
+[[annotations]]
+path = "desktop/build/icon.png"
+precedence = "override"
+SPDX-FileCopyrightText = "2026 LinuxContainers contributors"
+SPDX-License-Identifier = "Apache-2.0"
+
+[[annotations]]
+path = "app/static/vendor/vanilla-framework-*.min.css"
+precedence = "override"
+SPDX-FileCopyrightText = "Canonical Ltd."
+SPDX-License-Identifier = "LGPL-3.0-only"
+
+[[annotations]]
+path = "app/static/vendor/xterm/**"
+precedence = "override"
+SPDX-FileCopyrightText = "The xterm.js authors"
+SPDX-License-Identifier = "MIT"
