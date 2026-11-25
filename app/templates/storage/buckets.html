@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% set live = true %}
 {% from "macros.html" import crumbs, empty %}
 {% block title %}{% if pool %}Buckets in {{ pool }}{% else %}Buckets{% endif %}{% endblock %}
 {% block heading %}{% if pool %}{{ crumbs([('Buckets', url_for('srv.all_buckets')), ('Pool ' ~ pool, None)]) }}{% else %}Buckets{% endif %}{% endblock %}

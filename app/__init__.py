@@ -55,6 +55,7 @@ def create_app(test_config: dict | None = None) -> Flask:
     filters.init_app(app)
 
     from .views import (  # noqa: F401
+        events,
         images,
         instances,
         networks,

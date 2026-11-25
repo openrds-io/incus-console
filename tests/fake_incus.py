@@ -30,7 +30,7 @@ class FakeIncus:
     LOGS = {"lxc.log": "lxc 20261125 INFO start\n", "lxc.conf": "lxc.uts.name = x\n"}
 
     def __init__(self):
-        self.lock = threading.Lock()
+        self.lock = threading.RLock()
         self.instances: dict[str, dict] = {}
         self.operations: dict[str, dict] = {}
         self.pools = {
@@ -49,6 +49,7 @@ class FakeIncus:
         self.calls: list[tuple[str, str]] = []
         self.images: dict[str, dict] = {}
         self.op_done: dict[str, threading.Event] = {}
+        self.subscribers: list = []  # /1.0/events websockets
         self.volumes: dict[str, dict[str, dict]] = {}
         self.ended: dict[str, dict] = {}  # how finished operations ended
         self.forwards: dict[str, dict] = {"incusbr0": {}}
@@ -128,6 +129,7 @@ class FakeIncus:
             "operation": f"/1.0/operations/{op_id}",
             "metadata": op,
         }
+        self.emit("operation", **op)
         return 202, body
 
     def _volume(self, pool, volume):
@@ -811,6 +813,31 @@ class FakeIncus:
 
     # -- terminal websockets ----------------------------------------------
 
+    def subscribe(self, ws):
+        """Serve an /1.0/events websocket until the client goes away."""
+        with self.lock:
+            self.subscribers.append(ws)
+        try:
+            while ws.recv() is not None:
+                pass
+        finally:
+            with self.lock:
+                if ws in self.subscribers:
+                    self.subscribers.remove(ws)
+
+    def emit(self, event_type="lifecycle", **metadata):
+        """Send an event to every /1.0/events subscriber."""
+        event = {
+            "type": event_type,
+            "timestamp": _now(),
+            "project": "default",
+            "metadata": metadata,
+        }
+        with self.lock:
+            listeners = list(self.subscribers)
+        for ws in listeners:
+            ws.send(WS_TEXT, json.dumps(event).encode())
+
     def websocket_session(self, raw_path):
         """(session, secret) for an operation websocket URL, or (None, secret)."""
         parts = urlsplit(raw_path)
@@ -893,7 +920,21 @@ class _WebSocket:
 class _Handler(http.server.BaseHTTPRequestHandler):
     protocol_version = "HTTP/1.1"
 
+    def _accept(self):
+        key = self.headers.get("Sec-WebSocket-Key", "")
+        accept = base64.b64encode(hashlib.sha1((key + WS_GUID).encode()).digest()).decode()
+        self.send_response(101, "Switching Protocols")
+        self.send_header("Upgrade", "websocket")
+        self.send_header("Connection", "Upgrade")
+        self.send_header("Sec-WebSocket-Accept", accept)
+        self.end_headers()
+        self.close_connection = True
+        return _WebSocket(self.rfile, self.wfile)
+
     def _upgrade(self):
+        if urlsplit(self.path).path == "/1.0/events":
+            self.server.fake.subscribe(self._accept())
+            return
         if self.server.fake.websocket_session(self.path)[0] is None:
             self.send_response(404)
             self.send_header("Content-Length", "0")

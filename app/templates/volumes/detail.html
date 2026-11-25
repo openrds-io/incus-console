@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% set live = true %}
 {% from "macros.html" import crumbs, csrf, empty %}
 {% block title %}{{ volume.name }}{% endblock %}
 {% block heading %}{{ crumbs([('Volumes', url_for('srv.volumes')), (pool ~ ' / ' ~ volume.name, None)]) }}{% endblock %}

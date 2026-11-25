@@ -86,7 +86,7 @@
     </div>
   </nav>
   {% endif %}
-  <main class="l-main" id="main-content">
+  <main class="l-main" id="main-content"{% if live and server %} data-live="{{ url_for('srv.events') }}"{% endif %}>
     <div class="p-panel">
       <div class="p-panel__header">
         <h1 class="p-panel__title">{% block heading %}{{ self.title() }}{% endblock %}</h1>

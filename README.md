@@ -33,6 +33,9 @@ Early scaffold. Working today:
 - Operations: list and cancel; actions that outlast the page are watched in the
   background and their outcome is reported, even after Incus forgets them
 - Projects: switch project per server
+- Live updates: lists, detail pages and Operations refresh themselves when
+  something changes on the server (Incus's event stream, relayed as
+  server-sent events), but never while you are typing in a form
 
 Not built yet: the deb, rpm and container packages. See [Roadmap](#roadmap).
 
@@ -113,7 +116,8 @@ pip install gunicorn
 INCUS_CONSOLE_BEHIND_PROXY=true gunicorn --workers 2 --threads 50 --bind 127.0.0.1:5002 wsgi:app
 ```
 
-Use threads: each open terminal holds one for as long as it is open.
+Use threads: each open terminal, and each open page that updates live, holds
+one for as long as it is open.
 
 ```nginx
 location / {

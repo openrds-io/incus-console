@@ -361,10 +361,22 @@ class IncusClient:
 
         Returns a ``websocket.WebSocket`` (the websocket-client package).
         """
+        query = urlencode({"secret": secret, "project": self.project})
+        ws = self._websocket(f"{path('operations', op_id, 'websocket')}?{query}", "terminal")
+        ws.sock.settimeout(None)  # an idle terminal must not time out
+        return ws
+
+    def events(self, types: tuple[str, ...] = ("operation", "lifecycle"), idle: float = 15):
+        """Subscribe to the project's events; ``recv`` times out after ``idle`` seconds."""
+        query = urlencode({"type": ",".join(types), "project": self.project})
+        ws = self._websocket(f"{path('events')}?{query}", "event")
+        ws.sock.settimeout(idle)
+        return ws
+
+    def _websocket(self, target: str, what: str):
         import websocket
 
-        query = urlencode({"secret": secret, "project": self.project})
-        url = f"ws://incus{path('operations', op_id, 'websocket')}?{query}"
+        url = f"ws://incus{target}"
         sock = None
         try:
             conn = self._connect(self.timeout)
@@ -379,8 +391,7 @@ class IncusClient:
         except (OSError, websocket.WebSocketException) as exc:
             if sock is not None:
                 sock.close()
-            raise IncusConnectionError(f"Cannot open the terminal connection: {exc}") from exc
-        sock.settimeout(None)  # an idle terminal must not time out
+            raise IncusConnectionError(f"Cannot open the {what} connection: {exc}") from exc
         return ws
 
     # -- networks ----------------------------------------------------------

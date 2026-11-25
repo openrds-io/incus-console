@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% set live = true %}
 {% from "macros.html" import crumbs, csrf %}
 {% block title %}{{ label }}{% endblock %}
 {% block heading %}{{ crumbs([('Images', url_for('srv.images')), (label, None)]) }}{% endblock %}

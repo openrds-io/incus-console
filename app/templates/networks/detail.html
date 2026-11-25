@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% set live = true %}
 {% from "macros.html" import crumbs, csrf, status, empty %}
 {% block title %}{{ network.name }}{% endblock %}
 {% block heading %}{{ crumbs([('Networks', url_for('srv.networks')), (network.name, None)]) }}{% if network.managed %} <span class="title-status">{{ status(network.status) }}</span>{% endif %}{% endblock %}

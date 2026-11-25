@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% set live = true %}
 {% from "macros.html" import empty %}
 {% block title %}Volumes{% endblock %}
 {% block controls %}<a class="p-button--positive u-no-margin--bottom" href="{{ url_for('srv.volume_create') }}">Create volume</a>{% endblock %}
