@@ -62,6 +62,7 @@ def create_app(test_config: dict | None = None) -> Flask:
         profiles,
         scoped,
         storage,
+        volumes,
     )
     from .views import servers as servers_view
 

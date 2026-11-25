@@ -49,6 +49,7 @@ class FakeIncus:
         self.calls: list[tuple[str, str]] = []
         self.images: dict[str, dict] = {}
         self.op_done: dict[str, threading.Event] = {}
+        self.volumes: dict[str, dict[str, dict]] = {}
         self.ended: dict[str, dict] = {}  # how finished operations ended
         self.forwards: dict[str, dict] = {"incusbr0": {}}
         self.networks = {
@@ -128,6 +129,96 @@ class FakeIncus:
             "metadata": op,
         }
         return 202, body
+
+    def _volume(self, pool, volume):
+        used_by = [
+            f"/1.0/instances/{i['name']}"
+            for i in self.instances.values()
+            if any(
+                d.get("type") == "disk" and d.get("pool") == pool and d.get("source") == volume
+                for d in (i.get("devices") or {}).values()
+            )
+        ]
+        return {**self.volumes[pool][volume], "used_by": used_by}
+
+    def _volumes(self, method, pool, rest, body):
+        volumes = self.volumes.setdefault(pool, {})
+        match (method, rest):
+            case ("GET", []):
+                custom = [self._volume(pool, v) for v in volumes]
+                own = [
+                    {"name": i, "type": "container", "config": {}, "used_by": []}
+                    for i in self.instances
+                ]
+                return self.sync(custom + own)
+            case ("POST", ["custom"]):
+                name = body.get("name", "")
+                if name in volumes:
+                    return self.error(409, "Volume by that name already exists")
+                volumes[name] = {
+                    "name": name,
+                    "type": "custom",
+                    "description": body.get("description", ""),
+                    "content_type": body.get("content_type", "filesystem"),
+                    "config": body.get("config") or {},
+                    "created_at": _now(),
+                    "snapshots": [],
+                }
+                return self.sync()
+            case (_, ["custom", name, *more]):
+                if name not in volumes:
+                    return self.error(404, "Storage volume not found")
+                volume = volumes[name]
+                match (method, more):
+                    case ("GET", []):
+                        return self.sync(self._volume(pool, name))
+                    case ("PUT", []):
+                        if "restore" in body:
+                            if body["restore"] not in [s["name"] for s in volume["snapshots"]]:
+                                return self.error(404, "Snapshot not found")
+                            return self.sync()
+                        size = (body.get("config") or {}).get("size", "")
+                        if size.startswith("1MiB"):
+                            return self.error(400, "Volume would be smaller than its contents")
+                        volume["description"] = body.get("description", "")
+                        volume["config"] = body.get("config") or {}
+                        return self.sync()
+                    case ("POST", []):
+                        new_name = body.get("name", "")
+                        if self._volume(pool, name)["used_by"]:
+                            return self.error(400, "Volume is still in use")
+                        volumes[new_name] = {**volumes.pop(name), "name": new_name}
+                        return self.sync()
+                    case ("DELETE", []):
+                        if self._volume(pool, name)["used_by"]:
+                            return self.error(400, "The storage volume is still in use")
+                        del volumes[name]
+                        return self.sync()
+                    case ("GET", ["snapshots"]):
+                        return self.sync(
+                            [{**s, "name": f"{name}/{s['name']}"} for s in volume["snapshots"]]
+                        )
+                    case ("POST", ["snapshots"]):
+                        volume["snapshots"].append(
+                            {
+                                "name": body.get("name", ""),
+                                "created_at": _now(),
+                                "expires_at": "0001-01-01T00:00:00Z",
+                            }
+                        )
+                        return self.start_op(f"Snapshotting volume {name}")
+                    case ("DELETE", ["snapshots", snapshot]):
+                        before = len(volume["snapshots"])
+                        volume["snapshots"] = [
+                            s for s in volume["snapshots"] if s["name"] != snapshot
+                        ]
+                        if len(volume["snapshots"]) == before:
+                            return self.error(404, "Snapshot not found")
+                        return self.start_op(f"Deleting snapshot {snapshot}")
+        return self.error(404, "not found")
+
+    def add_volume(self, pool, name, **fields):
+        self._volumes("POST", pool, ["custom"], {"name": name, **fields})
 
     def add_pool(self, name, driver="dir"):
         self.pools[name] = {
@@ -361,6 +452,10 @@ class FakeIncus:
                 return self._network_op(method, name, rest, body)
             case ("GET", ["storage-pools"]):
                 return self.sync(list(self.pools.values()))
+            case (_, ["storage-pools", pool, "volumes", *rest]):
+                if pool not in self.pools:
+                    return self.error(404, "Storage pool not found")
+                return self._volumes(method, pool, rest, body)
             case (_, ["storage-pools", pool, "buckets", *rest]):
                 if pool not in self.pools:
                     return self.error(404, "Storage pool not found")
@@ -884,6 +979,7 @@ def demo() -> FakeIncus:
     fake.add_instance("scratch", status="Stopped")
     fake.add_pool("archive", "dir")
     fake.add_image("Web base (Debian 13)", ["web-base"])
+    fake.add_volume("default", "site-data", config={"size": "10GiB"}, description="Web content")
     fake.add_bucket("default", "media", config={"size": "10GiB"}, description="Photos and video")
     fake.add_bucket("archive", "backups")
     return fake

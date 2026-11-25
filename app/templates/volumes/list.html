@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+{% from "macros.html" import empty %}
+{% block title %}Volumes{% endblock %}
+{% block controls %}<a class="p-button--positive u-no-margin--bottom" href="{{ url_for('srv.volume_create') }}">Create volume</a>{% endblock %}
+{% block content %}
+{% for problem in problems %}
+<div class="p-notification--negative"><div class="p-notification__content"><p class="p-notification__message">{{ problem }}</p></div></div>
+{% endfor %}
+{% if volumes %}
+<table aria-label="Volumes">
+  <thead><tr><th>Name</th><th>Pool</th><th>Size</th><th>Content</th><th>Attached to</th><th>Description</th></tr></thead>
+  <tbody>
+  {% for v in volumes %}
+    <tr>
+      <td><a href="{{ url_for('srv.volume', pool=v.pool, name=v.name) }}">{{ v.name }}</a></td>
+      <td>{{ v.pool }}</td>
+      <td>{{ (v.config or {}).get('size', 'No limit') }}</td>
+      <td>{{ 'Block' if v.content_type == 'block' else 'Filesystem' }}</td>
+      <td>{% for name in v.instances %}<a href="{{ url_for('srv.instance', name=name) }}">{{ name }}</a>{% if not loop.last %}, {% endif %}{% else %}-{% endfor %}</td>
+      <td>{{ v.description or '' }}</td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% else %}
+{{ empty("No custom volumes in project " ~ project ~ ". A volume keeps data apart from any one container, so it survives rebuilding the container.") }}
+{% endif %}
+{% endblock %}

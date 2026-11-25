@@ -429,6 +429,43 @@ class IncusClient:
     def pools(self) -> list:
         return self.get("storage-pools", recursion=1) or []
 
+    def volumes(self, pool: str) -> list:
+        """The pool's volumes of every type (custom, container, image, ...)."""
+        return self.get("storage-pools", pool, "volumes", recursion=1) or []
+
+    def volume(self, pool: str, name: str) -> dict:
+        return self.get("storage-pools", pool, "volumes", "custom", name)
+
+    def create_volume(self, pool: str, payload: dict) -> dict:
+        return self.request("POST", path("storage-pools", pool, "volumes", "custom"), body=payload)
+
+    def update_volume(self, pool: str, name: str, payload: dict) -> dict:
+        url = path("storage-pools", pool, "volumes", "custom", name)
+        return self.request("PUT", url, body=payload)
+
+    def rename_volume(self, pool: str, name: str, new_name: str) -> dict:
+        url = path("storage-pools", pool, "volumes", "custom", name)
+        return self.request("POST", url, body={"name": new_name})
+
+    def delete_volume(self, pool: str, name: str) -> dict:
+        return self.request("DELETE", path("storage-pools", pool, "volumes", "custom", name))
+
+    def volume_snapshots(self, pool: str, name: str) -> list:
+        segments = ("storage-pools", pool, "volumes", "custom", name, "snapshots")
+        return self.get(*segments, recursion=1) or []
+
+    def create_volume_snapshot(self, pool: str, name: str, snapshot: str) -> dict:
+        url = path("storage-pools", pool, "volumes", "custom", name, "snapshots")
+        return self.request("POST", url, body={"name": snapshot})
+
+    def delete_volume_snapshot(self, pool: str, name: str, snapshot: str) -> dict:
+        url = path("storage-pools", pool, "volumes", "custom", name, "snapshots", snapshot)
+        return self.request("DELETE", url)
+
+    def restore_volume_snapshot(self, pool: str, name: str, snapshot: str) -> dict:
+        url = path("storage-pools", pool, "volumes", "custom", name)
+        return self.request("PUT", url, body={"restore": snapshot})
+
     def buckets(self, pool: str) -> list:
         return self.get("storage-pools", pool, "buckets", recursion=1) or []
 

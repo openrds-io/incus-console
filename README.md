@@ -23,6 +23,8 @@ Early scaffold. Working today:
   an image
 - Networks: list, create bridges, settings, YAML, rename, delete, DHCP leases,
   and port forwards from a host address to containers
+- Volumes: custom storage volumes across pools; create, resize, rename, delete,
+  attach to and detach from containers, and snapshots
 - Object storage: storage pools; buckets across all pools or per pool;
   create (credentials shown once), edit size and description, delete; access
   keys with admin or read-only roles, custom or generated access and secret

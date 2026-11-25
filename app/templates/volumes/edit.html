@@ -1,0 +1,18 @@
+{% extends "base.html" %}
+{% from "macros.html" import crumbs as crumb_links, csrf %}
+{% block title %}Edit {{ volume.name }}{% endblock %}
+{% block heading %}{{ crumb_links(crumbs) }}{% endblock %}
+{% block content %}
+<form class="narrow-form" method="post">
+  {{ csrf() }}
+  <label for="size">Size</label>
+  <input type="text" id="size" name="size" value="{{ form.get('size', (volume.config or {}).get('size', '')) }}" placeholder="The pool's default">
+  <p class="p-form-help-text">Most drivers can grow a volume; shrinking one is refused if it holds more than the new size, and some drivers cannot shrink at all.</p>
+  <label for="description">Description</label>
+  <input type="text" id="description" name="description" value="{{ form.get('description', volume.description or '') }}">
+  <div class="form-buttons">
+    <a class="p-button--base" href="{{ url_for('srv.volume', pool=pool, name=volume.name) }}">Cancel</a>
+    <button class="p-button--positive">Save</button>
+  </div>
+</form>
+{% endblock %}

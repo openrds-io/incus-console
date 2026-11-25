@@ -1,0 +1,34 @@
+{% extends "base.html" %}
+{% from "macros.html" import crumbs, csrf %}
+{% block title %}Create volume{% endblock %}
+{% block heading %}{{ crumbs([('Volumes', url_for('srv.volumes')), ('Create volume', None)]) }}{% endblock %}
+{% block content %}
+<form class="narrow-form" method="post">
+  {{ csrf() }}
+  <div class="row">
+    <div class="col-4"><label for="name">Name</label><input type="text" id="name" name="name" value="{{ form.get('name', '') }}" required autofocus></div>
+    <div class="col-4">
+      <label for="pool">Storage pool</label>
+      <select id="pool" name="pool" required>
+        {% for name in pools %}<option value="{{ name }}"{% if name == chosen_pool %} selected{% endif %}>{{ name }}</option>{% endfor %}
+      </select>
+    </div>
+  </div>
+  <div class="row">
+    <div class="col-4"><label for="size">Size</label><input type="text" id="size" name="size" value="{{ form.get('size', '') }}" placeholder="e.g. 10GiB"></div>
+    <div class="col-4">
+      <label for="content_type">Content</label>
+      <select id="content_type" name="content_type">
+        {% for value, label in types.items() %}<option value="{{ value }}"{% if form.get('content_type') == value %} selected{% endif %}>{{ label }}</option>{% endfor %}
+      </select>
+    </div>
+  </div>
+  <p class="p-form-help-text">Leave the size empty for the pool's default. Containers mount filesystem volumes; block volumes are for virtual machines.</p>
+  <label for="description">Description</label>
+  <input type="text" id="description" name="description" value="{{ form.get('description', '') }}">
+  <div class="form-buttons">
+    <a class="p-button--base" href="{{ url_for('srv.volumes') }}">Cancel</a>
+    <button class="p-button--positive">Create</button>
+  </div>
+</form>
+{% endblock %}
