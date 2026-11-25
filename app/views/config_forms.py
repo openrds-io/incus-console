@@ -41,14 +41,32 @@ SETTINGS = [
     ),
     ("snapshots.schedule.stopped", "Snapshot while stopped", "bool", ""),
 ]
+# Only for application containers; Incus fills them in from the image.
+OCI_SETTINGS = [
+    (
+        "oci.entrypoint",
+        "Command",
+        "text",
+        "What the container runs, from the image. Change it only if that does not suit.",
+    ),
+    ("oci.cwd", "Working directory", "text", ""),
+    ("oci.uid", "User id", "text", "Runs the command as this user id."),
+    ("oci.gid", "Group id", "text", ""),
+]
+ENV_NAME = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")
 # Headings shown above the first setting of each group.
 GROUPS = {
+    "oci.entrypoint": "Application",
     "limits.cpu": "Limits",
     "boot.autostart": "Behaviour",
     "snapshots.schedule": "Scheduled snapshots",
 }
 # What an empty field means, when "No limit" would be wrong.
 PLACEHOLDERS = {
+    "oci.entrypoint": "From the image",
+    "oci.cwd": "From the image",
+    "oci.uid": "From the image",
+    "oci.gid": "From the image",
     "snapshots.schedule": "No scheduled snapshots",
     "snapshots.expiry": "Keep until deleted",
 }
@@ -198,3 +216,31 @@ def load_yaml(text: str, keys: tuple) -> dict:
     if not isinstance(data, dict):
         raise IncusError(400, "The configuration must be a YAML mapping.")
     return {key: data[key] for key in keys if key in data}
+
+
+def parse_environment(text: str) -> dict:
+    """``NAME=value`` lines as Incus config: ``{"environment.NAME": "value"}``."""
+    found = {}
+    for name, value in parse_settings(text).items():
+        if not ENV_NAME.fullmatch(name):
+            raise IncusError(
+                400, f"{name!r} is not a variable name. Use letters, digits and underscores."
+            )
+        found[f"environment.{name}"] = value
+    return found
+
+
+def environment_text(config: dict) -> str:
+    """The environment.* keys of a config, one NAME=value per line."""
+    prefix = "environment."
+    return "\n".join(
+        f"{key[len(prefix) :]}={value}"
+        for key, value in sorted((config or {}).items())
+        if key.startswith(prefix)
+    )
+
+
+def apply_environment(config: dict, text: str) -> dict:
+    """Replace the config's environment.* keys with the form's. Raises IncusError."""
+    kept = {k: v for k, v in (config or {}).items() if not k.startswith("environment.")}
+    return {**kept, **parse_environment(text)}

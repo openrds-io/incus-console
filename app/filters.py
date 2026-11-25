@@ -37,7 +37,33 @@ def addresses(instance: dict, family: str = "inet") -> list[str]:
     return found
 
 
+KIND_LABELS = {
+    "container": "System container",
+    "oci": "Application container (OCI)",
+    "vm": "Virtual machine",
+}
+
+
+def instance_kind(instance: dict) -> str:
+    """container, oci (an application container from an OCI image) or vm."""
+    if instance.get("type") == "virtual-machine":
+        return "vm"
+    config = instance.get("config") or {}
+    if config.get("volatile.container.oci") == "true" or config.get("image.type") == "oci":
+        return "oci"
+    return "container"
+
+
+def environment_names(config: dict) -> list[str]:
+    """Names of the environment variables an instance config sets."""
+    prefix = "environment."
+    return sorted(key[len(prefix) :] for key in (config or {}) if key.startswith(prefix))
+
+
 def init_app(app) -> None:
     app.add_template_filter(filesize)
     app.add_template_filter(when)
     app.add_template_filter(addresses)
+    app.add_template_filter(instance_kind)
+    app.add_template_filter(environment_names)
+    app.jinja_env.globals["kind_labels"] = KIND_LABELS

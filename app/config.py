@@ -36,8 +36,22 @@ DEFAULT_IMAGE_SERVER = "https://images.linuxcontainers.org"
 IMAGE_CATALOG = True
 IMAGE_SUGGESTIONS = ["debian/13", "debian/12", "ubuntu/26.04", "ubuntu/24.04", "almalinux/10"]
 
+# OCI application containers (Incus 6.3 and later, with skopeo and umoci on the
+# Incus server): image names without a registry come from this one. The server
+# pulls the image itself; the console never contacts the registry.
+OCI_REGISTRY = "https://docker.io"
+OCI_SUGGESTIONS = [
+    "nginx:alpine",
+    "caddy:alpine",
+    "postgres:18-alpine",
+    "redis:alpine",
+    "ghcr.io/home-assistant/home-assistant:stable",
+]
+
 # What the browser terminal runs in a container: a login shell as root.
 TERMINAL_COMMAND = ["su", "-l"]
+# Application containers rarely have su or a login setup; most have sh.
+TERMINAL_COMMAND_OCI = ["sh"]
 
 # True behind nginx (or another proxy) serving HTTPS: trust its X-Forwarded-* headers
 # and send the session cookie over HTTPS only.

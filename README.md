@@ -17,6 +17,13 @@ Early scaffold. Working today:
   for limits and common options, adding and removing devices, and full
   configuration editing as YAML; creating from the image server's catalog,
   with a storage pool and cloud-init user data
+- Application containers (OCI): create from Docker Hub, ghcr.io, quay.io or
+  another registry (the Incus server pulls the image), with environment
+  variables; the command, working directory, user and environment are
+  editable in Settings, and the terminal runs `sh`. Environment values are
+  hidden from Viewers and Operators, since they often hold passwords. Needs
+  Incus 6.3 or later with `skopeo` and `umoci` on the Incus server; the console
+  offers it only where the server supports it
 - Files: browse a container's folders, view and edit text files, download,
   upload, create folders and delete
 - Profiles: list, create (empty or as a copy), settings form, devices, YAML,
@@ -293,7 +300,9 @@ wsgi.py           entry point for gunicorn
 ## Roadmap
 
 1. Virtual machines: create, VGA console, VM-specific settings
-2. OCI application containers: create from OCI registries
+2. OCI application containers, next steps: private registries (credentials),
+   updating an instance to a newer image (rebuild), and presets for common
+   images (ports, volumes)
 3. Test the desktop installers (`npm run dist`); code signing and a build
    workflow for all three platforms
 4. deb (Debian 13, Ubuntu 26.04) and rpm (EL10) packages with nginx and systemd
