@@ -31,9 +31,9 @@
 <form class="inline-row" method="post" action="{{ url_for('servers.add') }}">
   <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
   <input type="hidden" name="kind" value="unix">
-  <input type="hidden" name="address" value="{{ socket }}">
-  <code>{{ socket }}</code>
-  <input name="name" value="Local" aria-label="Name" required>
+  <input type="hidden" name="address" value="{{ socket.path }}">
+  <code>{{ socket.path }}</code>
+  <input name="name" value="{{ socket.name }}" aria-label="Name" required>
   <button class="btn btn-primary">Add</button>
 </form>
 {% endfor %}
@@ -52,11 +52,11 @@
   </form>
   <form class="card" method="post" action="{{ url_for('servers.add') }}">
     <h3>Local socket</h3>
-    <p class="hint">The account running this console needs access to the socket (group <code>incus-admin</code>).</p>
+    <p class="hint">Linux: <code>/var/lib/incus/unix.socket</code> (the account running this console needs the <code>incus-admin</code> group). Colima: <code>~/.colima/&lt;profile&gt;/incus.sock</code>.</p>
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
     <input type="hidden" name="kind" value="unix">
     <label>Name <input name="name" placeholder="Local"></label>
-    <label>Socket path <input name="address" value="/var/lib/incus/unix.socket" required></label>
+    <label>Socket path <input name="address" placeholder="/var/lib/incus/unix.socket" required></label>
     <button class="btn btn-primary">Add server</button>
   </form>
   <form class="card" method="post" action="{{ url_for('servers.add') }}">
@@ -66,7 +66,7 @@
     <input type="hidden" name="kind" value="https">
     <label>Name <input name="name" placeholder="Optional"></label>
     <label>Address <input name="address" placeholder="https://host:8443" required></label>
-    <label>Server certificate fingerprint (SHA-256) <input name="fingerprint" placeholder="Leave empty for a publicly trusted certificate"></label>
+    <label>Server certificate fingerprint (SHA-256) <input name="fingerprint" placeholder="Empty for a public certificate"></label>
     <button class="btn btn-primary">Add server</button>
   </form>
 </div>

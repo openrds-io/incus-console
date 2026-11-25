@@ -250,6 +250,56 @@ class IncusClient:
     def restore_snapshot(self, name: str, snapshot: str) -> dict:
         return self.request("PUT", path("instances", name), body={"restore": snapshot})
 
+    # -- terminal ----------------------------------------------------------
+
+    def exec_interactive(self, name: str, command: list[str], cols: int = 80, rows: int = 24):
+        """Start ``command`` on a pseudo-terminal in an instance.
+
+        Incus waits for both websockets before running it. Returns the operation
+        id and the two secrets: ``{"id": ..., "data": ..., "control": ...}``.
+        """
+        body = {
+            "command": command,
+            "environment": {"TERM": "xterm-256color"},
+            "wait-for-websocket": True,
+            "interactive": True,
+            "width": cols,
+            "height": rows,
+        }
+        response = self.request("POST", path("instances", name, "exec"), body=body)
+        op = response.get("metadata") or {}
+        fds = (op.get("metadata") or {}).get("fds") or {}
+        if not op.get("id") or "0" not in fds or "control" not in fds:
+            raise IncusError(500, "Incus did not offer a terminal session.")
+        return {"id": op["id"], "data": fds["0"], "control": fds["control"]}
+
+    def websocket(self, op_id: str, secret: str):
+        """Open one of an operation's websockets over this client's transport.
+
+        Returns a ``websocket.WebSocket`` (the websocket-client package).
+        """
+        import websocket
+
+        query = urlencode({"secret": secret, "project": self.project})
+        url = f"ws://incus{path('operations', op_id, 'websocket')}?{query}"
+        sock = None
+        try:
+            conn = self._connect(self.timeout)
+            conn.connect()
+            # The websocket takes over the socket (unix, or TLS already pinned).
+            sock, conn.sock = conn.sock, None
+            ws = websocket.create_connection(
+                url, socket=sock, suppress_origin=True, timeout=self.timeout
+            )
+        except IncusError:
+            raise
+        except (OSError, websocket.WebSocketException) as exc:
+            if sock is not None:
+                sock.close()
+            raise IncusConnectionError(f"Cannot open the terminal connection: {exc}") from exc
+        sock.settimeout(None)  # an idle terminal must not time out
+        return ws
+
     # -- storage -----------------------------------------------------------
 
     def pools(self) -> list:

@@ -7,6 +7,7 @@ Same stack as openrds-io/ui: Flask, server-rendered Jinja2, pytest.
 from __future__ import annotations
 
 import os
+import re
 import secrets
 from pathlib import Path
 
@@ -16,6 +17,9 @@ from . import auth, db, filters
 from .incus import IncusConnectionError, IncusError
 
 __version__ = "0.1.0.dev0"
+
+XTERM_CDN = "https://cdn.jsdelivr.net"
+HOST = re.compile(r"[A-Za-z0-9.\-:\[\]]+")
 
 
 def _secret_key(data_dir: Path) -> bytes:
@@ -35,6 +39,12 @@ def create_app(test_config: dict | None = None) -> Flask:
     app.config.from_prefixed_env("INCUS_CONSOLE")
     if test_config:
         app.config.update(test_config)
+
+    if app.config["BEHIND_PROXY"]:
+        from werkzeug.middleware.proxy_fix import ProxyFix
+
+        app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1)
+        app.config["SESSION_COOKIE_SECURE"] = True
 
     data_dir = Path(app.config["DATA_DIR"]).expanduser()
     data_dir.mkdir(mode=0o700, parents=True, exist_ok=True)
@@ -65,7 +75,15 @@ def create_app(test_config: dict | None = None) -> Flask:
 
     @app.after_request
     def _security_headers(response):
-        response.headers.setdefault("Content-Security-Policy", "default-src 'self'")
+        # xterm.js comes from jsDelivr and styles itself at run time; the terminal's
+        # websocket goes back to this host.
+        policy = (
+            f"default-src 'self'; script-src 'self' {XTERM_CDN}; "
+            f"style-src 'self' 'unsafe-inline' {XTERM_CDN}"
+        )
+        if HOST.fullmatch(request.host):
+            policy += f"; connect-src 'self' ws://{request.host} wss://{request.host}"
+        response.headers.setdefault("Content-Security-Policy", policy)
         response.headers.setdefault("X-Content-Type-Options", "nosniff")
         response.headers.setdefault("X-Frame-Options", "DENY")
         response.headers.setdefault("Referrer-Policy", "same-origin")

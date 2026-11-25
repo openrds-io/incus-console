@@ -1,8 +1,11 @@
 from __future__ import annotations
 
+from urllib.parse import urlsplit
+
 import yaml
 from flask import current_app, flash, g, redirect, render_template, request, url_for
 
+from .. import terminal
 from ..incus import IncusError
 from .scoped import bp, run
 
@@ -138,3 +141,24 @@ def snapshot_restore(name, snapshot):
 def snapshot_delete(name, snapshot):
     run(lambda: g.incus.delete_snapshot(name, snapshot), f"Snapshot {snapshot} deleted.")
     return redirect(url_for("srv.instance", name=name))
+
+
+@bp.get("/instances/<name>/terminal")
+def instance_terminal(name):
+    # url_for gives a websocket rule as an absolute ws:// URL; the page wants the path.
+    ws_path = urlsplit(url_for("srv.instance_terminal_ws", name=name)).path
+    return render_template(
+        "instances/terminal.html", instance=g.incus.instance(name), ws_path=ws_path
+    )
+
+
+def instance_terminal_ws(name):
+    return terminal.relay(g.incus, name, current_app.config["TERMINAL_COMMAND"])
+
+
+bp.add_url_rule(
+    "/instances/<name>/terminal/ws",
+    "instance_terminal_ws",
+    instance_terminal_ws,
+    websocket=True,
+)

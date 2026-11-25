@@ -1,3 +1,5 @@
 Flask>=3.0
 cryptography>=42        # this console's client certificate for remote Incus servers (app/certs.py)
+simple-websocket>=1.0   # the browser terminal's websocket (app/terminal.py)
+websocket-client>=1.7   # ... and its link to Incus (app/incus/client.py)
 PyYAML>=6.0             # the instance configuration editor (app/views/instances.py)

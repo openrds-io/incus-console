@@ -73,7 +73,9 @@ def test_desktop_key_is_required(tmp_path):
 
 def test_security_headers(browser):
     response = browser.get("/servers")
-    assert response.headers["Content-Security-Policy"] == "default-src 'self'"
+    policy = response.headers["Content-Security-Policy"]
+    assert policy.startswith("default-src 'self'; ")
+    assert "connect-src 'self' ws://localhost wss://localhost" in policy
     assert response.headers["X-Frame-Options"] == "DENY"
 
 

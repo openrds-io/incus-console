@@ -97,6 +97,8 @@ dl.facts { display: grid; grid-template-columns: 10rem 1fr; gap: 0.35rem 1rem; m
 dl.facts dt { color: var(--muted); }
 dl.facts dd { margin: 0; word-break: break-word; }
 
+.terminal { height: calc(100vh - 11rem); min-height: 16rem; padding: 0.5rem; border-radius: 6px; background: #0b1220; }
+
 @media (max-width: 720px) {
   .layout { flex-direction: column; }
   .sidebar { width: auto; display: flex; flex-wrap: wrap; }

@@ -5,6 +5,7 @@ Run a demo server with:  python -m tests.fake_incus /tmp/fake-incus.sock
 
 from __future__ import annotations
 
+import base64
 import datetime
 import hashlib
 import http.server
@@ -14,6 +15,7 @@ import re
 import secrets
 import socketserver
 import ssl
+import struct
 import sys
 import threading
 import uuid
@@ -41,6 +43,7 @@ class FakeIncus:
         self.buckets: dict[str, dict[str, dict]] = {"default": {}}
         self.tokens: set[str] = set()
         self.trusted: list[str] = []  # fingerprints enrolled with a token
+        self.sessions: dict[str, dict] = {}  # terminal sessions by operation id
         self.calls: list[tuple[str, str]] = []
         self.pending_ops = False  # True: operations stay Running
 
@@ -238,6 +241,22 @@ class FakeIncus:
                     return self.error(400, f"Unknown action {action}")
                 instance["status"] = target
                 return self.start_op(f"{action.title()}ing instance {name}")
+            case ("POST", ["exec"]):
+                if instance["status"] != "Running":
+                    return self.error(400, "Instance is not running")
+                status, response = self.start_op(f"Executing command in {name}")
+                op = response["metadata"]
+                op.update(status="Running", status_code=103)
+                fds = {"0": secrets.token_hex(16), "control": secrets.token_hex(16)}
+                op["metadata"] = {"fds": fds}
+                self.sessions[op["id"]] = {
+                    "request": body,
+                    "data": fds["0"],
+                    "control": fds["control"],
+                    "stdin": b"",
+                    "control_messages": [],
+                }
+                return status, response
             case ("GET", ["snapshots"]):
                 return self.sync(instance["snapshots"])
             case ("POST", ["snapshots"]):
@@ -309,11 +328,111 @@ class FakeIncus:
                         return self.sync()
         return self.error(404, "not found")
 
+    # -- terminal websockets ----------------------------------------------
+
+    def websocket_session(self, raw_path):
+        """(session, secret) for an operation websocket URL, or (None, secret)."""
+        parts = urlsplit(raw_path)
+        segments = parts.path.strip("/").split("/")
+        secret = parse_qs(parts.query).get("secret", [""])[0]
+        session = self.sessions.get(segments[2]) if len(segments) == 4 else None
+        if session is None or secret not in (session["data"], session["control"]):
+            return None, secret
+        return session, secret
+
+    def websocket(self, raw_path, ws):
+        """Serve one operation websocket. The fake shell echoes its input and ends on "exit"."""
+        session, secret = self.websocket_session(raw_path)
+        while True:
+            frame = ws.recv()
+            if frame is None:
+                return
+            opcode, payload = frame
+            if secret == session["control"]:
+                session["control_messages"].append(json.loads(payload))
+                continue
+            session["stdin"] += payload
+            ws.send(WS_BINARY, payload)
+            if b"exit" in payload:
+                ws.send(WS_CLOSE, struct.pack(">H", 1000))
+                return
+
+
+WS_GUID = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11"
+WS_TEXT, WS_BINARY, WS_CLOSE, WS_PING, WS_PONG = 0x1, 0x2, 0x8, 0x9, 0xA
+
+
+class _WebSocket:
+    """Just enough of RFC 6455 for the server side of a test."""
+
+    def __init__(self, rfile, wfile):
+        self.rfile, self.wfile = rfile, wfile
+
+    def send(self, opcode, payload=b""):
+        header = bytes([0x80 | opcode])
+        if len(payload) < 126:
+            header += bytes([len(payload)])
+        elif len(payload) < 65536:
+            header += bytes([126]) + struct.pack(">H", len(payload))
+        else:
+            header += bytes([127]) + struct.pack(">Q", len(payload))
+        try:
+            self.wfile.write(header + payload)
+            self.wfile.flush()
+        except OSError:
+            pass
+
+    def recv(self):
+        """The next text or binary message as (opcode, payload); None once the peer closes."""
+        while True:
+            try:
+                head = self.rfile.read(2)
+                if len(head) < 2:
+                    return None
+                opcode, length = head[0] & 0x0F, head[1] & 0x7F
+                if length == 126:
+                    length = struct.unpack(">H", self.rfile.read(2))[0]
+                elif length == 127:
+                    length = struct.unpack(">Q", self.rfile.read(8))[0]
+                mask = self.rfile.read(4) if head[1] & 0x80 else b""
+                payload = self.rfile.read(length)
+            except OSError:
+                return None
+            if mask:
+                payload = bytes(b ^ mask[i % 4] for i, b in enumerate(payload))
+            if opcode == WS_CLOSE:
+                self.send(WS_CLOSE, payload[:2])
+                return None
+            if opcode == WS_PING:
+                self.send(WS_PONG, payload)
+            elif opcode in (WS_TEXT, WS_BINARY):
+                return opcode, payload
+
 
 class _Handler(http.server.BaseHTTPRequestHandler):
     protocol_version = "HTTP/1.1"
 
+    def _upgrade(self):
+        if self.server.fake.websocket_session(self.path)[0] is None:
+            self.send_response(404)
+            self.send_header("Content-Length", "0")
+            self.send_header("Connection", "close")
+            self.end_headers()
+            self.close_connection = True
+            return
+        key = self.headers.get("Sec-WebSocket-Key", "")
+        accept = base64.b64encode(hashlib.sha1((key + WS_GUID).encode()).digest()).decode()
+        self.send_response(101, "Switching Protocols")
+        self.send_header("Upgrade", "websocket")
+        self.send_header("Connection", "Upgrade")
+        self.send_header("Sec-WebSocket-Accept", accept)
+        self.end_headers()
+        self.close_connection = True
+        self.server.fake.websocket(self.path, _WebSocket(self.rfile, self.wfile))
+
     def _serve(self):
+        if self.headers.get("Upgrade", "").lower() == "websocket":
+            return self._upgrade()
         length = int(self.headers.get("Content-Length") or 0)
         body = json.loads(self.rfile.read(length)) if length else None
         peer = None

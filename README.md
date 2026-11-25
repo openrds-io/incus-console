@@ -15,11 +15,12 @@ Early scaffold. Working today:
 - System containers: list, create, start, stop, restart, freeze, delete,
   snapshots, and full configuration editing as YAML
 - Object storage: pools, buckets, and bucket access keys
+- Terminal: a root login shell in a running container (xterm.js over a websocket)
 - Operations: list and cancel
 - Projects: switch project per server
 
-Not built yet: the container terminal and logs, the Electron runtime, and the
-deb, rpm and container packages. See [Roadmap](#roadmap).
+Not built yet: container logs, the Electron runtime, and the deb, rpm and
+container packages. See [Roadmap](#roadmap).
 
 ## Quick start (development)
 
@@ -49,12 +50,40 @@ The same app runs in two modes, following pgAdmin's model.
 | Setting | `SERVER_MODE = False` | `SERVER_MODE = True` (default) |
 | Shipped as | Electron app (Windows, macOS, Linux) | deb, rpm, container image |
 | Access | No login. The runtime starts the server on a random local port and proves itself with `DESKTOP_KEY`. | Username and password. |
-| Web server | Flask's own, bound to 127.0.0.1 | Apache with mod_wsgi (deb, rpm); gunicorn (container) |
+| Web server | Flask's own, bound to 127.0.0.1 | gunicorn behind nginx |
 
 Create a user for server mode with `flask create-user NAME`.
 
 Every user of a server-mode install acts on Incus with the console's one
 client certificate, so treat every console user as an Incus administrator.
+
+## Behind nginx (server mode)
+
+Run the app under gunicorn and let nginx serve HTTPS in front of it. Set
+`BEHIND_PROXY = True` so the app trusts nginx's `X-Forwarded-*` headers and
+sends its cookie over HTTPS only.
+
+```bash
+pip install gunicorn
+INCUS_CONSOLE_BEHIND_PROXY=true gunicorn --workers 2 --threads 50 --bind 127.0.0.1:5002 wsgi:app
+```
+
+Use threads: each open terminal holds one for as long as it is open.
+
+```nginx
+location / {
+    proxy_pass http://127.0.0.1:5002;
+    proxy_set_header Host $host;
+    proxy_set_header X-Forwarded-For $remote_addr;
+    proxy_set_header X-Forwarded-Proto $scheme;
+    proxy_set_header X-Forwarded-Host $host;
+    # the terminal's websocket
+    proxy_http_version 1.1;
+    proxy_set_header Upgrade $http_upgrade;
+    proxy_set_header Connection "upgrade";
+    proxy_read_timeout 1h;
+}
+```
 
 ## Configuration
 
@@ -75,7 +104,8 @@ app/
   db.py           SQLite: users and registered servers
   servers.py      server registry
   certs.py        client certificate
-  incus/client.py Incus REST client (standard library only)
+  terminal.py     browser terminal relay (simple-websocket)
+  incus/client.py Incus REST client (standard library, plus websocket-client)
   views/          pages: servers, instances, storage, operations
   templates/      Jinja templates
   static/         CSS and a few lines of JavaScript
@@ -86,10 +116,10 @@ wsgi.py           entry point for mod_wsgi and gunicorn
 
 ## Roadmap
 
-1. Container terminal and logs (Socket.IO: WebSocket under gunicorn and
-   Electron, long-polling under mod_wsgi)
-2. Electron runtime with a bundled Python
-3. deb (Debian 13, Ubuntu 26.04) and rpm (EL10) packages; container image
+1. Container logs
+2. Electron runtime with a bundled Python; xterm.js vendored instead of loaded from jsDelivr
+3. deb (Debian 13, Ubuntu 26.04) and rpm (EL10) packages with nginx and systemd
+   units; container image
 4. Graphics and styling from incus-ui-canonical (see `NOTICE.md`)
 5. Later: virtual machines, networks, images, cluster, permissions, OIDC
 

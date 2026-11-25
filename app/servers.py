@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import glob
 import os
 import sqlite3
 from pathlib import Path
@@ -65,13 +66,25 @@ def client_for(server: sqlite3.Row, project: str = "default") -> IncusClient:
     )
 
 
-def detected_sockets() -> list[str]:
-    """Local Incus sockets that exist, are accessible and are not registered yet."""
-    known = {row["address"] for row in all_servers() if row["kind"] == "unix"}
-    found = []
-    for candidate in current_app.config["LOCAL_SOCKETS"]:
-        candidate = str(Path(candidate).expanduser())
-        usable = os.access(candidate, os.R_OK | os.W_OK)
-        if candidate not in known and candidate not in found and usable:
-            found.append(candidate)
-    return found
+def detected_sockets() -> list[dict]:
+    """Local Incus sockets that exist, are accessible and are not registered yet.
+
+    Each entry is ``{"path": ..., "name": ...}``; the name is a suggestion for the form.
+    """
+    rows = all_servers()
+    known = {row["address"] for row in rows if row["kind"] == "unix"}
+    names = {row["name"] for row in rows}
+    found: dict[str, dict] = {}
+    for pattern in current_app.config["LOCAL_SOCKETS"]:
+        for candidate in sorted(glob.glob(str(Path(pattern).expanduser()))):
+            if candidate in known or candidate in found:
+                continue
+            if not os.access(candidate, os.R_OK | os.W_OK):
+                continue
+            parent = Path(candidate).parent
+            name = f"Colima {parent.name}" if parent.parent.name == ".colima" else "Local"
+            if name in names:
+                name = f"{name} ({candidate})"
+            names.add(name)
+            found[candidate] = {"path": candidate, "name": name}
+    return list(found.values())

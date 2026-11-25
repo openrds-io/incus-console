@@ -27,9 +27,17 @@ ACTION_WAIT = 30
 DEFAULT_IMAGE_SERVER = "https://images.linuxcontainers.org"
 IMAGE_SUGGESTIONS = ["debian/13", "debian/12", "ubuntu/26.04", "ubuntu/24.04", "almalinux/10"]
 
+# What the browser terminal runs in a container: a login shell as root.
+TERMINAL_COMMAND = ["su", "-l"]
+
+# True behind nginx (or another proxy) serving HTTPS: trust its X-Forwarded-* headers
+# and send the session cookie over HTTPS only.
+BEHIND_PROXY = False
+
 # Unix sockets offered on the Servers page when they exist and are accessible.
+# Glob patterns are allowed; Colima keeps one socket per profile.
 LOCAL_SOCKETS = [
     "/var/lib/incus/unix.socket",
     "/run/incus/unix.socket",
-    "~/.colima/default/incus.sock",
+    "~/.colima/*/incus.sock",
 ]

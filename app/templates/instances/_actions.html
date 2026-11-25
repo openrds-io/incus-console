@@ -8,6 +8,9 @@
   {% elif status == 'Frozen' %}
   <button class="btn btn-small" name="action" value="unfreeze">Resume</button>
   {% else %}
+  {% if status == 'Running' and instance.type == 'container' %}
+  <a class="btn btn-small" href="{{ url_for('srv.instance_terminal', name=instance.name) }}">Terminal</a>
+  {% endif %}
   <button class="btn btn-small" name="action" value="restart">Restart</button>
   <button class="btn btn-small" name="action" value="freeze">Freeze</button>
   <button class="btn btn-small" name="action" value="stop">Stop</button>
