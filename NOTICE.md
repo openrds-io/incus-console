@@ -17,6 +17,21 @@ List every file brought in from another project here.
 | `app/static/css/app.css` (font stacks, logo rules) | incus-ui-canonical `src/sass/_settings.scss` and `src/sass/_pattern_navigation.scss` at commit 7e41404 | Yes: rewritten as plain CSS |
 | `app/templates/base.html` (application layout) | incus-ui-canonical `src/components/Navigation.tsx` at commit 7e41404 | Yes: rewritten as a Jinja template |
 
+| `desktop/build/icon.png` | rendered from `app/static/img/incus-logo.svg` above | Yes: drawn at 1024 pixels |
+
+## xterm.js
+
+`app/static/vendor/xterm/` holds [xterm.js](https://github.com/xtermjs/xterm.js)
+5.5.0 and its fit addon 0.10.0, MIT license (`app/static/vendor/xterm/LICENSE`),
+copied from npm by `desktop/scripts/vendor-xterm.mjs`.
+
+## Python in the desktop app
+
+The desktop app ships a CPython 3.13 build from
+[python-build-standalone](https://github.com/astral-sh/python-build-standalone)
+(Python Software Foundation License; the build project's own files are under its
+licence), with this app's dependencies from `requirements.txt` installed in it.
+
 ## Vanilla Framework
 
 `app/static/vendor/vanilla-framework-4.61.0.min.css` is Canonical's

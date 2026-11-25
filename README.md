@@ -24,7 +24,7 @@ Early scaffold. Working today:
 - Operations: list and cancel
 - Projects: switch project per server
 
-Not built yet: the Electron runtime, and the deb, rpm and container packages. See [Roadmap](#roadmap).
+Not built yet: the deb, rpm and container packages. See [Roadmap](#roadmap).
 
 ## Quick start (development)
 
@@ -60,6 +60,37 @@ Create a user for server mode with `flask create-user NAME`.
 
 Every user of a server-mode install acts on Incus with the console's one
 client certificate, so treat every console user as an Incus administrator.
+
+## Desktop app
+
+`desktop/` is an Electron app on pgAdmin's model: it starts this Flask app with
+`python -m app.desktop` on a free port on 127.0.0.1, with a random key for that
+launch, and shows it in a window. Nothing else on the machine can use the
+console without that key. Its data (servers, client certificate) is in the
+app's own folder; File > Data folder opens it, and File > Server log shows the
+server's output.
+
+Run it from a checkout (uses the repository's `.venv`):
+
+```bash
+cd desktop
+npm install
+npm run vendor-xterm   # once; copies xterm.js into app/static/vendor/xterm
+npm start
+```
+
+Build an installer for the machine you are on (a DMG on macOS, an NSIS installer
+on Windows, AppImage, deb and rpm on Linux):
+
+```bash
+cd desktop
+npm install
+npm run dist           # downloads a standalone Python 3.13, then builds into dist/
+```
+
+`npm run dist` bundles a Python for the OS and CPU it runs on, so build each
+platform on that platform. The builds are not code-signed: macOS asks you to
+right-click and Open the first time, and Windows SmartScreen warns.
 
 ## Behind nginx (server mode)
 
@@ -130,18 +161,20 @@ app/
   servers.py      server registry
   certs.py        client certificate
   terminal.py     browser terminal relay (simple-websocket)
+  desktop.py      the server the desktop app starts
   incus/client.py Incus REST client (standard library, plus websocket-client)
   views/          pages: servers, instances, storage, operations
   templates/      Jinja templates
   static/         CSS and a few lines of JavaScript
 tests/
   fake_incus.py   in-memory Incus API used by the tests and for demos
-wsgi.py           entry point for mod_wsgi and gunicorn
+desktop/          Electron app (main.js) and its build scripts
+wsgi.py           entry point for gunicorn
 ```
 
 ## Roadmap
 
-1. Electron runtime with a bundled Python; xterm.js vendored instead of loaded from jsDelivr
+1. Code signing and a build workflow for the desktop app on all three platforms
 2. deb (Debian 13, Ubuntu 26.04) and rpm (EL10) packages with nginx and systemd
    units; container image
 3. Later: virtual machines, networks, images, cluster, permissions, OIDC

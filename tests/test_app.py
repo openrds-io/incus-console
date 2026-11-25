@@ -201,3 +201,19 @@ def test_yaml_edit(browser, sid, fake):
     assert fake.instances["web-1"]["description"] == "web tier"
     assert fake.instances["web-1"]["config"] == {"limits.memory": "1GiB"}
     assert fake.instances["web-1"]["status"] == "Running"
+
+
+def test_desktop_key_from_an_earlier_launch_is_refused(tmp_path):
+    def launch(key):
+        return create_app(
+            {"TESTING": True, "SERVER_MODE": False, "DESKTOP_KEY": key, "DATA_DIR": str(tmp_path)}
+        )
+
+    first = launch("first-key").test_client()
+    assert first.get("/servers?key=first-key").status_code == 200
+    with first.session_transaction() as session:
+        cookie = dict(session)
+    second = launch("second-key").test_client()
+    with second.session_transaction() as session:
+        session.update(cookie)
+    assert second.get("/servers").status_code == 401

@@ -1,0 +1,73 @@
+{
+  "name": "incus-console-desktop",
+  "productName": "Incus Console",
+  "version": "0.1.0",
+  "description": "Desktop app for incus-console: a lean console for Incus",
+  "license": "GPL-3.0-only",
+  "author": "OpenRDS",
+  "homepage": "https://github.com/openrds-io/incus-console",
+  "private": true,
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "python": "node scripts/bundle-python.mjs",
+    "vendor-xterm": "node scripts/vendor-xterm.mjs",
+    "dist": "npm run python && electron-builder --publish never",
+    "dist:dir": "npm run python && electron-builder --dir --publish never"
+  },
+  "devDependencies": {
+    "@xterm/addon-fit": "0.10.0",
+    "@xterm/xterm": "5.5.0",
+    "electron": "^45.3.3",
+    "electron-builder": "latest"
+  },
+  "build": {
+    "appId": "io.openrds.incus-console",
+    "productName": "Incus Console",
+    "artifactName": "incus-console-${version}-${os}-${arch}.${ext}",
+    "directories": {
+      "output": "dist",
+      "buildResources": "build"
+    },
+    "files": [
+      "main.js",
+      "loading.html",
+      "package.json"
+    ],
+    "extraResources": [
+      {
+        "from": "../app",
+        "to": "server/app",
+        "filter": ["**/*", "!**/__pycache__/**", "!**/*.pyc"]
+      },
+      {
+        "from": "python-dist",
+        "to": "python"
+      },
+      {
+        "from": "../LICENSE",
+        "to": "LICENSE"
+      },
+      {
+        "from": "../NOTICE.md",
+        "to": "NOTICE.md"
+      }
+    ],
+    "mac": {
+      "target": ["dmg"],
+      "category": "public.app-category.developer-tools"
+    },
+    "win": {
+      "target": ["nsis"]
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true
+    },
+    "linux": {
+      "target": ["AppImage", "deb", "rpm"],
+      "category": "System",
+      "maintainer": "OpenRDS"
+    }
+  }
+}

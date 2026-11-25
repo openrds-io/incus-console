@@ -18,7 +18,6 @@ from .incus import IncusConnectionError, IncusError
 
 __version__ = "0.1.0.dev0"
 
-XTERM_CDN = "https://cdn.jsdelivr.net"
 HOST = re.compile(r"[A-Za-z0-9.\-:\[\]]+")
 
 
@@ -75,13 +74,9 @@ def create_app(test_config: dict | None = None) -> Flask:
 
     @app.after_request
     def _security_headers(response):
-        # xterm.js comes from jsDelivr and styles itself at run time; the terminal's
-        # websocket goes back to this host.
-        # Vanilla draws its icons as data: images.
-        policy = (
-            f"default-src 'self'; img-src 'self' data:; script-src 'self' {XTERM_CDN}; "
-            f"style-src 'self' 'unsafe-inline' {XTERM_CDN}"
-        )
+        # Vanilla draws its icons as data: images; xterm.js styles itself at run
+        # time; the terminal's websocket goes back to this host.
+        policy = "default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'"
         if HOST.fullmatch(request.host):
             policy += f"; connect-src 'self' ws://{request.host} wss://{request.host}"
         response.headers.setdefault("Content-Security-Policy", policy)

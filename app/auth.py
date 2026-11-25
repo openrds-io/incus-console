@@ -7,6 +7,7 @@ Both modes: every state-changing request must carry the session's CSRF token.
 
 from __future__ import annotations
 
+import hashlib
 import hmac
 import secrets
 
@@ -64,10 +65,13 @@ def gate():
     if not current_app.config["SERVER_MODE"]:
         key = current_app.config.get("DESKTOP_KEY")
         if key:
+            # The session remembers this launch's key (hashed), so a cookie from an
+            # earlier launch does not open the console.
+            proof = hashlib.sha256(str(key).encode()).hexdigest()
             supplied = request.args.get("key")
             if supplied and hmac.compare_digest(str(supplied), str(key)):
-                session["desktop"] = True
-            if not session.get("desktop"):
+                session["desktop"] = proof
+            if not hmac.compare_digest(str(session.get("desktop", "")), proof):
                 abort(401)
         g.user = DESKTOP_USER
         return None

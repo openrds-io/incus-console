@@ -8,8 +8,9 @@ Override them in a Python file (``/etc/incus-console/config.py`` or the path in
 # False: single-user desktop app; the Electron runtime sets this and DESKTOP_KEY.
 SERVER_MODE = True
 
-# In desktop mode the runtime starts the server with a random key and opens
-# ``/?key=<key>``. Requests without a session that presented the key get a 401.
+# In desktop mode the runtime starts the server (app/desktop.py) with a random key
+# for that launch and opens ``/?key=<key>``. Requests without a session that
+# presented this launch's key get a 401.
 DESKTOP_KEY = None
 
 # Database, secret key and the client certificate live here.
