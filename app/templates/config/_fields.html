@@ -1,6 +1,7 @@
 {# The inputs for settings_fields(); used by the settings form and create forms. #}
 {% macro settings_inputs(fields) %}
 {% for f in fields %}
+{% if f.group %}<h3 class="p-heading--5 settings-group">{{ f.group }}</h3>{% endif %}
 <label for="cfg-{{ loop.index }}">{{ f.label }} <code class="key-name">{{ f.key }}</code></label>
 {% if f.kind == 'bool' %}
 <select id="cfg-{{ loop.index }}" name="cfg:{{ f.key }}">

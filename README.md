@@ -13,7 +13,7 @@ Early scaffold. Working today:
 
 - Servers: register a local socket, or a remote server with a trust token
 - System containers: list, create, start, stop, restart, freeze, delete,
-  rename, copy, snapshots, logs (console and Incus log files), a settings form
+  rename, copy, snapshots (by hand or on a schedule, with expiry), logs (console and Incus log files), a settings form
   for limits and common options, adding and removing devices, and full
   configuration editing as YAML; creating from the image server's catalog,
   with a storage pool and cloud-init user data
@@ -24,7 +24,7 @@ Early scaffold. Working today:
 - Networks: list, create bridges, settings, YAML, rename, delete, DHCP leases,
   and port forwards from a host address to containers
 - Volumes: custom storage volumes across pools; create, resize, rename, delete,
-  attach to and detach from containers, and snapshots
+  attach to and detach from containers, and snapshots (also scheduled)
 - Object storage: storage pools; buckets across all pools or per pool;
   create (credentials shown once), edit size and description, delete; access
   keys with admin or read-only roles, custom or generated access and secret

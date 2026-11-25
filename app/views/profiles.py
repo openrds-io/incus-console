@@ -98,10 +98,15 @@ def profile_settings(name):
     found = g.incus.profile(name)
     if request.method == "POST":
         payload = _editable(found)
-        payload["config"] = apply_settings(payload.get("config"), request.form)
         payload["description"] = request.form.get("description", "").strip()
-        if _save(name, payload, f"Profile {name} updated."):
-            return redirect(url_for("srv.profile", name=name))
+        try:
+            payload["config"] = apply_settings(payload.get("config"), request.form)
+        except IncusError as error:
+            flash(error.message, "error")
+            payload["config"] = apply_settings(payload.get("config"), request.form, check=False)
+        else:
+            if _save(name, payload, f"Profile {name} updated."):
+                return redirect(url_for("srv.profile", name=name))
         found = {**found, **payload}
     return render_template(
         "config/settings.html",

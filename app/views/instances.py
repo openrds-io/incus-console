@@ -310,10 +310,15 @@ def instance_settings(name):
     instance = g.incus.instance(name)
     if request.method == "POST":
         payload = _editable(instance)
-        payload["config"] = apply_settings(payload.get("config"), request.form)
         payload["description"] = request.form.get("description", "").strip()
-        if _save(name, payload, f"{name} updated."):
-            return redirect(url_for("srv.instance", name=name))
+        try:
+            payload["config"] = apply_settings(payload.get("config"), request.form)
+        except IncusError as error:
+            flash(error.message, "error")
+            payload["config"] = apply_settings(payload.get("config"), request.form, check=False)
+        else:
+            if _save(name, payload, f"{name} updated."):
+                return redirect(url_for("srv.instance", name=name))
         instance = {**instance, **payload}
     return render_template(
         "config/settings.html",

@@ -8,6 +8,12 @@
   <label for="size">Size</label>
   <input type="text" id="size" name="size" value="{{ form.get('size', (volume.config or {}).get('size', '')) }}" placeholder="The pool's default">
   <p class="p-form-help-text">Most drivers can grow a volume; shrinking one is refused if it holds more than the new size, and some drivers cannot shrink at all.</p>
+  <label for="schedule">Snapshot schedule</label>
+  <input type="text" id="schedule" name="schedule" value="{{ form.get('schedule', (volume.config or {}).get('snapshots.schedule', '')) }}" placeholder="No scheduled snapshots">
+  <p class="p-form-help-text">@hourly, @daily, @weekly, @monthly, or cron syntax such as 0 3 * * * (03:00 daily).</p>
+  <label for="expiry">Keep scheduled snapshots for</label>
+  <input type="text" id="expiry" name="expiry" value="{{ form.get('expiry', (volume.config or {}).get('snapshots.expiry', '')) }}" placeholder="Keep until deleted">
+  <p class="p-form-help-text">Such as 12H, 7d, 2w or 3m (hours, days, weeks, months).</p>
   <label for="description">Description</label>
   <input type="text" id="description" name="description" value="{{ form.get('description', volume.description or '') }}">
   <div class="form-buttons">

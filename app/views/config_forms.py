@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import re
+
 import yaml
 
 from ..incus import IncusError
@@ -25,7 +27,63 @@ SETTINGS = [
         "bool",
         "Root in the container is root on the host. Avoid unless you need it.",
     ),
+    (
+        "snapshots.schedule",
+        "Snapshot schedule",
+        "text",
+        "@hourly, @daily, @weekly, @monthly, or cron syntax such as 0 3 * * * (03:00 daily).",
+    ),
+    (
+        "snapshots.expiry",
+        "Keep scheduled snapshots for",
+        "text",
+        "Such as 12H, 7d, 2w or 3m (hours, days, weeks, months). Empty keeps them.",
+    ),
+    ("snapshots.schedule.stopped", "Snapshot while stopped", "bool", ""),
 ]
+# Headings shown above the first setting of each group.
+GROUPS = {
+    "limits.cpu": "Limits",
+    "boot.autostart": "Behaviour",
+    "snapshots.schedule": "Scheduled snapshots",
+}
+# What an empty field means, when "No limit" would be wrong.
+PLACEHOLDERS = {
+    "snapshots.schedule": "No scheduled snapshots",
+    "snapshots.expiry": "Keep until deleted",
+}
+SCHEDULE_ALIASES = {
+    "@hourly",
+    "@daily",
+    "@midnight",
+    "@weekly",
+    "@monthly",
+    "@annually",
+    "@yearly",
+    "@startup",
+    "@never",
+}
+CRON_FIELD = re.compile(r"[0-9*/,\-A-Za-z]+")
+EXPIRY = re.compile(r"(\d+[MHdwmy])(\s+\d+[MHdwmy])*")
+
+
+def check_schedule(value: str) -> None:
+    """Raise IncusError unless value is an Incus snapshot schedule (comma-separated)."""
+    for part in (p.strip() for p in value.split(",")):
+        fields = part.split()
+        if part in SCHEDULE_ALIASES or (
+            len(fields) == 5 and all(CRON_FIELD.fullmatch(f) for f in fields)
+        ):
+            continue
+        raise IncusError(400, f"{part!r} is not a schedule. Use @daily, or cron like 0 3 * * *.")
+
+
+def check_expiry(value: str) -> None:
+    if not EXPIRY.fullmatch(value):
+        raise IncusError(400, f"{value!r} is not a duration. Use something like 7d or 2w.")
+
+
+CHECKS = {"snapshots.schedule": check_schedule, "snapshots.expiry": check_expiry}
 DEVICE_TYPES = {
     "disk": "source=/srv/data\npath=/data",
     "proxy": "listen=tcp:0.0.0.0:8080\nconnect=tcp:127.0.0.1:80",
@@ -37,13 +95,18 @@ DEVICE_TYPES = {
 }
 
 
-def apply_settings(config: dict, form, settings: list = SETTINGS) -> dict:
-    """The config with the settings form's values; an empty field removes the key."""
+def apply_settings(config: dict, form, settings: list = SETTINGS, check: bool = True) -> dict:
+    """The config with the settings form's values; an empty field removes the key.
+
+    Raises IncusError for a value Incus would refuse less clearly.
+    """
     config = dict(config or {})
     for key, _label, kind, _help in settings:
         value = form.get(f"cfg:{key}", "").strip()
         if kind == "bool" and value not in ("", "true", "false"):
             value = ""
+        if check and value and key in CHECKS:
+            CHECKS[key](value)
         if value:
             config[key] = value
         else:
@@ -60,7 +123,8 @@ def settings_fields(
     local, inherited = local or {}, inherited or {}
     return [
         {
-            "empty": empty,
+            "group": GROUPS.get(key) if settings is SETTINGS else None,
+            "empty": PLACEHOLDERS.get(key, empty),
             "key": key,
             "label": label,
             "kind": kind,

@@ -49,8 +49,13 @@
 </div>
 <hr class="p-rule">
 <div class="row">
-  <div class="col-3"><h2 class="p-heading--5 section-heading">Snapshots</h2></div>
+  <div class="col-3">
+    <h2 class="p-heading--5 section-heading">Snapshots</h2>
+    <a class="p-button is-dense" href="{{ url_for('srv.instance_settings', name=instance.name) }}">Schedule</a>
+  </div>
   <div class="col-9">
+    {% set cfg = instance.expanded_config or {} %}
+    <p class="snapshot-schedule">{% if cfg.get('snapshots.schedule') %}Taken on schedule <code>{{ cfg['snapshots.schedule'] }}</code>{% if cfg.get('snapshots.expiry') %}, kept for {{ cfg['snapshots.expiry'] }}{% endif %}{% if cfg.get('snapshots.schedule.stopped') == 'true' %}, also while stopped{% endif %}.{% else %}No scheduled snapshots.{% endif %}</p>
     {% if instance.snapshots %}
     <table aria-label="Snapshots">
       <thead><tr><th>Name</th><th>Created</th><th>Expires</th><th class="u-align--right">Actions</th></tr></thead>

@@ -7,6 +7,7 @@ import re
 from flask import flash, g, redirect, render_template, request, url_for
 
 from ..incus import IncusError
+from .config_forms import check_expiry, check_schedule
 from .networks import used_by
 from .scoped import bp, run
 
@@ -117,14 +118,25 @@ def volume_edit(pool, name):
     if request.method == "POST":
         try:
             size = _size(form)
+            schedule = form.get("schedule", "").strip()
+            expiry = form.get("expiry", "").strip()
+            if schedule:
+                check_schedule(schedule)
+            if expiry:
+                check_expiry(expiry)
         except IncusError as error:
             flash(error.message, "error")
         else:
             config = dict(found.get("config") or {})
-            if size:
-                config["size"] = size
-            else:
-                config.pop("size", None)
+            for key, value in (
+                ("size", size),
+                ("snapshots.schedule", schedule),
+                ("snapshots.expiry", expiry),
+            ):
+                if value:
+                    config[key] = value
+                else:
+                    config.pop(key, None)
             payload = {"description": form.get("description", "").strip(), "config": config}
             if run(lambda: g.incus.update_volume(pool, name, payload), f"Volume {name} updated."):
                 return redirect(url_for("srv.volume", pool=pool, name=name))
