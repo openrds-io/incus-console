@@ -69,7 +69,7 @@ def _wanted(user, server, admin: IncusClient) -> list[str] | None:
     """Projects the user's certificate should list, or None for no certificate."""
     if user is None or user["is_admin"] or user["disabled"]:
         return None
-    grants = {row["project"] for row in access.grants_for(user["id"], server["id"])}
+    grants = {e["project"] for e in access.effective_grants(user["id"], server["id"])}
     if not grants:
         return None
     if access.ALL_PROJECTS in grants:
@@ -177,16 +177,34 @@ def sync_all(user_id: int) -> list[str]:
 def sync_server(server) -> list[str]:
     """Sync every user who has access to one server (after projects change)."""
     problems = []
-    rows = get_db().execute(
-        "SELECT DISTINCT user_id FROM grants WHERE server_id = ? "
-        "UNION SELECT user_id FROM user_certs WHERE server_id = ?",
-        (server["id"], server["id"]),
+    holders = get_db().execute(
+        "SELECT user_id FROM user_certs WHERE server_id = ?", (server["id"],)
     )
-    for row in rows.fetchall():
+    user_ids = set(access.users_with_access(server["id"])) | {row[0] for row in holders}
+    for user_id in sorted(user_ids):
         try:
-            sync(server, row["user_id"])
+            sync(server, user_id)
         except IncusError as error:
             problems.append(error.message)
+    return problems
+
+
+def sync_many(user_ids, server_ids) -> list[str]:
+    """Sync some users on some servers (after a group changes); returns problems."""
+    from .servers import get
+
+    problems: list[str] = []
+    for server_id in sorted(set(server_ids)):
+        server = get(server_id)
+        if server is None:
+            continue
+        for user_id in sorted(set(user_ids)):
+            try:
+                sync(server, user_id)
+            except IncusError as error:
+                message = f"{server['name']}: {error.message}"
+                if message not in problems:
+                    problems.append(message)
     return problems
 
 
@@ -214,7 +232,7 @@ def client(server, user, project: str) -> IncusClient | None:
         listed = json.loads(row["projects"])
         interval = current_app.config["CERT_SYNC_INTERVAL"]
         all_projects = access.ALL_PROJECTS in {
-            g["project"] for g in access.grants_for(user["id"], server["id"])
+            e["project"] for e in access.effective_grants(user["id"], server["id"])
         }
         stale = all_projects and (
             project not in listed or time.time() - row["synced_at"] > interval

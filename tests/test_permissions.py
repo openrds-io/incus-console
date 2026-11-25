@@ -188,3 +188,12 @@ def test_audit_log(server_app, setup, admin, fake):
 def test_desktop_mode_has_no_user_admin(app):
     assert app.test_client().get("/admin/users").status_code == 404
     assert app.test_client().get("/account").status_code == 404
+
+
+def test_pages_show_who_is_signed_in(server_app, setup, admin):
+    page = text(admin.get("/servers"))
+    assert "Signed in as" in page and 'whoami__role is-admin">Console admin<' in page
+    assert "root (console admin)" in page
+    page = text(login(server_app, "vic").get("/servers"))
+    assert 'whoami__name">vic<' in page and 'whoami__role">User<' in page
+    assert "(console admin)" not in page

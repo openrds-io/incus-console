@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+{% from "macros.html" import empty %}
+{% block title %}Groups{% endblock %}
+{% block controls %}<a class="p-button--positive u-no-margin--bottom" href="{{ url_for('admin.group_create') }}">Create group</a>{% endblock %}
+{% block content %}
+{% if rows %}
+<table aria-label="Groups">
+  <thead><tr><th>Name</th><th>Description</th><th>Members</th><th>Access</th><th>Created</th></tr></thead>
+  <tbody>
+  {% for row in rows %}
+    <tr>
+      <td><a href="{{ url_for('admin.group', group_id=row.id) }}">{{ row.name }}</a></td>
+      <td>{{ row.description }}</td>
+      <td>{{ row.member_count }}</td>
+      <td>{{ row.grant_count }} grant{{ '' if row.grant_count == 1 else 's' }}</td>
+      <td>{{ row.created_at|when }}</td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% else %}
+{{ empty("No groups yet. A group gives the same access to many users at once.") }}
+{% endif %}
+<p class="p-text--small u-text--muted">A user's access is their own grants plus those of every group they are in; where several apply to the same project, the strongest role wins. Groups never make anyone a console admin.</p>
+{% endblock %}

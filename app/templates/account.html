@@ -9,12 +9,12 @@
     <p>You are a console admin: you can do everything on every server.</p>
     {% else %}
     <table aria-label="Your access">
-      <thead><tr><th>Server</th><th>Project</th><th>Role</th></tr></thead>
+      <thead><tr><th>Server</th><th>Project</th><th>Role</th><th>Given by</th></tr></thead>
       <tbody>
       {% for grant in grants %}
-        <tr><td>{{ grant.server_name }}</td><td>{{ 'All projects' if grant.project == '*' else grant.project }}</td><td>{{ roles[grant.role] }}</td></tr>
+        <tr><td>{{ grant.server_name }}</td><td>{{ 'All projects' if grant.project == '*' else grant.project }}</td><td>{{ roles[grant.role] }}</td><td>{% for via in grant.via %}{{ via or 'You directly' }}{{ ', ' if not loop.last }}{% endfor %}</td></tr>
       {% else %}
-        <tr><td colspan="3" class="u-text--muted">No access yet. Ask a console admin.</td></tr>
+        <tr><td colspan="4" class="u-text--muted">No access yet. Ask a console admin.</td></tr>
       {% endfor %}
       </tbody>
     </table>

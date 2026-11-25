@@ -37,8 +37,9 @@ Early scaffold. Working today:
 - Projects: list, create and configure (features, resource limits, restrictions),
   usage against limits, YAML, rename, delete, and switch project per server
 - Users and access (server mode): console admins, and Viewer, Operator or
-  Project admin roles per server and project; user management, own password
-  change, and an audit log
+  Project admin roles per server and project, given to users directly or
+  through groups; user and group management, own password change, and an
+  audit log
 - Live updates: lists, detail pages and Operations refresh themselves when
   something changes on the server (Incus's event stream, relayed as
   server-sent events), but never while you are typing in a form
@@ -93,6 +94,14 @@ server. The strongest one that applies wins. Users see only the servers and
 projects they have access to, and buttons they cannot use are hidden. Only
 console admins create projects or change a project's limits and restrictions.
 
+**Groups** (admins only) bundle roles for many users at once. A user's access
+is their own roles plus those of every group they are in, again with the
+strongest winning. Adding someone to a group, removing them, or changing the
+group's roles takes effect at once, including their restricted certificates
+below. Groups carry project roles only: being a console admin is always set
+per user. Deleting a group takes away what it gave, not its members' own
+roles.
+
 The console checks every request. On remote (https) servers it also gives
 each user who is not an admin their own client certificate, added to that
 server's trust store as a restricted certificate (`incus-console/<username>`)
@@ -119,11 +128,10 @@ certificate alone.
 
 Pending work, roughly in the order planned:
 
-- [ ] **Groups:** bundles of grants (server, project, role) given to many users
-  at once; a user's access is their own grants plus their groups'
 - [ ] **OIDC sign-in:** log in with the organisation's identity provider
   (Keycloak, Entra ID, Okta, ...); map identity-provider groups to console
-  groups; local accounts stay available
+  groups (`user_groups.external_name` is reserved for this); local accounts
+  stay available
 - [ ] **Incus-enforced roles inside a project:** an authorization scriptlet
   shipped with the console, so Incus also refuses a Viewer's or Operator's
   changes, not just the console
@@ -267,7 +275,7 @@ app/
   auth.py         login, desktop key, CSRF
   access.py       roles: who may do what on which server and project
   audit.py        audit log
-  db.py           SQLite: users, grants, audit log, registered servers
+  db.py           SQLite: users, groups, grants, audit log, registered servers
   servers.py      server registry
   certs.py        client certificate
   terminal.py     browser terminal relay (simple-websocket)

@@ -1,4 +1,4 @@
-"""Server mode: console users, their access, the audit log, and each user's own account."""
+"""Server mode: users and groups, their access, the audit log, and each user's own account."""
 
 from __future__ import annotations
 
@@ -28,6 +28,11 @@ account_bp = Blueprint("account", __name__)
 USERNAME = re.compile(r"[A-Za-z0-9][A-Za-z0-9._@-]{0,63}")
 USERNAME_RULE = (
     "Use up to 64 letters, digits, dots, dashes, underscores or @, starting with a letter or digit."
+)
+GROUP_NAME = re.compile(r"[A-Za-z0-9][A-Za-z0-9 ._@-]{0,63}")
+GROUP_NAME_RULE = (
+    "Use up to 64 letters, digits, spaces, dots, dashes, underscores or @, "
+    "starting with a letter or digit."
 )
 
 
@@ -90,12 +95,33 @@ def _sync(server_id: int, user_id: int) -> None:
         _report([f"{server['name']}: {error.message}"])
 
 
+def _grant_form():
+    """(server_id, project, role) from a "Give access" form, or None after flashing why."""
+    form = request.form
+    project = form.get("project", "").strip() or access.ALL_PROJECTS
+    role = form.get("role", "")
+    try:
+        server_id = int(form.get("server_id", ""))
+    except ValueError:
+        server_id = 0
+    if servers.get(server_id) is None or role not in access.ROLES:
+        flash("Pick a server and a role.", "error")
+        return None
+    return server_id, project, role
+
+
+def _where(project: str) -> str:
+    return "all projects" if project == access.ALL_PROJECTS else f"project {project}"
+
+
 @bp.get("/users")
 def users():
     rows = (
         get_db()
         .execute(
-            "SELECT users.*, (SELECT COUNT(*) FROM grants WHERE user_id = users.id) AS grant_count "
+            "SELECT users.*, "
+            "(SELECT COUNT(*) FROM grants WHERE user_id = users.id) AS grant_count, "
+            "(SELECT COUNT(*) FROM group_members WHERE user_id = users.id) AS group_count "
             "FROM users ORDER BY username"
         )
         .fetchall()
@@ -133,17 +159,31 @@ def user_create():
 
 @bp.get("/users/<int:user_id>")
 def user(user_id):
+    target = _user(user_id)
+    db = get_db()
     return render_template(
         "admin/user.html",
-        user=_user(user_id),
+        user=target,
         grants=access.grants_for(user_id),
+        group_grants=access.group_grants_for(user_id),
+        groups=db.execute(
+            "SELECT user_groups.* FROM user_groups JOIN group_members "
+            "ON group_members.group_id = user_groups.id WHERE group_members.user_id = ? "
+            "ORDER BY user_groups.name",
+            (user_id,),
+        ).fetchall(),
+        other_groups=db.execute(
+            "SELECT * FROM user_groups WHERE id NOT IN "
+            "(SELECT group_id FROM group_members WHERE user_id = ?) ORDER BY name",
+            (user_id,),
+        ).fetchall(),
         servers=servers.all_servers(),
         project_names=_project_names(),
         roles=access.ROLE_LABELS,
-        entries=audit.recent(20, _user(user_id)["username"]),
+        entries=audit.recent(20, target["username"]),
         certs={
             row["server_id"]: row
-            for row in get_db().execute("SELECT * FROM user_certs WHERE user_id = ?", (user_id,))
+            for row in db.execute("SELECT * FROM user_certs WHERE user_id = ?", (user_id,))
         },
     )
 
@@ -224,16 +264,10 @@ def user_delete(user_id):
 @bp.post("/users/<int:user_id>/grants")
 def grant_add(user_id):
     target = _user(user_id)
-    form = request.form
-    project = form.get("project", "").strip() or access.ALL_PROJECTS
-    role = form.get("role", "")
-    try:
-        server_id = int(form.get("server_id", ""))
-    except ValueError:
-        server_id = 0
-    if servers.get(server_id) is None or role not in access.ROLES:
-        flash("Pick a server and a role.", "error")
+    parsed = _grant_form()
+    if parsed is None:
         return redirect(url_for("admin.user", user_id=user_id))
+    server_id, project, role = parsed
     db = get_db()
     db.execute(
         "INSERT INTO grants (user_id, server_id, project, role) VALUES (?, ?, ?, ?) "
@@ -241,8 +275,8 @@ def grant_add(user_id):
         (user_id, server_id, project, role),
     )
     db.commit()
-    where = "all projects" if project == access.ALL_PROJECTS else f"project {project}"
-    flash(f"{target['username']} is now {access.ROLE_LABELS[role]} in {where}.", "success")
+    label = access.ROLE_LABELS[role]
+    flash(f"{target['username']} is now {label} in {_where(project)}.", "success")
     _sync(server_id, user_id)
     return redirect(url_for("admin.user", user_id=user_id))
 
@@ -259,6 +293,218 @@ def grant_delete(user_id, grant_id):
     if row:
         _sync(row["server_id"], user_id)
     return redirect(url_for("admin.user", user_id=user_id))
+
+
+# -- groups ----------------------------------------------------------------
+
+
+def _group(group_id: int):
+    row = get_db().execute("SELECT * FROM user_groups WHERE id = ?", (group_id,)).fetchone()
+    if row is None:
+        abort(404)
+    return row
+
+
+def _group_members(group_id: int) -> list[int]:
+    rows = get_db().execute("SELECT user_id FROM group_members WHERE group_id = ?", (group_id,))
+    return [row[0] for row in rows]
+
+
+def _group_servers(group_id: int) -> list[int]:
+    rows = get_db().execute(
+        "SELECT DISTINCT server_id FROM group_grants WHERE group_id = ?", (group_id,)
+    )
+    return [row[0] for row in rows]
+
+
+def _group_name_error(name: str, group_id: int | None = None) -> str | None:
+    if not GROUP_NAME.fullmatch(name):
+        return GROUP_NAME_RULE
+    clash = (
+        get_db()
+        .execute("SELECT 1 FROM user_groups WHERE name = ? AND id IS NOT ?", (name, group_id))
+        .fetchone()
+    )
+    return f"A group named {name} already exists." if clash else None
+
+
+def _back(group_id: int):
+    """Membership changes can come from the group page or a user's page."""
+    user_id = request.form.get("back_user", type=int)
+    if user_id:
+        return redirect(url_for("admin.user", user_id=user_id))
+    return redirect(url_for("admin.group", group_id=group_id))
+
+
+@bp.get("/groups")
+def groups():
+    rows = (
+        get_db()
+        .execute(
+            "SELECT user_groups.*, "
+            "(SELECT COUNT(*) FROM group_members WHERE group_id = user_groups.id) "
+            "AS member_count, "
+            "(SELECT COUNT(*) FROM group_grants WHERE group_id = user_groups.id) AS grant_count "
+            "FROM user_groups ORDER BY name"
+        )
+        .fetchall()
+    )
+    return render_template("admin/groups.html", rows=rows)
+
+
+@bp.route("/groups/new", methods=["GET", "POST"])
+def group_create():
+    form = request.form
+    if request.method == "POST":
+        name = form.get("name", "").strip()
+        problem = _group_name_error(name)
+        if problem:
+            flash(problem, "error")
+        else:
+            db = get_db()
+            cursor = db.execute(
+                "INSERT INTO user_groups (name, description) VALUES (?, ?)",
+                (name, form.get("description", "").strip()),
+            )
+            db.commit()
+            flash(f"Group {name} created.", "success")
+            return redirect(url_for("admin.group", group_id=cursor.lastrowid))
+    return render_template("admin/group_new.html", form=form)
+
+
+@bp.get("/groups/<int:group_id>")
+def group(group_id):
+    db = get_db()
+    return render_template(
+        "admin/group.html",
+        group=_group(group_id),
+        members=db.execute(
+            "SELECT users.* FROM users JOIN group_members ON group_members.user_id = users.id "
+            "WHERE group_members.group_id = ? ORDER BY username",
+            (group_id,),
+        ).fetchall(),
+        non_members=db.execute(
+            "SELECT * FROM users WHERE id NOT IN "
+            "(SELECT user_id FROM group_members WHERE group_id = ?) ORDER BY username",
+            (group_id,),
+        ).fetchall(),
+        grants=db.execute(
+            "SELECT group_grants.*, servers.name AS server_name FROM group_grants "
+            "JOIN servers ON servers.id = group_grants.server_id WHERE group_id = ? "
+            "ORDER BY servers.name, project",
+            (group_id,),
+        ).fetchall(),
+        servers=servers.all_servers(),
+        project_names=_project_names(),
+        roles=access.ROLE_LABELS,
+    )
+
+
+@bp.post("/groups/<int:group_id>/settings")
+def group_settings(group_id):
+    _group(group_id)
+    name = request.form.get("name", "").strip()
+    problem = _group_name_error(name, group_id)
+    if problem:
+        flash(problem, "error")
+    else:
+        db = get_db()
+        db.execute(
+            "UPDATE user_groups SET name = ?, description = ? WHERE id = ?",
+            (name, request.form.get("description", "").strip(), group_id),
+        )
+        db.commit()
+        flash(f"Group {name} saved.", "success")
+    return redirect(url_for("admin.group", group_id=group_id))
+
+
+@bp.post("/groups/<int:group_id>/delete")
+def group_delete(group_id):
+    target = _group(group_id)
+    members, server_ids = _group_members(group_id), _group_servers(group_id)
+    db = get_db()
+    db.execute("DELETE FROM user_groups WHERE id = ?", (group_id,))
+    db.commit()
+    flash(f"Group {target['name']} deleted. Its members keep their own access.", "success")
+    _report(user_certs.sync_many(members, server_ids))
+    return redirect(url_for("admin.groups"))
+
+
+@bp.post("/groups/<int:group_id>/members")
+def group_member_add(group_id):
+    target = _group(group_id)
+    member = _user(request.form.get("user_id", type=int) or 0)
+    db = get_db()
+    db.execute(
+        "INSERT OR IGNORE INTO group_members (group_id, user_id) VALUES (?, ?)",
+        (group_id, member["id"]),
+    )
+    db.commit()
+    flash(f"{member['username']} added to {target['name']}.", "success")
+    _report(user_certs.sync_many([member["id"]], _group_servers(group_id)))
+    return _back(group_id)
+
+
+@bp.post("/users/<int:user_id>/groups")
+def user_group_add(user_id):
+    member = _user(user_id)
+    target = _group(request.form.get("group_id", type=int) or 0)
+    db = get_db()
+    db.execute(
+        "INSERT OR IGNORE INTO group_members (group_id, user_id) VALUES (?, ?)",
+        (target["id"], user_id),
+    )
+    db.commit()
+    flash(f"{member['username']} added to {target['name']}.", "success")
+    _report(user_certs.sync_many([user_id], _group_servers(target["id"])))
+    return redirect(url_for("admin.user", user_id=user_id))
+
+
+@bp.post("/groups/<int:group_id>/members/<int:user_id>/delete")
+def group_member_delete(group_id, user_id):
+    target, member = _group(group_id), _user(user_id)
+    db = get_db()
+    db.execute("DELETE FROM group_members WHERE group_id = ? AND user_id = ?", (group_id, user_id))
+    db.commit()
+    flash(f"{member['username']} removed from {target['name']}.", "success")
+    _report(user_certs.sync_many([user_id], _group_servers(group_id)))
+    return _back(group_id)
+
+
+@bp.post("/groups/<int:group_id>/grants")
+def group_grant_add(group_id):
+    target = _group(group_id)
+    parsed = _grant_form()
+    if parsed is None:
+        return redirect(url_for("admin.group", group_id=group_id))
+    server_id, project, role = parsed
+    db = get_db()
+    db.execute(
+        "INSERT INTO group_grants (group_id, server_id, project, role) VALUES (?, ?, ?, ?) "
+        "ON CONFLICT (group_id, server_id, project) DO UPDATE SET role = excluded.role",
+        (group_id, server_id, project, role),
+    )
+    db.commit()
+    flash(
+        f"Members of {target['name']} are now {access.ROLE_LABELS[role]} in {_where(project)}.",
+        "success",
+    )
+    _report(user_certs.sync_many(_group_members(group_id), [server_id]))
+    return redirect(url_for("admin.group", group_id=group_id))
+
+
+@bp.post("/groups/<int:group_id>/grants/<int:grant_id>/delete")
+def group_grant_delete(group_id, grant_id):
+    db = get_db()
+    row = db.execute(
+        "SELECT server_id FROM group_grants WHERE id = ? AND group_id = ?", (grant_id, group_id)
+    ).fetchone()
+    db.execute("DELETE FROM group_grants WHERE id = ? AND group_id = ?", (grant_id, group_id))
+    db.commit()
+    flash("Access removed from the group.", "success")
+    if row:
+        _report(user_certs.sync_many(_group_members(group_id), [row["server_id"]]))
+    return redirect(url_for("admin.group", group_id=group_id))
 
 
 @bp.get("/audit")
@@ -292,6 +538,6 @@ def account():
     return render_template(
         "account.html",
         user=user,
-        grants=access.grants_for(user["id"]),
+        grants=access.effective_grants(user["id"]),
         roles=access.ROLE_LABELS,
     )

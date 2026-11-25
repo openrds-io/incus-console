@@ -38,6 +38,13 @@
           </div>
         </div>
         <div class="p-panel__content">
+          {% if server_mode and g.user %}
+          <a class="whoami" href="{{ url_for('account.account') }}" title="Your account">
+            <span class="whoami__label">Signed in as</span>
+            <span class="whoami__name">{{ g.user.username }}</span>
+            <span class="whoami__role{% if is_admin() %} is-admin{% endif %}">{{ 'Console admin' if is_admin() else 'User' }}</span>
+          </a>
+          {% endif %}
           <div class="p-side-navigation--icons is-dark">
             {% if server %}
             <form class="project-select" method="get" action="{{ url_for('srv.instances') }}">
@@ -78,7 +85,10 @@
               {% if server_mode and g.user %}
               {% if is_admin() %}
               <li class="p-side-navigation__item">
-                <a class="p-side-navigation__link" href="{{ url_for('admin.users') }}"{% if here.startswith('admin.user') or here.startswith('admin.grant') %} aria-current="page"{% endif %}>Users</a>
+                <a class="p-side-navigation__link" href="{{ url_for('admin.users') }}"{% if here.startswith('admin.user') or here == 'admin.grant_add' or here == 'admin.grant_delete' %} aria-current="page"{% endif %}>Users</a>
+              </li>
+              <li class="p-side-navigation__item">
+                <a class="p-side-navigation__link" href="{{ url_for('admin.groups') }}"{% if here.startswith('admin.group') %} aria-current="page"{% endif %}>Groups</a>
               </li>
               <li class="p-side-navigation__item">
                 <a class="p-side-navigation__link" href="{{ url_for('admin.audit_log') }}"{% if here == 'admin.audit_log' %} aria-current="page"{% endif %}>Audit log</a>
@@ -119,7 +129,7 @@
         </div>
       </div>
     </div>
-    {% if not bare %}<footer class="status-bar"><a class="status-bar__version" href="{{ url_for('about.about', sid=g.sid) if server else url_for('about.about') }}" data-dialog title="About Incus Console">Version {{ build.label }}</a></footer>{% endif %}
+    {% if not bare %}<footer class="status-bar"><a class="status-bar__version" href="{{ url_for('about.about', sid=g.sid) if server else url_for('about.about') }}" data-dialog title="About Incus Console">Version {{ build.label }}</a>{% if server_mode and g.user %}<span class="status-bar__user">{{ g.user.username }}{% if is_admin() %} (console admin){% endif %}</span>{% endif %}</footer>{% endif %}
   </main>
 </div>
 <dialog class="about-dialog" aria-labelledby="about-title"></dialog>
