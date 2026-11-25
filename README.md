@@ -28,7 +28,8 @@ Early scaffold. Working today:
   keys with admin or read-only roles, custom or generated access and secret
   keys, edit and delete
 - Terminal: a root login shell in a running container (xterm.js over a websocket)
-- Operations: list and cancel
+- Operations: list and cancel; actions that outlast the page are watched in the
+  background and their outcome is reported, even after Incus forgets them
 - Projects: switch project per server
 
 Not built yet: the deb, rpm and container packages. See [Roadmap](#roadmap).

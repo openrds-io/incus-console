@@ -197,13 +197,7 @@ class IncusClient:
         op_id = (response.get("metadata") or {}).get("id")
         if not op_id:
             return True
-        result = self.request(
-            "GET",
-            path("operations", op_id, "wait"),
-            params={"timeout": timeout},
-            timeout=timeout + 10,
-        )
-        op = result.get("metadata") or {}
+        op = self.wait_operation(op_id, timeout)
         code = op.get("status_code")
         if code in (OP_FAILURE, OP_CANCELLED) or op.get("err"):
             raise IncusError(code or OP_FAILURE, op.get("err") or "The operation failed.")
@@ -269,6 +263,16 @@ class IncusClient:
         else:
             ops = list(grouped)
         return sorted(ops, key=lambda op: op.get("created_at") or "", reverse=True)
+
+    def wait_operation(self, op_id: str, timeout: int = 30) -> dict:
+        """The operation once it ends, or as it is after ``timeout`` seconds."""
+        result = self.request(
+            "GET",
+            path("operations", op_id, "wait"),
+            params={"timeout": timeout},
+            timeout=timeout + 10,
+        )
+        return result.get("metadata") or {}
 
     def cancel_operation(self, op_id: str) -> dict:
         return self.request("DELETE", path("operations", op_id))

@@ -166,3 +166,15 @@ def test_publish(browser, sid, fake):
     [image] = fake.images.values()
     assert image["cached"] is False
     assert "no spaces" in text(browser.post(url, {"alias": "has space"}))
+
+
+def test_slow_create_goes_to_operations(browser, sid, fake):
+    # Incus makes the instance only once the image is fetched; until then the
+    # new instance has no page, so a slow create lands on Operations.
+    fake.pending_ops = True
+    form = {"name": "r10", "source": "remote", "alias": "rockylinux/10"}
+    response = browser.post(f"/servers/{sid}/create-instance", form)
+    assert response.headers["Location"] == f"/servers/{sid}/operations"
+    fake.add_instance("web-1")
+    copied = browser.post(f"/servers/{sid}/instances/web-1/copy", {"new_name": "web-2"})
+    assert copied.headers["Location"] == f"/servers/{sid}/operations"

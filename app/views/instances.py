@@ -15,7 +15,7 @@ from .config_forms import (
     new_device,
     settings_fields,
 )
-from .scoped import bp, run
+from .scoped import DONE, RUNNING, bp, run, start
 
 ACTIONS = {
     "start": "started",
@@ -87,8 +87,14 @@ def instance_create():
             flash(NAME_RULE, "error")
         elif chosen != "local" and not source["alias"]:
             flash("Choose an image.", "error")
-        elif run(lambda: g.incus.create_instance(payload), f"Container {name} created."):
-            return redirect(url_for("srv.instance", name=name))
+        else:
+            # Incus makes the instance only after fetching the image, so while that
+            # is still running there is no instance page to show yet.
+            outcome = start(lambda: g.incus.create_instance(payload), f"Container {name} created.")
+            if outcome == DONE:
+                return redirect(url_for("srv.instance", name=name))
+            if outcome == RUNNING:
+                return redirect(url_for("srv.operations"))
     image = request.args.get("image", "")
     default_source = "local" if image else ("catalog" if groups else "remote")
     return render_template(
@@ -231,13 +237,20 @@ def instance_copy(name):
         new_name = form.get("new_name", "").strip()
         if not NAME.fullmatch(new_name):
             flash(NAME_RULE, "error")
-        elif run(
-            lambda: g.incus.copy_instance(
-                name, new_name, snapshots=bool(form.get("snapshots")), start=bool(form.get("start"))
-            ),
-            f"{name} copied to {new_name}.",
-        ):
-            return redirect(url_for("srv.instance", name=new_name))
+        else:
+            outcome = start(
+                lambda: g.incus.copy_instance(
+                    name,
+                    new_name,
+                    snapshots=bool(form.get("snapshots")),
+                    start=bool(form.get("start")),
+                ),
+                f"{name} copied to {new_name}.",
+            )
+            if outcome == DONE:
+                return redirect(url_for("srv.instance", name=new_name))
+            if outcome == RUNNING:
+                return redirect(url_for("srv.operations"))
     return render_template("instances/copy.html", instance=instance, form=request.form)
 
 

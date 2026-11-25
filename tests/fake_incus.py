@@ -48,6 +48,8 @@ class FakeIncus:
         self.sessions: dict[str, dict] = {}  # terminal sessions by operation id
         self.calls: list[tuple[str, str]] = []
         self.images: dict[str, dict] = {}
+        self.op_done: dict[str, threading.Event] = {}
+        self.ended: dict[str, dict] = {}  # how finished operations ended
         self.forwards: dict[str, dict] = {"incusbr0": {}}
         self.networks = {
             "incusbr0": {
@@ -115,6 +117,9 @@ class FakeIncus:
             "err": err,
         }
         self.operations[op_id] = op
+        self.op_done[op_id] = threading.Event()
+        if not running:
+            self.op_done[op_id].set()
         body = {
             "type": "async",
             "status": "Operation created",
@@ -190,6 +195,8 @@ class FakeIncus:
         parts = urlsplit(raw_path)
         query = {k: v[0] for k, v in parse_qs(parts.query).items()}
         segments = [unquote(s) for s in parts.path.strip("/").split("/")]
+        if method == "GET" and len(segments) == 4 and segments[1:4:2] == ["operations", "wait"]:
+            return self._wait(segments[2], float(query.get("timeout", 30)))
         with self.lock:
             self.calls.append((method, parts.path))
             if segments[0] != "1.0":
@@ -291,6 +298,7 @@ class FakeIncus:
                 if not op:
                     return self.error(404, "Operation not found")
                 op.update(status="Cancelled", status_code=401, may_cancel=False)
+                self.op_done.setdefault(op_id, threading.Event()).set()
                 return self.sync()
             case ("GET", ["instances"]):
                 return self.sync([self._full(i) for i in self.instances.values()])
@@ -358,6 +366,39 @@ class FakeIncus:
                     return self.error(404, "Storage pool not found")
                 return self._buckets(method, pool, rest, body)
         return self.error(404, "not found")
+
+    def _wait(self, op_id, timeout):
+        """Like Incus: block until the operation ends or the timeout passes."""
+        with self.lock:
+            self.calls.append(("GET", f"/1.0/operations/{op_id}/wait"))
+            done = self.op_done.get(op_id)
+        if done is not None and done.wait(min(timeout, 5)):
+            # A waiter gets the operation as it ended, even if Incus drops it right after.
+            with self.lock:
+                op = self.operations.get(op_id) or self.ended.get(op_id)
+        else:
+            with self.lock:
+                op = self.operations.get(op_id)
+        return self.sync(op) if op else self.error(404, "Operation not found")
+
+    def finish(self, op_id, err=""):
+        """End a running operation, as Incus would."""
+        with self.lock:
+            op = self.operations[op_id]
+            op.update(
+                status="Failure" if err else "Success",
+                status_code=400 if err else 200,
+                err=err,
+                may_cancel=False,
+            )
+            self.ended[op_id] = dict(op)
+            self.op_done.setdefault(op_id, threading.Event()).set()
+
+    def forget(self, op_id):
+        """Drop an operation, as Incus does a few seconds after it ends."""
+        with self.lock:
+            self.operations.pop(op_id, None)
+            self.op_done.setdefault(op_id, threading.Event()).set()
 
     def add_image(self, description="", aliases=(), kind="container"):
         fingerprint = secrets.token_hex(32)

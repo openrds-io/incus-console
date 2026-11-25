@@ -24,6 +24,27 @@
   </tbody>
 </table>
 {% else %}
-{{ empty("No running or recent operations.") }}
+{{ empty("Nothing is running on the server.") }}
+{% endif %}
+
+<h2 class="p-heading--4">Started from this console</h2>
+{% if tracked %}
+<table aria-label="Operations started from this console">
+  <thead><tr><th>Started</th><th>Action</th><th>Finished</th><th>Detail</th><th>Status</th></tr></thead>
+  <tbody>
+  {% for t in tracked %}
+    <tr>
+      <td>{{ t.started_at|when }}</td>
+      <td>{{ t.label }}</td>
+      <td>{{ t.finished_at|when }}</td>
+      <td>{{ t.error or '' }}</td>
+      <td>{{ status(t.status) }}</td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+<p class="p-form-help-text">Actions that took longer than the page waits for. Incus forgets finished operations within seconds, so the console keeps how they ended. Times are UTC.</p>
+{% else %}
+{{ empty("Nothing has needed longer than the page waits for.") }}
 {% endif %}
 {% endblock %}

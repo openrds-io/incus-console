@@ -14,6 +14,18 @@ CREATE TABLE IF NOT EXISTS users (
     password_hash TEXT NOT NULL,
     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
+CREATE TABLE IF NOT EXISTS tracked_operations (
+    id INTEGER PRIMARY KEY,
+    server_id INTEGER NOT NULL,
+    project TEXT NOT NULL,
+    op_id TEXT NOT NULL,
+    label TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'Running',
+    error TEXT,
+    seen INTEGER NOT NULL DEFAULT 0,
+    started_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    finished_at TEXT
+);
 CREATE TABLE IF NOT EXISTS servers (
     id INTEGER PRIMARY KEY,
     name TEXT NOT NULL UNIQUE,
@@ -25,10 +37,19 @@ CREATE TABLE IF NOT EXISTS servers (
 """
 
 
+def path_for(data_dir: str) -> Path:
+    return Path(data_dir) / "incus-console.db"
+
+
+def connect(data_dir: str) -> sqlite3.Connection:
+    db = sqlite3.connect(path_for(data_dir), timeout=10)
+    db.row_factory = sqlite3.Row
+    return db
+
+
 def get_db() -> sqlite3.Connection:
     if "db" not in g:
-        g.db = sqlite3.connect(Path(current_app.config["DATA_DIR"]) / "incus-console.db")
-        g.db.row_factory = sqlite3.Row
+        g.db = connect(current_app.config["DATA_DIR"])
     return g.db
 
 

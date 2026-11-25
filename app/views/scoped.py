@@ -4,7 +4,8 @@ from __future__ import annotations
 
 from flask import Blueprint, abort, current_app, flash, g, request, session
 
-from .. import servers
+from .. import servers, tracker
+from ..db import get_db
 from ..incus import IncusError
 
 bp = Blueprint("srv", __name__, url_prefix="/servers/<int:sid>")
@@ -26,6 +27,13 @@ def _load_server():
         session[key] = request.args["project"]
     g.project = session.get(key, "default")
     g.incus = servers.client_for(server, g.project)
+    if request.method == "GET":
+        for row in tracker.unseen(get_db(), g.sid, g.project):
+            if row["status"] == "Success":
+                flash(row["label"], "success")
+            else:
+                outcome = row["error"] or row["status"].lower()
+                flash(f"Did not finish: {_undone(row['label'])} ({outcome})", "error")
 
 
 @bp.context_processor
@@ -41,15 +49,34 @@ def _server_context():
     return {"server": g.server, "project": g.project, "projects": projects}
 
 
-def run(call, done: str) -> bool:
-    """Run an Incus call that may start an operation and report the outcome."""
+DONE, RUNNING = "done", "running"
+
+
+def _undone(label: str) -> str:
+    """ "Container r10 created." -> "Container r10 created" for use inside a sentence."""
+    return label.rstrip(".")
+
+
+def start(call, done: str) -> str | None:
+    """Run an Incus call that may start an operation and report the outcome.
+
+    Returns DONE, RUNNING (still going after ACTION_WAIT seconds), or None if it failed.
+    """
     try:
-        finished = g.incus.wait(call(), current_app.config["ACTION_WAIT"])
+        response = call()
+        finished = g.incus.wait(response, current_app.config["ACTION_WAIT"])
     except IncusError as error:
         flash(error.message, "error")
-        return False
+        return None
     if finished:
         flash(done, "success")
-    else:
-        flash("Still running. See Operations for progress.", "info")
-    return True
+        return DONE
+    op_id = response["metadata"]["id"]
+    tracker.track(get_db(), current_app.config["DATA_DIR"], g.incus, g.sid, g.project, op_id, done)
+    flash("Still running. You will see the outcome here when it finishes.", "info")
+    return RUNNING
+
+
+def run(call, done: str) -> bool:
+    """Like start(), for callers that only care whether it went wrong."""
+    return start(call, done) is not None
