@@ -13,6 +13,8 @@ from .config_forms import (
     GROUPS,
     OCI_SETTINGS,
     SETTINGS,
+    VM_DEFAULTS,
+    VM_SETTINGS,
     apply_environment,
     apply_settings,
     dump_yaml,
@@ -41,14 +43,16 @@ def instances():
     return render_template("instances/list.html", instances=rows)
 
 
-def _catalog() -> tuple[list, str | None]:
-    """The image server's container images for this host, or a reason there are none."""
+def _catalog(kind: str = "container") -> tuple[list, str | None]:
+    """The image server's images of this kind for this host, or why there are none."""
     if not current_app.config["IMAGE_CATALOG"]:
         return [], None
     environment = g.incus.server_info().get("environment") or {}
     try:
         groups = catalog.for_server(
-            current_app.config["DEFAULT_IMAGE_SERVER"], environment.get("architectures") or []
+            current_app.config["DEFAULT_IMAGE_SERVER"],
+            environment.get("architectures") or [],
+            kind,
         )
     except Exception as error:  # noqa: BLE001 - offline, blocked, or a bad index
         current_app.logger.warning("image catalog unavailable: %s", error)
@@ -56,7 +60,8 @@ def _catalog() -> tuple[list, str | None]:
     return groups, None
 
 
-KINDS = ("container", "oci")
+KINDS = ("container", "oci", "vm")
+SIZE = re.compile(r"\d+(\.\d+)?\s*(B|kB|MB|GB|TB|KiB|MiB|GiB|TiB)", re.IGNORECASE)
 OCI_IMAGE = re.compile(r"[a-z0-9][a-z0-9._/-]*(:[A-Za-z0-9._-]+)?(@sha256:[a-f0-9]{64})?")
 
 
@@ -77,6 +82,24 @@ def _is_oci_image(image: dict) -> bool:
     return (image.get("properties") or {}).get("type") == "oci"
 
 
+def image_kind(image: dict) -> str:
+    """Which create form an image belongs to: container, oci or vm."""
+    if image.get("type") == "virtual-machine":
+        return "vm"
+    return "oci" if _is_oci_image(image) else "container"
+
+
+def _root_pool(profile_names: list[str]) -> str | None:
+    """The pool of the root disk the chosen profiles give (the last one wins)."""
+    pool = None
+    by_name = {p["name"]: p for p in g.incus.profiles()}
+    for name in profile_names:
+        root = ((by_name.get(name) or {}).get("devices") or {}).get("root") or {}
+        if root.get("type") == "disk" and root.get("pool"):
+            pool = root["pool"]
+    return pool
+
+
 @bp.route("/create-instance", methods=["GET", "POST"])
 def instance_create():
     config = current_app.config
@@ -86,9 +109,12 @@ def instance_create():
     picked = next((i for i in images if i["fingerprint"] == image), None)
     kind = form.get("kind") or request.args.get("type", "")
     if kind not in KINDS:
-        kind = "oci" if picked and _is_oci_image(picked) else "container"
+        kind = image_kind(picked) if picked else "container"
     oci_ok = supports_oci()
-    groups, catalog_problem = _catalog() if kind == "container" else ([], None)
+    if kind == "oci":
+        groups, catalog_problem = [], None
+    else:
+        groups, catalog_problem = _catalog("virtual-machine" if kind == "vm" else "container")
     if request.method == "POST":
         name = form.get("name", "").strip()
         chosen = form.get("source", "catalog" if kind == "container" else "remote")
@@ -114,8 +140,10 @@ def instance_create():
                 settings.update(parse_environment(form.get("environment", "")))
             except IncusError as error:
                 problem = problem or error.message
-        else:
+        else:  # a system container or a virtual machine, from a system image
             settings["cloud-init.user-data"] = form.get("user_data", "").strip()
+            if kind == "vm" and not form.get("secureboot"):
+                settings["security.secureboot"] = "false"
             if chosen == "local":
                 source["fingerprint"] = form.get("fingerprint", "")
             else:
@@ -128,7 +156,7 @@ def instance_create():
                     problem = "Choose an image."
         payload = {
             "name": name,
-            "type": "container",
+            "type": "virtual-machine" if kind == "vm" else "container",
             "description": form.get("description", "").strip(),
             "profiles": form.getlist("profiles") or ["default"],
             "config": {key: value for key, value in settings.items() if value},
@@ -136,8 +164,17 @@ def instance_create():
             "start": bool(form.get("start")),
         }
         pool = form.get("pool", "").strip()
+        disk = form.get("disk_size", "").strip() if kind == "vm" else ""
+        if disk and not SIZE.fullmatch(disk):
+            problem = problem or f"{disk!r} is not a size, such as 20GiB."
+        if disk and not pool:
+            # A root device of the instance's own needs a pool: keep the profiles' one.
+            pool = _root_pool(payload["profiles"]) or "default"
         if pool:
-            payload["devices"] = {"root": {"type": "disk", "path": "/", "pool": pool}}
+            root = {"type": "disk", "path": "/", "pool": pool}
+            if disk:
+                root["size"] = disk
+            payload["devices"] = {"root": root}
         if not NAME.fullmatch(name):
             flash(NAME_RULE, "error")
         elif problem:
@@ -145,13 +182,13 @@ def instance_create():
         else:
             # Incus makes the instance only after fetching the image, so while that
             # is still running there is no instance page to show yet.
-            what = "Application container" if kind == "oci" else "Container"
+            what = {"oci": "Application container", "vm": "Virtual machine"}.get(kind, "Container")
             outcome = start(lambda: g.incus.create_instance(payload), f"{what} {name} created.")
             if outcome == DONE:
                 return redirect(url_for("srv.instance", name=name))
             if outcome == RUNNING:
                 return redirect(url_for("srv.operations"))
-    local = [i for i in images if _is_oci_image(i) == (kind == "oci")]
+    local = [i for i in images if image_kind(i) == kind]
     default_source = "local" if picked else ("catalog" if groups else "remote")
     return render_template(
         "instances/new.html",
@@ -168,6 +205,7 @@ def instance_create():
         oci_suggestions=config["OCI_SUGGESTIONS"],
         default_source=default_source,
         default_alias=config["IMAGE_SUGGESTIONS"][0],
+        vm_disk=config["VM_DISK_SUGGESTION"],
         default_image=image,
         form=form,
     )
@@ -274,6 +312,33 @@ bp.add_url_rule(
 )
 
 
+# -- consoles ---------------------------------------------------------------
+
+
+@bp.get("/instances/<name>/console")
+def instance_console(name):
+    """The text console: boot messages and a login prompt, without the Incus agent."""
+    ws_path = urlsplit(url_for("srv.instance_console_ws", name=name)).path
+    return render_template(
+        "instances/terminal.html",
+        instance=g.incus.instance(name),
+        ws_path=ws_path,
+        what="Console",
+    )
+
+
+def instance_console_ws(name):
+    return terminal.relay(g.incus, name, None)
+
+
+bp.add_url_rule(
+    "/instances/<name>/console/ws",
+    "instance_console_ws",
+    instance_console_ws,
+    websocket=True,
+)
+
+
 # -- rename and copy ------------------------------------------------------
 
 NAME = re.compile(r"[A-Za-z][A-Za-z0-9-]{0,62}")
@@ -373,7 +438,8 @@ def _crumbs(instance: dict, last: str) -> list:
 @bp.route("/instances/<name>/settings", methods=["GET", "POST"])
 def instance_settings(name):
     instance = g.incus.instance(name)
-    settings = OCI_SETTINGS + SETTINGS if instance_kind(instance) == "oci" else SETTINGS
+    kind = instance_kind(instance)
+    settings = {"oci": OCI_SETTINGS + SETTINGS, "vm": VM_SETTINGS}.get(kind, SETTINGS)
     environment = environment_text(instance.get("config"))
     if request.method == "POST":
         payload = _editable(instance)
@@ -399,7 +465,11 @@ def instance_settings(name):
         yaml_href=url_for("srv.instance_edit", name=name),
         description=instance.get("description") or "",
         fields=settings_fields(
-            instance.get("config"), instance.get("expanded_config"), settings, groups=GROUPS
+            instance.get("config"),
+            instance.get("expanded_config"),
+            settings,
+            groups=GROUPS,
+            defaults=VM_DEFAULTS if kind == "vm" else None,
         ),
         environment=environment,
         inherits=True,

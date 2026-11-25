@@ -17,6 +17,13 @@ Early scaffold. Working today:
   for limits and common options, adding and removing devices, and full
   configuration editing as YAML; creating from the image server's catalog,
   with a storage pool and cloud-init user data
+- Virtual machines: create from the image server's VM images (or a local one)
+  with CPUs, memory, root disk size, Secure Boot and cloud-init; VM settings
+  (Secure Boot, legacy BIOS); a text console in the browser that works from
+  boot, without the Incus agent. Terminal and files work once the Incus agent
+  runs in the VM
+- Consoles: every running instance has a text console page beside its
+  terminal
 - Application containers (OCI): create from Docker Hub, ghcr.io, quay.io or
   another registry (the Incus server pulls the image), with environment
   variables; the command, working directory, user and environment are
@@ -299,7 +306,8 @@ wsgi.py           entry point for gunicorn
 
 ## Roadmap
 
-1. Virtual machines: create, VGA console, VM-specific settings
+1. Virtual machines, next steps: ISO installs (upload an ISO as a volume, boot
+   an empty VM from it), and live migration settings
 2. OCI application containers, next steps: private registries (credentials),
    updating an instance to a newer image (rebuild), and presets for common
    images (ports, volumes)

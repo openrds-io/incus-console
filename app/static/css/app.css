@@ -32,8 +32,10 @@ label code {
   padding: 0;
   background: none;
 }
-/* Inline code in help text: Vanilla pads code like a block, which overlaps the line. */
-.p-form-help-text code {
+/* Inline code in help text and notices: Vanilla pads code like a block, which
+   overlaps the line. */
+.p-form-help-text code,
+.p-notification__message code {
   padding: 0 0.25em;
   font-size: 0.875em;
 }
@@ -327,8 +329,14 @@ label code {
   flex-direction: column;
   min-height: 100vh;
 }
+/* The page fills the window above the status bar and grows with its content,
+   so the status bar is always after it: at the bottom of the window on short
+   pages, after the content on long ones. Vanilla sizes the panel to the window
+   instead, which let long pages run under the status bar. */
 .l-main > .p-panel {
-  flex: 1;
+  flex: 1 0 auto;
+  height: auto;
+  min-height: 0;
 }
 
 .terminal {

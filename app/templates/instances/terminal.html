@@ -1,7 +1,8 @@
 {% extends "base.html" %}
 {% from "macros.html" import crumbs %}
-{% block title %}Terminal - {{ instance.name }}{% endblock %}
-{% block heading %}{{ crumbs([('Instances', url_for('srv.instances')), (instance.name, url_for('srv.instance', name=instance.name)), ('Terminal', None)]) }} <span id="term-state" class="title-status" role="status">Connecting</span>{% endblock %}
+{% set what = what or 'Terminal' %}
+{% block title %}{{ what }} - {{ instance.name }}{% endblock %}
+{% block heading %}{{ crumbs([('Instances', url_for('srv.instances')), (instance.name, url_for('srv.instance', name=instance.name)), (what, None)]) }} <span id="term-state" class="title-status" role="status">Connecting</span>{% endblock %}
 {% block controls %}
 <button type="button" id="term-again" class="p-button is-dense u-no-margin--bottom" hidden>Reconnect</button>
 {% endblock %}
@@ -9,10 +10,11 @@
 <link rel="stylesheet" href="{{ url_for('static', filename='vendor/xterm/xterm.css') }}">
 {% if instance.status != 'Running' %}
 <div class="p-notification--information">
-  <div class="p-notification__content"><p class="p-notification__message">{{ instance.name }} is {{ instance.status|lower }}. Start it to open a terminal.</p></div>
+  <div class="p-notification__content"><p class="p-notification__message">{{ instance.name }} is {{ instance.status|lower }}. Start it to open {{ 'its console' if what == 'Console' else 'a terminal' }}.</p></div>
 </div>
 {% else %}
-<div id="term" class="terminal" data-ws="{{ ws_path }}" aria-label="Terminal for {{ instance.name }}"></div>
+{% if what == 'Console' %}<p class="p-text--small u-text--muted">The instance's own console: what it prints while booting, then a login prompt. Press Enter if nothing shows. Works without the Incus agent.</p>{% endif %}
+<div id="term" class="terminal" data-ws="{{ ws_path }}" aria-label="{{ what }} for {{ instance.name }}"></div>
 <script src="{{ url_for('static', filename='vendor/xterm/xterm.js') }}" defer></script>
 <script src="{{ url_for('static', filename='vendor/xterm/addon-fit.js') }}" defer></script>
 <script src="{{ url_for('static', filename='js/terminal.js') }}" defer></script>

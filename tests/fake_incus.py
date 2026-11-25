@@ -513,7 +513,12 @@ class FakeIncus:
                 if oci:
                     registry = source.get("server", "").removeprefix("https://")
                     alias = f"{registry}/{alias} (OCI)"
-                self.add_instance(name, "Running" if body.get("start") else "Stopped", image=alias)
+                self.add_instance(
+                    name,
+                    "Running" if body.get("start") else "Stopped",
+                    kind=body.get("type") or "container",
+                    image=alias,
+                )
                 created = self.instances[name]
                 created["profiles"] = body.get("profiles") or ["default"]
                 if oci:
@@ -969,6 +974,22 @@ class FakeIncus:
                 if instance["status"] != "Running":
                     return self.error(400, "Instance is not running")
                 status, response = self.start_op(f"Executing command in {name}")
+                op = response["metadata"]
+                op.update(status="Running", status_code=103)
+                fds = {"0": secrets.token_hex(16), "control": secrets.token_hex(16)}
+                op["metadata"] = {"fds": fds}
+                self.sessions[op["id"]] = {
+                    "request": body,
+                    "data": fds["0"],
+                    "control": fds["control"],
+                    "stdin": b"",
+                    "control_messages": [],
+                }
+                return status, response
+            case ("POST", ["console"]):
+                if instance["status"] != "Running":
+                    return self.error(400, "Instance is not running")
+                status, response = self.start_op(f"Showing console of {name}")
                 op = response["metadata"]
                 op.update(status="Running", status_code=103)
                 fds = {"0": secrets.token_hex(16), "control": secrets.token_hex(16)}
