@@ -1,0 +1,52 @@
+{% extends "base.html" %}
+{% block title %}Create container{% endblock %}
+{% block content %}
+<h1>Create container</h1>
+<form class="card form" method="post">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+  <label>Name <input name="name" value="{{ form.get('name', '') }}" required autofocus pattern="[A-Za-z][A-Za-z0-9\-]*" title="Letters, digits and dashes, starting with a letter"></label>
+  <label>Description <input name="description" value="{{ form.get('description', '') }}"></label>
+
+  <fieldset>
+    <legend>Image</legend>
+    <label class="check"><input type="radio" name="source" value="remote"{% if form.get('source', 'remote') == 'remote' %} checked{% endif %}> From an image server</label>
+    <div class="row">
+      <label>Alias <input name="alias" list="aliases" value="{{ form.get('alias', suggestions[0]) }}"></label>
+      <label>Image server <input name="image_server" value="{{ form.get('image_server', image_server) }}"></label>
+    </div>
+    <datalist id="aliases">{% for alias in suggestions %}<option value="{{ alias }}">{% endfor %}</datalist>
+    {% if images %}
+    <label class="check"><input type="radio" name="source" value="local"{% if form.get('source') == 'local' %} checked{% endif %}> Already on this server</label>
+    <label>Local image
+      <select name="fingerprint">
+        {% for image in images %}
+        <option value="{{ image.fingerprint }}">{{ (image.properties or {}).get('description') or image.fingerprint[:12] }} ({{ image.type }})</option>
+        {% endfor %}
+      </select>
+    </label>
+    {% endif %}
+  </fieldset>
+
+  <fieldset>
+    <legend>Profiles</legend>
+    {% set chosen = form.getlist('profiles') or ['default'] %}
+    {% for profile in profiles %}
+    <label class="check"><input type="checkbox" name="profiles" value="{{ profile }}"{% if profile in chosen %} checked{% endif %}> {{ profile }}</label>
+    {% endfor %}
+  </fieldset>
+
+  <fieldset>
+    <legend>Limits</legend>
+    <div class="row">
+      <label>CPUs <input name="cpu" value="{{ form.get('cpu', '') }}" placeholder="No limit"></label>
+      <label>Memory <input name="memory" value="{{ form.get('memory', '') }}" placeholder="No limit, e.g. 2GiB"></label>
+    </div>
+  </fieldset>
+
+  <label class="check"><input type="checkbox" name="start" value="1" checked> Start after creating</label>
+  <div class="button-row">
+    <button class="btn btn-primary">Create</button>
+    <a class="btn btn-quiet" href="{{ url_for('srv.instances') }}">Cancel</a>
+  </div>
+</form>
+{% endblock %}

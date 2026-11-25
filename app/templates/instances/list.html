@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+{% from "instances/_actions.html" import actions %}
+{% block title %}Instances{% endblock %}
+{% block content %}
+<div class="heading">
+  <h1>Instances</h1>
+  <a class="btn btn-primary" href="{{ url_for('srv.instance_create') }}">Create container</a>
+</div>
+{% if instances %}
+<table class="list">
+  <thead><tr><th>Name</th><th>Status</th><th>Type</th><th>IPv4</th><th>Image</th><th>Snapshots</th><th></th></tr></thead>
+  <tbody>
+  {% for i in instances %}
+    <tr>
+      <td><a href="{{ url_for('srv.instance', name=i.name) }}">{{ i.name }}</a></td>
+      <td><span class="badge status-{{ i.status|lower }}">{{ i.status }}</span></td>
+      <td>{{ 'VM' if i.type == 'virtual-machine' else 'Container' }}</td>
+      <td>{{ i|addresses|join(', ') or '-' }}</td>
+      <td>{{ (i.config or {}).get('image.description', '-') }}</td>
+      <td>{{ (i.snapshots or [])|length }}</td>
+      <td class="actions">{{ actions(i, 'list') }}</td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% else %}
+<p class="empty">No instances in project {{ project }}.</p>
+{% endif %}
+{% endblock %}

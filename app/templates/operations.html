@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+{% block title %}Operations{% endblock %}
+{% block content %}
+<h1>Operations</h1>
+{% if operations %}
+<table class="list">
+  <thead><tr><th>Started</th><th>Action</th><th>Status</th><th>Detail</th><th></th></tr></thead>
+  <tbody>
+  {% for op in operations %}
+    <tr>
+      <td>{{ op.created_at|when }}</td>
+      <td>{{ op.description or op.class }}</td>
+      <td><span class="badge status-{{ op.status|lower }}">{{ op.status }}</span></td>
+      <td>{{ op.err or '' }}</td>
+      <td class="actions">
+        {% if op.may_cancel and op.status == 'Running' %}
+        <form method="post" action="{{ url_for('srv.operation_cancel', op_id=op.id) }}">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <button class="btn btn-small">Cancel</button>
+        </form>
+        {% endif %}
+      </td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% else %}
+<p class="empty">No running or recent operations.</p>
+{% endif %}
+{% endblock %}

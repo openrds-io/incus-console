@@ -1,0 +1,40 @@
+{% extends "base.html" %}
+{% block title %}Buckets in {{ pool }}{% endblock %}
+{% block content %}
+<p class="breadcrumb"><a href="{{ url_for('srv.pools') }}">Storage</a> / {{ pool }} /</p>
+<h1>Buckets</h1>
+{% if problem %}
+<p class="flash flash-error">{{ problem }}</p>
+{% endif %}
+{% if endpoint == '' %}
+<p class="flash flash-info">Buckets on local pools need an S3 address. Set one with <code>incus config set core.storage_buckets_address :8555</code>.</p>
+{% endif %}
+{% if buckets %}
+<table class="list">
+  <thead><tr><th>Name</th><th>Size limit</th><th>S3 URL</th><th>Description</th></tr></thead>
+  <tbody>
+  {% for b in buckets %}
+    <tr>
+      <td><a href="{{ url_for('srv.bucket', pool=pool, bucket=b.name) }}">{{ b.name }}</a></td>
+      <td>{{ (b.config or {}).get('size', '-') }}</td>
+      <td>{% if b.s3_url %}<code>{{ b.s3_url }}</code>{% else %}-{% endif %}</td>
+      <td>{{ b.description or '-' }}</td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% elif not problem %}
+<p class="empty">No buckets in this pool.</p>
+{% endif %}
+
+<form class="card form" method="post">
+  <h2>Create bucket</h2>
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+  <div class="row">
+    <label>Name <input name="name" required></label>
+    <label>Size limit <input name="size" placeholder="No limit, e.g. 10GiB"></label>
+  </div>
+  <label>Description <input name="description"></label>
+  <button class="btn btn-primary">Create bucket</button>
+</form>
+{% endblock %}

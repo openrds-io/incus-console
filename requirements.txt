@@ -1,0 +1,3 @@
+Flask>=3.0
+cryptography>=42        # this console's client certificate for remote Incus servers (app/certs.py)
+PyYAML>=6.0             # the instance configuration editor (app/views/instances.py)

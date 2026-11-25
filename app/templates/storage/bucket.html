@@ -1,0 +1,55 @@
+{% extends "base.html" %}
+{% block title %}{{ bucket.name }}{% endblock %}
+{% block content %}
+<p class="breadcrumb"><a href="{{ url_for('srv.pools') }}">Storage</a> / <a href="{{ url_for('srv.buckets', pool=pool) }}">{{ pool }}</a> /</p>
+<div class="heading">
+  <h1>{{ bucket.name }}</h1>
+  <form method="post" action="{{ url_for('srv.bucket_delete', pool=pool, bucket=bucket.name) }}" data-confirm="Delete bucket {{ bucket.name }} and everything in it? This cannot be undone.">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <button class="btn btn-small btn-danger">Delete bucket</button>
+  </form>
+</div>
+<section class="card">
+  <dl class="facts">
+    <dt>S3 URL</dt><dd>{% if bucket.s3_url %}<code>{{ bucket.s3_url }}</code>{% else %}-{% endif %}</dd>
+    <dt>Size limit</dt><dd>{{ (bucket.config or {}).get('size', '-') }}</dd>
+    <dt>Description</dt><dd>{{ bucket.description or '-' }}</dd>
+    <dt>Location</dt><dd>{{ bucket.location or '-' }}</dd>
+  </dl>
+</section>
+<section class="card">
+  <h2>Access keys</h2>
+  {% if keys %}
+  <table class="list">
+    <thead><tr><th>Name</th><th>Role</th><th>Access key</th><th>Secret key</th><th></th></tr></thead>
+    <tbody>
+    {% for key in keys %}
+      <tr>
+        <td>{{ key.name }}</td>
+        <td>{{ key.role }}</td>
+        <td><code>{{ key['access-key'] }}</code></td>
+        <td><code class="secret" data-secret="{{ key['secret-key'] }}">Hidden</code> <button type="button" class="btn btn-small btn-quiet" data-reveal>Show</button></td>
+        <td class="actions">
+          <form method="post" action="{{ url_for('srv.bucket_key_delete', pool=pool, bucket=bucket.name, key=key.name) }}" data-confirm="Delete key {{ key.name }}? Clients using it lose access.">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <button class="btn btn-small btn-danger">Delete</button>
+          </form>
+        </td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p class="empty">No access keys.</p>
+  {% endif %}
+  <form class="inline-row" method="post" action="{{ url_for('srv.bucket_key_create', pool=pool, bucket=bucket.name) }}">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <input name="name" placeholder="Key name" aria-label="Key name" required>
+    <select name="role" aria-label="Role">
+      <option value="read-only">Read only</option>
+      <option value="admin">Admin (read and write)</option>
+    </select>
+    <button class="btn">Create key</button>
+  </form>
+</section>
+{% endblock %}

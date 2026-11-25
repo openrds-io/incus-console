@@ -1,0 +1,16 @@
+{% macro actions(instance, back) %}
+{% set status = instance.status %}
+<form class="button-row" method="post" action="{{ url_for('srv.instance_action', name=instance.name) }}">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+  <input type="hidden" name="back" value="{{ back }}">
+  {% if status == 'Stopped' %}
+  <button class="btn btn-small" name="action" value="start">Start</button>
+  {% elif status == 'Frozen' %}
+  <button class="btn btn-small" name="action" value="unfreeze">Resume</button>
+  {% else %}
+  <button class="btn btn-small" name="action" value="restart">Restart</button>
+  <button class="btn btn-small" name="action" value="freeze">Freeze</button>
+  <button class="btn btn-small" name="action" value="stop">Stop</button>
+  {% endif %}
+</form>
+{% endmacro %}

@@ -1,0 +1,15 @@
+{% extends "base.html" %}
+{% block title %}Edit {{ name }}{% endblock %}
+{% block content %}
+<p class="breadcrumb"><a href="{{ url_for('srv.instances') }}">Instances</a> / <a href="{{ url_for('srv.instance', name=name) }}">{{ name }}</a> /</p>
+<h1>Edit configuration</h1>
+<p class="hint">The same document as <code>incus config edit {{ name }}</code>. Leave the <code>volatile.*</code> keys alone unless you mean to change them.</p>
+<form method="post">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+  <textarea class="code" name="yaml" rows="28" spellcheck="false" aria-label="Configuration as YAML">{{ text }}</textarea>
+  <div class="button-row">
+    <button class="btn btn-primary">Save</button>
+    <a class="btn btn-quiet" href="{{ url_for('srv.instance', name=name) }}">Cancel</a>
+  </div>
+</form>
+{% endblock %}

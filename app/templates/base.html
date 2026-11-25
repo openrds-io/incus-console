@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}{% endblock %} - Incus Console</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/app.css') }}">
+</head>
+<body>
+<header class="topbar">
+  <a class="brand" href="{{ url_for('servers.home') }}">Incus Console</a>
+  {% if server %}
+  <span class="crumb">{{ server.name }}</span>
+  <form class="project-switch" method="get" action="{{ url_for('srv.instances') }}">
+    <label>Project
+      <select name="project" data-autosubmit>
+        {% for name in projects %}
+        <option value="{{ name }}"{% if name == project %} selected{% endif %}>{{ name }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <noscript><button class="btn btn-small">Switch</button></noscript>
+  </form>
+  {% endif %}
+  <span class="spacer"></span>
+  {% if server_mode and g.user %}
+  <form method="post" action="{{ url_for('auth.logout') }}">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <button class="btn btn-small btn-quiet">Sign out {{ g.user.username }}</button>
+  </form>
+  {% endif %}
+</header>
+<div class="layout">
+  {% if not bare %}
+  <nav class="sidebar">
+    {% set here = request.endpoint or '' %}
+    {% if server %}
+    <a href="{{ url_for('srv.instances') }}"{% if 'instance' in here or 'snapshot' in here %} class="active"{% endif %}>Instances</a>
+    <a href="{{ url_for('srv.pools') }}"{% if 'pool' in here or 'bucket' in here %} class="active"{% endif %}>Storage</a>
+    <a href="{{ url_for('srv.operations') }}"{% if 'operation' in here %} class="active"{% endif %}>Operations</a>
+    <hr>
+    {% endif %}
+    <a href="{{ url_for('servers.index') }}"{% if here.startswith('servers.') %} class="active"{% endif %}>Servers</a>
+  </nav>
+  {% endif %}
+  <main>
+    {% for category, message in get_flashed_messages(with_categories=true) %}
+    <p class="flash flash-{{ category }}" role="status">{{ message }}</p>
+    {% endfor %}
+    {% block content %}{% endblock %}
+  </main>
+</div>
+<script src="{{ url_for('static', filename='js/app.js') }}" defer></script>
+</body>
+</html>
