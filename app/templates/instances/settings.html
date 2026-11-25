@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+{% from "macros.html" import crumbs, csrf %}
+{% block title %}Settings - {{ instance.name }}{% endblock %}
+{% block heading %}{{ crumbs([('Instances', url_for('srv.instances')), (instance.name, url_for('srv.instance', name=instance.name)), ('Settings', None)]) }}{% endblock %}
+{% block content %}
+<p class="p-form-help-text">Leave a field empty to use the value from the instance's profiles, shown as a placeholder, or Incus's default. Some limits take effect only after a restart. Everything else is in <a href="{{ url_for('srv.instance_edit', name=instance.name) }}">Edit YAML</a>.</p>
+<form class="narrow-form" method="post">
+  {{ csrf() }}
+  <label for="description">Description</label>
+  <input type="text" id="description" name="description" value="{{ instance.description or '' }}">
+  {% for f in fields %}
+  <label for="cfg-{{ loop.index }}">{{ f.label }} <code class="key-name">{{ f.key }}</code></label>
+  {% if f.kind == 'bool' %}
+  <select id="cfg-{{ loop.index }}" name="cfg:{{ f.key }}">
+    <option value=""{% if not f.value %} selected{% endif %}>{% if f.inherited %}From profile ({{ 'yes' if f.inherited == 'true' else 'no' }}){% else %}Default{% endif %}</option>
+    <option value="true"{% if f.value == 'true' %} selected{% endif %}>Yes</option>
+    <option value="false"{% if f.value == 'false' %} selected{% endif %}>No</option>
+  </select>
+  {% else %}
+  <input type="text" id="cfg-{{ loop.index }}" name="cfg:{{ f.key }}" value="{{ f.value }}" placeholder="{{ ('From profile: ' ~ f.inherited) if f.inherited else 'No limit' }}">
+  {% endif %}
+  {% if f.help %}<p class="p-form-help-text">{{ f.help }}</p>{% endif %}
+  {% endfor %}
+  <div class="form-buttons">
+    <a class="p-button--base" href="{{ url_for('srv.instance', name=instance.name) }}">Cancel</a>
+    <button class="p-button--positive">Save</button>
+  </div>
+</form>
+{% endblock %}

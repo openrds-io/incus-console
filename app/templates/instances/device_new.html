@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+{% from "macros.html" import crumbs, csrf %}
+{% block title %}Add device - {{ instance.name }}{% endblock %}
+{% block heading %}{{ crumbs([('Instances', url_for('srv.instances')), (instance.name, url_for('srv.instance', name=instance.name)), ('Add device', None)]) }}{% endblock %}
+{% block content %}
+<form class="narrow-form" method="post">
+  {{ csrf() }}
+  <div class="row">
+    <div class="col-4"><label for="device">Name</label><input type="text" id="device" name="device" value="{{ form.get('device', '') }}" required autofocus></div>
+    <div class="col-4">
+      <label for="type">Type</label>
+      <select id="type" name="type" data-examples>
+        {% for kind, example in types.items() %}
+        <option value="{{ kind }}" data-example="{{ example }}"{% if form.get('type') == kind %} selected{% endif %}>{{ kind }}</option>
+        {% endfor %}
+      </select>
+    </div>
+  </div>
+  <label for="settings">Settings, one <code>key=value</code> per line</label>
+  {% set first = types[form.get('type')] if form.get('type') in types else types.values()|first %}
+  <textarea class="code-editor" id="settings" name="settings" rows="6" spellcheck="false" placeholder="{{ first }}">{{ form.get('settings', '') }}</textarea>
+  <p class="p-form-help-text">The keys for each type are in the <a href="https://linuxcontainers.org/incus/docs/main/reference/devices/" rel="noreferrer">Incus device reference</a>. A device with the same name as one from a profile replaces it for this instance.</p>
+  <div class="form-buttons">
+    <a class="p-button--base" href="{{ url_for('srv.instance', name=instance.name) }}">Cancel</a>
+    <button class="p-button--positive">Add device</button>
+  </div>
+</form>
+{% endblock %}

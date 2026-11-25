@@ -13,14 +13,15 @@ Early scaffold. Working today:
 
 - Servers: register a local socket, or a remote server with a trust token
 - System containers: list, create, start, stop, restart, freeze, delete,
-  snapshots, and full configuration editing as YAML
+  rename, copy, snapshots, logs (console and Incus log files), a settings form
+  for limits and common options, adding and removing devices, and full
+  configuration editing as YAML
 - Object storage: pools, buckets, and bucket access keys
 - Terminal: a root login shell in a running container (xterm.js over a websocket)
 - Operations: list and cancel
 - Projects: switch project per server
 
-Not built yet: container logs, the Electron runtime, and the deb, rpm and
-container packages. See [Roadmap](#roadmap).
+Not built yet: the Electron runtime, and the deb, rpm and container packages. See [Roadmap](#roadmap).
 
 ## Quick start (development)
 
@@ -137,12 +138,10 @@ wsgi.py           entry point for mod_wsgi and gunicorn
 
 ## Roadmap
 
-1. Container logs
-2. Electron runtime with a bundled Python; xterm.js vendored instead of loaded from jsDelivr
-3. deb (Debian 13, Ubuntu 26.04) and rpm (EL10) packages with nginx and systemd
+1. Electron runtime with a bundled Python; xterm.js vendored instead of loaded from jsDelivr
+2. deb (Debian 13, Ubuntu 26.04) and rpm (EL10) packages with nginx and systemd
    units; container image
-4. Graphics and styling from incus-ui-canonical (see `NOTICE.md`)
-5. Later: virtual machines, networks, images, cluster, permissions, OIDC
+3. Later: virtual machines, networks, images, cluster, permissions, OIDC
 
 ## License
 

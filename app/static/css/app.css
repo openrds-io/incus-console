@@ -15,6 +15,34 @@ code,
 pre,
 kbd,
 samp,
+.log-view {
+  max-height: calc(100vh - 16rem);
+  overflow: auto;
+  padding: 1rem;
+  background: #f7f7f7;
+  font-size: 0.8125rem;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+.key-name {
+  margin-left: 0.5rem;
+  font-size: 0.8125rem;
+  color: #666;
+}
+label code {
+  padding: 0;
+  background: none;
+}
+/* An introduction at the top of a page (Vanilla pulls help text up under its field). */
+.u-fixed-width > .p-form-help-text {
+  margin-top: 0;
+}
+.section-heading + .p-button,
+.section-heading + .p-button + [class*="p-button"] {
+  margin-bottom: 0.5rem;
+}
+
 .code-editor {
   font-family: "Ubuntu Sans Mono", "Ubuntu Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
 }
@@ -206,6 +234,34 @@ table.facts th {
   text-transform: none;
   letter-spacing: normal;
   font-size: 1rem;
+}
+
+.log-view {
+  max-height: calc(100vh - 16rem);
+  overflow: auto;
+  padding: 1rem;
+  background: #f7f7f7;
+  font-size: 0.8125rem;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+.key-name {
+  margin-left: 0.5rem;
+  font-size: 0.8125rem;
+  color: #666;
+}
+label code {
+  padding: 0;
+  background: none;
+}
+/* An introduction at the top of a page (Vanilla pulls help text up under its field). */
+.u-fixed-width > .p-form-help-text {
+  margin-top: 0;
+}
+.section-heading + .p-button,
+.section-heading + .p-button + [class*="p-button"] {
+  margin-bottom: 0.5rem;
 }
 
 .code-editor {

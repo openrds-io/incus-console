@@ -27,6 +27,8 @@ def _now() -> str:
 
 
 class FakeIncus:
+    LOGS = {"lxc.log": "lxc 20261125 INFO start\n", "lxc.conf": "lxc.uts.name = x\n"}
+
     def __init__(self):
         self.lock = threading.Lock()
         self.instances: dict[str, dict] = {}
@@ -45,6 +47,7 @@ class FakeIncus:
         self.trusted: list[str] = []  # fingerprints enrolled with a token
         self.sessions: dict[str, dict] = {}  # terminal sessions by operation id
         self.calls: list[tuple[str, str]] = []
+        self.puts: list[dict] = []  # bodies of instance PUTs
         self.pending_ops = False  # True: operations stay Running
 
     # -- helpers -----------------------------------------------------------
@@ -125,7 +128,9 @@ class FakeIncus:
             "memory": {"usage": 64 * 1024 * 1024 if running else 0},
             "network": network,
         }
-        return {**instance, "state": state}
+        # Like Incus: the expanded devices are the profiles' with the instance's own on top.
+        expanded = {**instance["expanded_devices"], **(instance.get("devices") or {})}
+        return {**instance, "expanded_devices": expanded, "state": state}
 
     # -- routing -----------------------------------------------------------
 
@@ -185,6 +190,18 @@ class FakeIncus:
                     return self.error(400, f'Invalid instance name "{name}"')
                 if name in self.instances:
                     return self.error(409, f'Instance "{name}" already exists')
+                source = body.get("source") or {}
+                if source.get("type") == "copy":
+                    original = self.instances.get(source.get("source"))
+                    if original is None:
+                        return self.error(404, "Source instance not found")
+                    copied = json.loads(json.dumps(original))
+                    copied["name"] = name
+                    copied["status"] = "Running" if body.get("start") else "Stopped"
+                    if source.get("instance_only"):
+                        copied["snapshots"] = []
+                    self.instances[name] = copied
+                    return self.start_op(f"Creating instance {name}")
                 alias = body.get("source", {}).get("alias") or "local image"
                 self.add_instance(name, "Running" if body.get("start") else "Stopped", image=alias)
                 created = self.instances[name]
@@ -210,12 +227,33 @@ class FakeIncus:
         match (method, rest):
             case ("GET", []):
                 return self.sync(self._full(instance))
+            case ("POST", []):
+                new_name = body.get("name", "")
+                if instance["status"] != "Stopped":
+                    return self.error(400, "Renaming of running instance not allowed")
+                if new_name in self.instances:
+                    return self.error(409, "Name already in use")
+                del self.instances[name]
+                instance["name"] = new_name
+                self.instances[new_name] = instance
+                return self.start_op(f"Renaming instance {name}")
+            case ("GET", ["logs"]):
+                return self.sync([f"/1.0/instances/{name}/logs/{f}" for f in self.LOGS])
+            case ("GET", ["logs", filename]):
+                if filename not in self.LOGS:
+                    return self.error(404, "Log file not found")
+                return 200, self.LOGS[filename]
+            case ("GET", ["console"]):
+                if instance["status"] != "Running":
+                    return self.error(400, "Instance is not running")
+                return 200, f"Debian GNU/Linux 13 {name} console\n<b>login:</b> "
             case ("PUT", []):
                 if "restore" in body:
                     known = [s["name"] for s in instance["snapshots"]]
                     if body["restore"] not in known:
                         return self.error(404, "Snapshot not found")
                     return self.start_op(f"Restoring snapshot of {name}")
+                self.puts.append(json.loads(json.dumps(body)))
                 for key in ("config", "devices", "profiles", "description", "ephemeral"):
                     if key in body:
                         instance[key] = body[key]
@@ -439,9 +477,12 @@ class _Handler(http.server.BaseHTTPRequestHandler):
         if isinstance(self.connection, ssl.SSLSocket):
             peer = self.connection.getpeercert(binary_form=True)
         status, payload = self.server.fake.handle(self.command, self.path, body, peer)
-        data = json.dumps(payload).encode()
+        if isinstance(payload, str):  # a log file
+            data, kind = payload.encode(), "text/plain"
+        else:
+            data, kind = json.dumps(payload).encode(), "application/json"
         self.send_response(status)
-        self.send_header("Content-Type", "application/json")
+        self.send_header("Content-Type", kind)
         self.send_header("Content-Length", str(len(data)))
         self.send_header("Connection", "close")
         self.end_headers()

@@ -27,6 +27,14 @@ document.addEventListener("click", (event) => {
   }
 });
 
+// Add device: show an example of the chosen type's settings.
+document.addEventListener("change", (event) => {
+  if (!event.target.matches("[data-examples]")) return;
+  const example = event.target.selectedOptions[0]?.dataset.example || "";
+  const settings = document.getElementById("settings");
+  if (settings) settings.placeholder = example;
+});
+
 // On small screens the side navigation starts closed.
 if (window.matchMedia("(max-width: 619px)").matches) {
   document.querySelector(".l-navigation")?.classList.add("is-collapsed");

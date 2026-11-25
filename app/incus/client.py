@@ -136,9 +136,34 @@ class IncusClient:
         timeout: float | None = None,
     ) -> dict:
         """Send one request and return the decoded response envelope."""
+        status, raw = self._send(method, url_path, params=params, body=body, timeout=timeout)
+        try:
+            data = json.loads(raw) if raw else {}
+        except ValueError as exc:
+            raise IncusError(status, "Incus sent a response that is not JSON.") from exc
+        if status >= 400 or data.get("type") == "error":
+            raise IncusError(
+                data.get("error_code") or status,
+                data.get("error") or f"Incus returned HTTP {status}",
+            )
+        return data
+
+    def get_text(self, *segments: str, **params) -> str:
+        """GET an endpoint that answers with plain text (log files)."""
+        status, raw = self._send("GET", path(*segments), params=params)
+        if status >= 400:
+            try:
+                error = json.loads(raw).get("error")
+            except ValueError:
+                error = None
+            raise IncusError(status, error or f"Incus returned HTTP {status}")
+        return raw.decode("utf-8", errors="replace")
+
+    def _send(self, method, url_path, *, params=None, body=None, timeout=None):
+        """Send one request; return (HTTP status, body bytes)."""
         query = {"project": self.project, **(params or {})}
         target = f"{url_path}?{urlencode(query)}"
-        headers = {"Accept": "application/json", "User-Agent": "incus-console"}
+        headers = {"User-Agent": "incus-console"}
         payload = None
         if body is not None:
             payload = json.dumps(body).encode()
@@ -156,16 +181,7 @@ class IncusClient:
         except (OSError, http.client.HTTPException) as exc:
             where = self.socket_path or self.url
             raise IncusConnectionError(f"Cannot reach Incus at {where}: {exc}") from exc
-        try:
-            data = json.loads(raw) if raw else {}
-        except ValueError as exc:
-            raise IncusError(response.status, "Incus sent a response that is not JSON.") from exc
-        if response.status >= 400 or data.get("type") == "error":
-            raise IncusError(
-                data.get("error_code") or response.status,
-                data.get("error") or f"Incus returned HTTP {response.status}",
-            )
-        return data
+        return response.status, raw
 
     def get(self, *segments: str, **params) -> object:
         return self.request("GET", path(*segments), params=params).get("metadata")
@@ -239,6 +255,31 @@ class IncusClient:
     def instance_action(self, name: str, action: str, force: bool = False) -> dict:
         body = {"action": action, "timeout": 30, "force": force}
         return self.request("PUT", path("instances", name, "state"), body=body)
+
+    def rename_instance(self, name: str, new_name: str) -> dict:
+        return self.request("POST", path("instances", name), body={"name": new_name})
+
+    def copy_instance(
+        self, name: str, new_name: str, *, snapshots: bool = True, start: bool = False
+    ) -> dict:
+        body = {
+            "name": new_name,
+            "source": {"type": "copy", "source": name, "instance_only": not snapshots},
+            "start": start,
+        }
+        return self.request("POST", path("instances"), body=body)
+
+    def instance_log_files(self, name: str) -> list[str]:
+        """Names of the instance's log files (lxc.log, lxc.conf, ...)."""
+        urls = self.get("instances", name, "logs") or []
+        return sorted(url.rstrip("/").rsplit("/", 1)[-1] for url in urls)
+
+    def instance_log(self, name: str, filename: str) -> str:
+        return self.get_text("instances", name, "logs", filename)
+
+    def console_log(self, name: str) -> str:
+        """What the instance has written to its console."""
+        return self.get_text("instances", name, "console")
 
     def create_snapshot(self, name: str, snapshot: str) -> dict:
         body = {"name": snapshot, "stateful": False}

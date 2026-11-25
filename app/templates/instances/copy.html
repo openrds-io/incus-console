@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+{% from "macros.html" import crumbs, csrf %}
+{% block title %}Copy {{ instance.name }}{% endblock %}
+{% block heading %}{{ crumbs([('Instances', url_for('srv.instances')), (instance.name, url_for('srv.instance', name=instance.name)), ('Copy', None)]) }}{% endblock %}
+{% block content %}
+<p class="p-form-help-text">The copy gets the same configuration, devices and profiles as {{ instance.name }}.</p>
+<form class="narrow-form" method="post">
+  {{ csrf() }}
+  <label for="new_name">Name of the copy</label>
+  <input type="text" id="new_name" name="new_name" value="{{ form.get('new_name', instance.name ~ '-copy') }}" required autofocus pattern="[A-Za-z][A-Za-z0-9\-]*" title="Letters, digits and dashes, starting with a letter">
+  {% set posted = form.get('new_name') is not none %}
+  <label class="p-checkbox">
+    <input type="checkbox" class="p-checkbox__input" name="snapshots" value="1"{% if form.get('snapshots') or not posted %} checked{% endif %}>
+    <span class="p-checkbox__label">Copy its snapshots too ({{ (instance.snapshots or [])|length }})</span>
+  </label>
+  <label class="p-checkbox">
+    <input type="checkbox" class="p-checkbox__input" name="start" value="1"{% if form.get('start') %} checked{% endif %}>
+    <span class="p-checkbox__label">Start the copy</span>
+  </label>
+  <div class="form-buttons">
+    <a class="p-button--base" href="{{ url_for('srv.instance', name=instance.name) }}">Cancel</a>
+    <button class="p-button--positive">Copy</button>
+  </div>
+</form>
+{% endblock %}
