@@ -2,7 +2,7 @@
 {% set live = true %}
 {% from "macros.html" import empty %}
 {% block title %}Volumes{% endblock %}
-{% block controls %}<a class="p-button--positive u-no-margin--bottom" href="{{ url_for('srv.volume_create') }}">Create volume</a>{% endblock %}
+{% block controls %}{% if allowed('srv.volume_create') %}<a class="p-button--positive u-no-margin--bottom" href="{{ url_for('srv.volume_create') }}">Create volume</a>{% endif %}{% endblock %}
 {% block content %}
 {% for problem in problems %}
 <div class="p-notification--negative"><div class="p-notification__content"><p class="p-notification__message">{{ problem }}</p></div></div>

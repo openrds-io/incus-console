@@ -4,7 +4,7 @@
 {% block title %}{% if creating %}Create project{% else %}Configure {{ name }}{% endif %}{% endblock %}
 {% block heading %}{% if creating %}{{ crumb_links([('Projects', url_for('srv.projects')), ('Create project', None)]) }}{% else %}{{ crumb_links(crumbs) }}{% endif %}{% endblock %}
 {% block content %}
-<p class="p-form-help-text">A project keeps its instances apart. With a feature on, the project has its own images, profiles, volumes, buckets or networks; with it off, it uses the default project's.{% if not creating %} Incus changes features only while a project is empty. Everything else is in <a href="{{ url_for('srv.project_yaml', name=name) }}">Edit YAML</a>.{% endif %}</p>
+<p class="p-form-help-text">A project keeps its instances apart. With a feature on, the project has its own images, profiles, volumes, buckets or networks; with it off, it uses the default project's.{% if not creating %} Incus changes features only while a project is empty. Everything else is in {% if allowed('srv.project_yaml') %}<a href="{{ url_for('srv.project_yaml', name=name) }}">Edit YAML</a>{% endif %}.{% endif %}</p>
 <form class="narrow-form" method="post">
   {{ csrf() }}
   {% if creating %}

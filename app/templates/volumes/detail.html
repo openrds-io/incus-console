@@ -4,12 +4,14 @@
 {% block title %}{{ volume.name }}{% endblock %}
 {% block heading %}{{ crumbs([('Volumes', url_for('srv.volumes')), (pool ~ ' / ' ~ volume.name, None)]) }}{% endblock %}
 {% block controls %}
-<a class="p-button is-dense u-no-margin--bottom" href="{{ url_for('srv.volume_edit', pool=pool, name=volume.name) }}">Edit</a>
-<a class="p-button is-dense u-no-margin--bottom" href="{{ url_for('srv.volume_rename', pool=pool, name=volume.name) }}">Rename</a>
+{% if allowed('srv.volume_edit') %}<a class="p-button is-dense u-no-margin--bottom" href="{{ url_for('srv.volume_edit', pool=pool, name=volume.name) }}">Edit</a>{% endif %}
+{% if allowed('srv.volume_rename') %}<a class="p-button is-dense u-no-margin--bottom" href="{{ url_for('srv.volume_rename', pool=pool, name=volume.name) }}">Rename</a>{% endif %}
+{% if allowed('srv.volume_delete') %}
 <form class="inline" method="post" action="{{ url_for('srv.volume_delete', pool=pool, name=volume.name) }}" data-confirm="Delete volume {{ volume.name }} and everything on it? This cannot be undone.">
   {{ csrf() }}
   <button class="p-button--negative is-dense u-no-margin--bottom"{% if attached %} disabled title="Detach it first"{% endif %}>Delete</button>
 </form>
+{% endif %}
 {% endblock %}
 {% block content %}
 <div class="row">
@@ -38,9 +40,11 @@
         <tr>
           <td><a href="{{ url_for('srv.instance', name=name) }}">{{ name }}</a></td>
           <td class="u-align--right">
+            {% if allowed('srv.volume_detach') %}
             <form class="inline" method="post" action="{{ url_for('srv.volume_detach', pool=pool, name=volume.name, instance_name=name) }}" data-confirm="Detach {{ volume.name }} from {{ name }}? Its data stays on the volume.">
               {{ csrf() }}<button class="p-button--negative is-dense u-no-margin--bottom">Detach</button>
             </form>
+            {% endif %}
           </td>
         </tr>
       {% endfor %}
@@ -50,6 +54,7 @@
     {{ empty("Not attached to any instance.") }}
     {% endif %}
     {% if instances %}
+    {% if allowed('srv.volume_attach') %}
     <form class="inline-form" method="post" action="{{ url_for('srv.volume_attach', pool=pool, name=volume.name) }}">
       {{ csrf() }}
       <select name="instance" aria-label="Instance">
@@ -61,6 +66,7 @@
       <input type="text" name="device" placeholder="Device name: {{ volume.name }}" aria-label="Device name">
       <button class="p-button">Attach</button>
     </form>
+    {% endif %}
     <p class="p-form-help-text">Adds a disk device to the instance. Containers see the change at once.</p>
     {% endif %}
   </div>
@@ -69,7 +75,7 @@
 <div class="row">
   <div class="col-3">
     <h2 class="p-heading--5 section-heading">Snapshots</h2>
-    <a class="p-button is-dense" href="{{ url_for('srv.volume_edit', pool=pool, name=volume.name) }}">Schedule</a>
+    {% if allowed('srv.volume_edit') %}<a class="p-button is-dense" href="{{ url_for('srv.volume_edit', pool=pool, name=volume.name) }}">Schedule</a>{% endif %}
   </div>
   <div class="col-9">
     {% set cfg = volume.config or {} %}
@@ -85,12 +91,16 @@
           <td>{{ snap.created_at|when }}</td>
           <td>{{ snap.expires_at|when }}</td>
           <td class="u-align--right">
+            {% if allowed('srv.volume_snapshot_restore') %}
             <form class="inline" method="post" action="{{ url_for('srv.volume_snapshot_restore', pool=pool, name=volume.name, snapshot=short) }}" data-confirm="Restore {{ volume.name }} to {{ short }}? Changes made since then are lost.">
               {{ csrf() }}<button class="p-button is-dense u-no-margin--bottom">Restore</button>
             </form>
+            {% endif %}
+            {% if allowed('srv.volume_snapshot_delete') %}
             <form class="inline" method="post" action="{{ url_for('srv.volume_snapshot_delete', pool=pool, name=volume.name, snapshot=short) }}" data-confirm="Delete snapshot {{ short }}?">
               {{ csrf() }}<button class="p-button--negative is-dense u-no-margin--bottom">Delete</button>
             </form>
+            {% endif %}
           </td>
         </tr>
       {% endfor %}
@@ -99,11 +109,13 @@
     {% else %}
     {{ empty("No snapshots.") }}
     {% endif %}
+    {% if allowed('srv.volume_snapshot_create') %}
     <form class="inline-form" method="post" action="{{ url_for('srv.volume_snapshot_create', pool=pool, name=volume.name) }}">
       {{ csrf() }}
       <input type="text" name="snapshot" placeholder="Snapshot name" aria-label="Snapshot name" required>
       <button class="p-button">Take snapshot</button>
     </form>
+    {% endif %}
   </div>
 </div>
 {% endblock %}

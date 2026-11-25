@@ -1,0 +1,109 @@
+{% extends "base.html" %}
+{% from "macros.html" import crumbs, csrf, empty %}
+{% block title %}{{ user.username }}{% endblock %}
+{% block heading %}{{ crumbs([('Users', url_for('admin.users')), (user.username, None)]) }}{% endblock %}
+{% block controls %}
+{% if user.id != g.user.id %}
+<form class="inline" method="post" action="{{ url_for('admin.user_delete', user_id=user.id) }}" data-confirm="Delete user {{ user.username }}? Their access goes with them.">
+  {{ csrf() }}<button class="p-button--negative is-dense u-no-margin--bottom">Delete</button>
+</form>
+{% endif %}
+{% endblock %}
+{% block content %}
+<div class="row">
+  <div class="col-3"><h2 class="p-heading--5 section-heading">Account</h2></div>
+  <div class="col-9">
+    <form method="post" action="{{ url_for('admin.user_settings', user_id=user.id) }}">
+      {{ csrf() }}
+      <label class="p-checkbox">
+        <input type="checkbox" class="p-checkbox__input" name="is_admin" value="1"{% if user.is_admin %} checked{% endif %}>
+        <span class="p-checkbox__label">Console admin: every server and project, plus users and settings</span>
+      </label>
+      <label class="p-checkbox">
+        <input type="checkbox" class="p-checkbox__input" name="disabled" value="1"{% if user.disabled %} checked{% endif %}>
+        <span class="p-checkbox__label">Disabled: cannot log in, and is signed out at once</span>
+      </label>
+      <button class="p-button is-dense">Save</button>
+    </form>
+  </div>
+</div>
+<hr class="p-rule">
+<div class="row">
+  <div class="col-3">
+    <h2 class="p-heading--5 section-heading">Access</h2>
+    <p class="p-text--small u-text--muted">The strongest role that applies wins. "All projects" includes projects created later.</p>
+    <p class="p-text--small u-text--muted">On remote servers the user gets their own certificate, restricted to these projects, so Incus enforces the project boundary too. Roles inside a project are enforced by the console.</p>
+  </div>
+  <div class="col-9">
+    {% if user.is_admin %}
+    <p>Console admins can do everything on every server. Grants below apply only if the user stops being an admin.</p>
+    {% endif %}
+    <table aria-label="Access">
+      <thead><tr><th>Server</th><th>Project</th><th>Role</th><th>Enforced by</th><th class="u-align--right">Actions</th></tr></thead>
+      <tbody>
+      {% for grant in grants %}
+        <tr>
+          <td>{{ grant.server_name }}</td>
+          <td>{{ 'All projects' if grant.project == '*' else grant.project }}</td>
+          <td>{{ roles[grant.role] }}</td>
+          <td>
+            {% if user.is_admin or user.disabled %}-
+            {% elif grant.server_kind != 'https' or not config.PER_USER_CERTIFICATES %}<span title="Local sockets cannot carry a per-user identity">Console</span>
+            {% elif grant.server_id in certs %}<span title="Restricted certificate {{ certs[grant.server_id].fingerprint[:12] }}">Console and Incus</span>
+            {% else %}<span class="u-text--negative">Console; Incus not updated</span>{% endif %}
+          </td>
+          <td class="u-align--right">
+            <form class="inline" method="post" action="{{ url_for('admin.grant_delete', user_id=user.id, grant_id=grant.id) }}">
+              {{ csrf() }}<button class="p-button--negative is-dense u-no-margin--bottom">Remove</button>
+            </form>
+          </td>
+        </tr>
+      {% else %}
+        <tr><td colspan="5" class="u-text--muted">No access yet.</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+    {% if servers %}
+    <form class="inline-form" method="post" action="{{ url_for('admin.grant_add', user_id=user.id) }}">
+      {{ csrf() }}
+      <select name="server_id" aria-label="Server" required>
+        {% for s in servers %}<option value="{{ s.id }}">{{ s.name }}</option>{% endfor %}
+      </select>
+      <input type="text" name="project" list="project-names" placeholder="All projects" aria-label="Project">
+      <datalist id="project-names">
+        {% for name in project_names %}<option value="{{ name }}">{% endfor %}
+      </datalist>
+      <select name="role" aria-label="Role" required>
+        {% for value, label in roles.items() %}<option value="{{ value }}"{% if value == 'operator' %} selected{% endif %}>{{ label }}</option>{% endfor %}
+      </select>
+      <button class="p-button--positive">Give access</button>
+    </form>
+    <p class="p-form-help-text">Leave the project empty for all projects on that server. Giving a new role for the same server and project replaces the old one.</p>
+    {% else %}
+    {{ empty("Add a server first.") }}
+    {% endif %}
+  </div>
+</div>
+<hr class="p-rule">
+<div class="row">
+  <div class="col-3"><h2 class="p-heading--5 section-heading">Reset password</h2></div>
+  <div class="col-9">
+    <form class="inline-form" method="post" action="{{ url_for('admin.user_password', user_id=user.id) }}">
+      {{ csrf() }}
+      <input type="password" name="password" placeholder="New password" aria-label="New password" autocomplete="new-password" required minlength="10">
+      <input type="password" name="confirm" placeholder="Again" aria-label="New password again" autocomplete="new-password" required>
+      <button class="p-button">Set password</button>
+    </form>
+  </div>
+</div>
+<hr class="p-rule">
+<div class="row">
+  <div class="col-3">
+    <h2 class="p-heading--5 section-heading">Recent activity</h2>
+    <a class="p-button--base is-dense" href="{{ url_for('admin.audit_log', user=user.username) }}">Full log</a>
+  </div>
+  <div class="col-9">
+    {% set hide_user = true %}{% include "admin/_audit_table.html" %}
+  </div>
+</div>
+{% endblock %}

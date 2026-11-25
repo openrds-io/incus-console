@@ -3,7 +3,7 @@
 {% block title %}Files - {{ name }}{% endblock %}
 {% block heading %}{{ crumb_links(crumbs) }}{% endblock %}
 {% block controls %}
-{% if parent is not none %}<a class="p-button is-dense u-no-margin--bottom" href="{{ url_for('srv.files', name=name, path=parent) }}">Up one folder</a>{% endif %}
+{% if parent is not none %}{% if allowed('srv.files') %}<a class="p-button is-dense u-no-margin--bottom" href="{{ url_for('srv.files', name=name, path=parent) }}">Up one folder</a>{% endif %}{% endif %}
 {% endblock %}
 {% block content %}
 <p class="file-location"><code>{{ folder }}</code> on {{ name }}{% if instance.status != 'Running' %} ({{ instance.status|lower }}){% endif %}</p>
@@ -15,9 +15,9 @@
     <tr>
       <td>
         {% if e.type == 'directory' %}
-        <a class="file-name is-folder" href="{{ url_for('srv.files', name=name, path=e.path) }}">{{ e.name }}/</a>
+        {% if allowed('srv.files') %}<a class="file-name is-folder" href="{{ url_for('srv.files', name=name, path=e.path) }}">{{ e.name }}/</a>{% endif %}
         {% elif e.type == 'file' %}
-        <a class="file-name" href="{{ url_for('srv.file_view', name=name, path=e.path) }}">{{ e.name }}</a>
+        {% if allowed('srv.file_view') %}<a class="file-name" href="{{ url_for('srv.file_view', name=name, path=e.path) }}">{{ e.name }}</a>{% endif %}
         {% else %}
         <span class="file-name">{{ e.name }}</span> <span class="u-text--muted">({{ 'link' if e.type == 'symlink' else e.type }})</span>
         {% endif %}
@@ -27,12 +27,14 @@
       <td>{% if e.uid is not none %}{{ e.uid }}:{{ e.gid }}{% endif %}</td>
       <td class="u-align--right">
         {% if e.type == 'file' %}
-        <a class="p-button is-dense u-no-margin--bottom" href="{{ url_for('srv.file_download', name=name, path=e.path) }}">Download</a>
+        {% if allowed('srv.file_download') %}<a class="p-button is-dense u-no-margin--bottom" href="{{ url_for('srv.file_download', name=name, path=e.path) }}">Download</a>{% endif %}
         {% endif %}
         {% if e.type in ('file', 'directory', 'symlink') %}
+        {% if allowed('srv.file_delete') %}
         <form class="inline" method="post" action="{{ url_for('srv.file_delete', name=name, path=e.path) }}" data-confirm="Delete {{ e.path }}?{% if e.type == 'directory' %} Only empty folders can be deleted.{% endif %} This cannot be undone.">
           {{ csrf() }}<button class="p-button--negative is-dense u-no-margin--bottom">Delete</button>
         </form>
+        {% endif %}
         {% endif %}
       </td>
     </tr>
@@ -47,20 +49,24 @@
 <div class="row">
   <div class="col-6">
     <h2 class="p-heading--5">Upload files here</h2>
+    {% if allowed('srv.file_upload') %}
     <form class="inline-form" method="post" action="{{ url_for('srv.file_upload', name=name, path=folder) }}" enctype="multipart/form-data">
       {{ csrf() }}
       <input type="file" name="files" multiple required aria-label="Files to upload">
       <button class="p-button--positive">Upload</button>
     </form>
+    {% endif %}
     <p class="p-form-help-text">Files with the same name are replaced. New files belong to root, with permissions 0644.</p>
   </div>
   <div class="col-6">
     <h2 class="p-heading--5">New folder</h2>
+    {% if allowed('srv.file_mkdir') %}
     <form class="inline-form" method="post" action="{{ url_for('srv.file_mkdir', name=name, path=folder) }}">
       {{ csrf() }}
       <input type="text" name="folder" placeholder="Folder name" aria-label="Folder name" required>
       <button class="p-button">Create folder</button>
     </form>
+    {% endif %}
   </div>
 </div>
 {% endblock %}

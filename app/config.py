@@ -50,3 +50,18 @@ LOCAL_SOCKETS = [
     "/run/incus/unix.socket",
     "~/.colima/*/incus.sock",
 ]
+
+# Server mode: days of audit log to keep (0 keeps everything).
+AUDIT_KEEP_DAYS = 365
+
+# Server mode: sign people out after this many seconds.
+PERMANENT_SESSION_LIFETIME = 12 * 60 * 60
+
+# Server mode, remote (https) servers: act on Incus with a certificate per user,
+# restricted to the projects that user has access to, so Incus enforces the
+# project boundary too. The console's own certificate must be unrestricted.
+PER_USER_CERTIFICATES = True
+
+# Seconds between refreshing the project list of an "all projects" user's
+# certificate, so it picks up projects created outside the console.
+CERT_SYNC_INTERVAL = 300

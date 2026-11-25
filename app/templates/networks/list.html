@@ -2,7 +2,7 @@
 {% set live = true %}
 {% from "macros.html" import status, empty %}
 {% block title %}Networks{% endblock %}
-{% block controls %}<a class="p-button--positive u-no-margin--bottom" href="{{ url_for('srv.network_create') }}">Create network</a>{% endblock %}
+{% block controls %}{% if allowed('srv.network_create') %}<a class="p-button--positive u-no-margin--bottom" href="{{ url_for('srv.network_create') }}">Create network</a>{% endif %}{% endblock %}
 {% block content %}
 {% if networks %}
 <table aria-label="Networks">

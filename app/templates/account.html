@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+{% from "macros.html" import csrf %}
+{% block title %}Account{% endblock %}
+{% block content %}
+<div class="row">
+  <div class="col-3"><h2 class="p-heading--5 section-heading">Your access</h2></div>
+  <div class="col-9">
+    {% if user.is_admin %}
+    <p>You are a console admin: you can do everything on every server.</p>
+    {% else %}
+    <table aria-label="Your access">
+      <thead><tr><th>Server</th><th>Project</th><th>Role</th></tr></thead>
+      <tbody>
+      {% for grant in grants %}
+        <tr><td>{{ grant.server_name }}</td><td>{{ 'All projects' if grant.project == '*' else grant.project }}</td><td>{{ roles[grant.role] }}</td></tr>
+      {% else %}
+        <tr><td colspan="3" class="u-text--muted">No access yet. Ask a console admin.</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+    {% endif %}
+  </div>
+</div>
+<hr class="p-rule">
+<div class="row">
+  <div class="col-3"><h2 class="p-heading--5 section-heading">Change password</h2></div>
+  <div class="col-9">
+    <form method="post" class="narrow-form">
+      {{ csrf() }}
+      <input type="text" name="username" value="{{ user.username }}" autocomplete="username" hidden>
+      <label for="current">Current password</label>
+      <input type="password" id="current" name="current" autocomplete="current-password" required>
+      <label for="password">New password</label>
+      <input type="password" id="password" name="password" autocomplete="new-password" required minlength="10">
+      <label for="confirm">New password again</label>
+      <input type="password" id="confirm" name="confirm" autocomplete="new-password" required>
+      <button class="p-button--positive">Change password</button>
+    </form>
+  </div>
+</div>
+{% endblock %}

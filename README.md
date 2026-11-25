@@ -36,6 +36,9 @@ Early scaffold. Working today:
   background and their outcome is reported, even after Incus forgets them
 - Projects: list, create and configure (features, resource limits, restrictions),
   usage against limits, YAML, rename, delete, and switch project per server
+- Users and access (server mode): console admins, and Viewer, Operator or
+  Project admin roles per server and project; user management, own password
+  change, and an audit log
 - Live updates: lists, detail pages and Operations refresh themselves when
   something changes on the server (Incus's event stream, relayed as
   server-sent events), but never while you are typing in a form
@@ -72,10 +75,51 @@ The same app runs in two modes, following pgAdmin's model.
 | Access | No login. The runtime starts the server on a random local port and proves itself with `DESKTOP_KEY`. | Username and password. |
 | Web server | Flask's own, bound to 127.0.0.1 | gunicorn behind nginx |
 
-Create a user for server mode with `flask create-user NAME`.
+Create the first user for server mode with `flask create-user NAME`. The
+first user is always a console admin; add `--admin` for more admins. After
+that, admins manage users under **Users**.
 
-Every user of a server-mode install acts on Incus with the console's one
-client certificate, so treat every console user as an Incus administrator.
+## Users and access (server mode)
+
+| Role | Can |
+| --- | --- |
+| Console admin | Everything: servers, users, the audit log, creating and configuring projects |
+| Project admin | Everything inside the project: instances, profiles, images, networks, volumes, buckets |
+| Operator | Viewer, plus start, stop, restart, freeze, snapshots, terminal and files |
+| Viewer | See everything in the project; change nothing; no terminal or files |
+
+Roles are given per server, for one project or for all projects on that
+server. The strongest one that applies wins. Users see only the servers and
+projects they have access to, and buttons they cannot use are hidden. Only
+console admins create projects or change a project's limits and restrictions.
+
+The console checks every request. On remote (https) servers it also gives
+each user who is not an admin their own client certificate, added to that
+server's trust store as a restricted certificate (`incus-console/<username>`)
+listing the user's projects. That user's requests go out with it, so Incus
+itself refuses other projects, project settings and server-wide changes, even
+if the console got something wrong. The certificate is updated or removed when
+access changes, the user is disabled or deleted, a project is created, renamed
+or deleted, or the server is removed. "All projects" certificates also pick up
+projects made outside the console (`CERT_SYNC_INTERVAL`, default 5 minutes).
+
+What this does not cover:
+
+- Roles inside a project (Viewer, Operator) are enforced by the console only;
+  Incus sees a user who may do everything in their projects.
+- Local-socket servers have no per-user identity; the console is the only check.
+- The console's own certificate must be unrestricted, since it manages the
+  trust store, and the per-user keys are stored in `DATA_DIR/user-certs`.
+  Protect `DATA_DIR` like any other credential store.
+
+Set `PER_USER_CERTIFICATES = False` to act on every server with the console's
+certificate alone.
+
+The audit log (**Audit log**, admins only) records every change made through
+the console with its outcome, sign-ins, failed sign-ins and opened terminals.
+`AUDIT_KEEP_DAYS` (default 365) sets how long entries are kept. Sessions end
+after `PERMANENT_SESSION_LIFETIME` seconds (default 12 hours), and disabling a
+user signs them out at once.
 
 ## Desktop app
 
@@ -176,7 +220,9 @@ app/
   __init__.py     app factory
   config.py       default settings
   auth.py         login, desktop key, CSRF
-  db.py           SQLite: users and registered servers
+  access.py       roles: who may do what on which server and project
+  audit.py        audit log
+  db.py           SQLite: users, grants, audit log, registered servers
   servers.py      server registry
   certs.py        client certificate
   terminal.py     browser terminal relay (simple-websocket)
@@ -193,10 +239,15 @@ wsgi.py           entry point for gunicorn
 
 ## Roadmap
 
-1. Code signing and a build workflow for the desktop app on all three platforms
-2. deb (Debian 13, Ubuntu 26.04) and rpm (EL10) packages with nginx and systemd
+1. About box; Ubuntu-style versions (YY.MM.N)
+2. Virtual machines: create, VGA console, VM-specific settings
+3. OCI application containers: create from OCI registries
+4. Test the desktop installers (`npm run dist`); code signing and a build
+   workflow for all three platforms
+5. deb (Debian 13, Ubuntu 26.04) and rpm (EL10) packages with nginx and systemd
    units; container image
-3. Later: virtual machines, networks, images, cluster, permissions, OIDC
+6. Later: OIDC sign-in, Incus-enforced viewer and operator roles (authorization
+   scriptlet), per-instance access, cluster
 
 ## License
 

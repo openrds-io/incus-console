@@ -5,11 +5,13 @@
 {% block heading %}{{ crumbs([('Networks', url_for('srv.networks')), (network.name, None)]) }}{% if network.managed %} <span class="title-status">{{ status(network.status) }}</span>{% endif %}{% endblock %}
 {% block controls %}
 {% if network.managed %}
-<a class="p-button is-dense u-no-margin--bottom" href="{{ url_for('srv.network_rename', name=network.name) }}">Rename</a>
+{% if allowed('srv.network_rename') %}<a class="p-button is-dense u-no-margin--bottom" href="{{ url_for('srv.network_rename', name=network.name) }}">Rename</a>{% endif %}
+{% if allowed('srv.network_delete') %}
 <form class="inline" method="post" action="{{ url_for('srv.network_delete', name=network.name) }}" data-confirm="Delete network {{ network.name }}?">
   {{ csrf() }}
   <button class="p-button--negative is-dense u-no-margin--bottom"{% if users.instances or users.profiles %} disabled title="Instances or profiles still use it"{% endif %}>Delete</button>
 </form>
+{% endif %}
 {% endif %}
 {% endblock %}
 {% block content %}
@@ -41,8 +43,8 @@
 <div class="row">
   <div class="col-3">
     <h2 class="p-heading--5 section-heading">Configuration</h2>
-    <a class="p-button is-dense" href="{{ url_for('srv.network_settings', name=network.name) }}">Edit settings</a>
-    <a class="p-button--base is-dense" href="{{ url_for('srv.network_edit', name=network.name) }}">Edit YAML</a>
+    {% if allowed('srv.network_settings') %}<a class="p-button is-dense" href="{{ url_for('srv.network_settings', name=network.name) }}">Edit settings</a>{% endif %}
+    {% if allowed('srv.network_edit') %}<a class="p-button--base is-dense" href="{{ url_for('srv.network_edit', name=network.name) }}">Edit YAML</a>{% endif %}
   </div>
   <div class="col-9">
     <table aria-label="Configuration">
@@ -61,7 +63,7 @@
 <div class="row">
   <div class="col-3">
     <h2 class="p-heading--5 section-heading">Port forwards</h2>
-    <a class="p-button is-dense" href="{{ url_for('srv.forward_create', name=network.name) }}">Add port forward</a>
+    {% if allowed('srv.forward_create') %}<a class="p-button is-dense" href="{{ url_for('srv.forward_create', name=network.name) }}">Add port forward</a>{% endif %}
   </div>
   <div class="col-9">
     {% if forwards %}
@@ -78,10 +80,12 @@
           </td>
           <td>{{ f.description or '' }}</td>
           <td class="u-align--right">
-            <a class="p-button is-dense u-no-margin--bottom" href="{{ url_for('srv.forward_edit', name=network.name, listen=f.listen_address) }}">Edit</a>
+            {% if allowed('srv.forward_edit') %}<a class="p-button is-dense u-no-margin--bottom" href="{{ url_for('srv.forward_edit', name=network.name, listen=f.listen_address) }}">Edit</a>{% endif %}
+            {% if allowed('srv.forward_delete') %}
             <form class="inline" method="post" action="{{ url_for('srv.forward_delete', name=network.name, listen=f.listen_address) }}" data-confirm="Remove the forward on {{ f.listen_address }}?">
               {{ csrf() }}<button class="p-button--negative is-dense u-no-margin--bottom">Delete</button>
             </form>
+            {% endif %}
           </td>
         </tr>
       {% endfor %}

@@ -13,7 +13,7 @@ from pathlib import Path
 
 from flask import Flask, g, render_template, request
 
-from . import auth, db, filters
+from . import access, audit, auth, db, filters
 from .incus import IncusConnectionError, IncusError
 
 __version__ = "0.1.0.dev0"
@@ -52,9 +52,12 @@ def create_app(test_config: dict | None = None) -> Flask:
 
     db.init_app(app)
     auth.init_app(app)
+    access.init_app(app)
+    audit.init_app(app)
     filters.init_app(app)
 
     from .views import (  # noqa: F401
+        admin,
         events,
         files,
         images,
@@ -70,6 +73,8 @@ def create_app(test_config: dict | None = None) -> Flask:
     from .views import servers as servers_view
 
     app.register_blueprint(servers_view.bp)
+    app.register_blueprint(admin.bp)
+    app.register_blueprint(admin.account_bp)
     app.register_blueprint(scoped.bp)
 
     @app.url_defaults
@@ -97,13 +102,17 @@ def create_app(test_config: dict | None = None) -> Flask:
         response.headers.setdefault("Referrer-Policy", "same-origin")
         return response
 
+    @app.errorhandler(403)
+    def _forbidden(_error):
+        return render_template("forbidden.html"), 403
+
     @app.errorhandler(IncusError)
     def _incus_error(error: IncusError):
         # Tells the server pages not to ask the (possibly unreachable) server for more.
         g.incus_failed = True
         status = 502 if isinstance(error, IncusConnectionError) else 500
-        if error.status == 404:
-            status = 404
+        if error.status in (403, 404):
+            status = error.status
         return render_template("error.html", error=error, path=request.path), status
 
     return app

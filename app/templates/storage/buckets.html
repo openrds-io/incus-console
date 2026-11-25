@@ -3,7 +3,7 @@
 {% from "macros.html" import crumbs, empty %}
 {% block title %}{% if pool %}Buckets in {{ pool }}{% else %}Buckets{% endif %}{% endblock %}
 {% block heading %}{% if pool %}{{ crumbs([('Buckets', url_for('srv.all_buckets')), ('Pool ' ~ pool, None)]) }}{% else %}Buckets{% endif %}{% endblock %}
-{% block controls %}<a class="p-button--positive u-no-margin--bottom" href="{{ url_for('srv.bucket_create', pool=pool) if pool else url_for('srv.bucket_create') }}">Create bucket</a>{% endblock %}
+{% block controls %}{% if allowed('srv.bucket_create') %}<a class="p-button--positive u-no-margin--bottom" href="{{ url_for('srv.bucket_create', pool=pool) if pool else url_for('srv.bucket_create') }}">Create bucket</a>{% endif %}{% endblock %}
 {% block content %}
 {% for problem in problems %}
 <div class="p-notification--negative"><div class="p-notification__content"><p class="p-notification__message">{{ problem }}</p></div></div>

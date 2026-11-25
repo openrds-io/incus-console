@@ -9,13 +9,15 @@
   {{ csrf() }}<button class="p-button is-dense u-no-margin--bottom">Switch to</button>
 </form>
 {% endif %}
-<a class="p-button is-dense u-no-margin--bottom" href="{{ url_for('srv.project_edit', name=project.name) }}">Configure</a>
+{% if allowed('srv.project_edit') %}<a class="p-button is-dense u-no-margin--bottom" href="{{ url_for('srv.project_edit', name=project.name) }}">Configure</a>{% endif %}
 {% if not is_default %}
-<a class="p-button is-dense u-no-margin--bottom" href="{{ url_for('srv.project_rename', name=project.name) }}">Rename</a>
+{% if allowed('srv.project_rename') %}<a class="p-button is-dense u-no-margin--bottom" href="{{ url_for('srv.project_rename', name=project.name) }}">Rename</a>{% endif %}
+{% if allowed('srv.project_delete') %}
 <form class="inline" method="post" action="{{ url_for('srv.project_delete', name=project.name) }}" data-confirm="Delete project {{ project.name }}?">
   {{ csrf() }}
   <button class="p-button--negative is-dense u-no-margin--bottom"{% if counts.get('instances') %} disabled title="It still has instances"{% endif %}>Delete</button>
 </form>
+{% endif %}
 {% endif %}
 {% endblock %}
 {% block content %}
@@ -58,8 +60,8 @@
 <div class="row">
   <div class="col-3">
     <h2 class="p-heading--5 section-heading">{{ section.title }}</h2>
-    {% if loop.first %}<a class="p-button is-dense" href="{{ url_for('srv.project_edit', name=project.name) }}">Configure</a>
-    <a class="p-button--base is-dense" href="{{ url_for('srv.project_yaml', name=project.name) }}">Edit YAML</a>{% endif %}
+    {% if loop.first %}{% if allowed('srv.project_edit') %}<a class="p-button is-dense" href="{{ url_for('srv.project_edit', name=project.name) }}">Configure</a>{% endif %}
+    {% if allowed('srv.project_yaml') %}<a class="p-button--base is-dense" href="{{ url_for('srv.project_yaml', name=project.name) }}">Edit YAML</a>{% endif %}{% endif %}
   </div>
   <div class="col-9">
     {% if section.title == 'Restrictions' and not restricted %}

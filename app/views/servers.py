@@ -2,9 +2,18 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from flask import Blueprint, current_app, flash, redirect, render_template, request, url_for
+from flask import (
+    Blueprint,
+    abort,
+    current_app,
+    flash,
+    redirect,
+    render_template,
+    request,
+    url_for,
+)
 
-from .. import servers
+from .. import access, servers, user_certs
 from ..certs import ensure_client_cert, fingerprint
 from ..incus import IncusClient, IncusError, enroll_with_token
 from ..incus.client import normalize_fingerprint
@@ -17,9 +26,15 @@ UNTRUSTED = (
 )
 
 
+@bp.before_request
+def _admins_change_servers():
+    if request.method == "POST" and not access.is_admin():
+        abort(403)
+
+
 @bp.get("/")
 def home():
-    rows = servers.all_servers()
+    rows = access.visible_servers(servers.all_servers())
     if len(rows) == 1:
         return redirect(url_for("srv.instances", sid=rows[0]["id"]))
     return redirect(url_for("servers.index"))
@@ -30,8 +45,8 @@ def index():
     cert, _key = ensure_client_cert(current_app.config["DATA_DIR"])
     return render_template(
         "servers/index.html",
-        servers=servers.all_servers(),
-        detected=servers.detected_sockets(),
+        servers=access.visible_servers(servers.all_servers()),
+        detected=servers.detected_sockets() if access.is_admin() else [],
         client_fingerprint=fingerprint(cert),
     )
 
@@ -79,6 +94,9 @@ def add():
 
 @bp.post("/servers/<int:server_id>/delete")
 def delete(server_id):
+    server = servers.get(server_id)
+    if server is not None:
+        user_certs.forget_server(server)
     servers.delete(server_id)
     flash("Server removed from this console. Nothing was changed on the server.", "success")
     return redirect(url_for("servers.index"))

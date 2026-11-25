@@ -47,7 +47,7 @@ def test_login_and_logout(tmp_path):
             "next": "//evil",
         },
     )
-    assert good.headers["Location"] == "/servers"  # the unsafe next target is ignored
+    assert good.headers["Location"] == "/"  # the unsafe next target is ignored
     assert client.get("/servers").status_code == 200
     with client.session_transaction() as session:
         token = session["csrf"]

@@ -1,0 +1,19 @@
+{% if entries %}
+<table aria-label="Audit log" class="audit">
+  <thead><tr><th>When (UTC)</th>{% if not hide_user %}<th>User</th>{% endif %}<th>Server</th><th>Project</th><th>Action</th><th>Outcome</th></tr></thead>
+  <tbody>
+  {% for e in entries %}
+    <tr>
+      <td>{{ e.at|when }}</td>
+      {% if not hide_user %}<td><a href="{{ url_for('admin.audit_log', user=e.username) }}">{{ e.username }}</a></td>{% endif %}
+      <td>{{ e.server_name or '-' }}</td>
+      <td>{{ e.project or '-' }}</td>
+      <td title="{{ e.path }}">{{ e.action }}</td>
+      <td>{% if e.status >= 400 %}<span class="u-text--negative">{{ e.outcome or e.status }}</span>{% else %}{{ e.outcome or '' }}{% endif %}</td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% else %}
+<p class="u-text--muted empty-state">Nothing recorded yet.</p>
+{% endif %}

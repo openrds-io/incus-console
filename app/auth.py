@@ -24,14 +24,16 @@ from flask import (
     session,
     url_for,
 )
+from flask.cli import with_appcontext
 from werkzeug.security import check_password_hash, generate_password_hash
 
+from . import audit
 from .db import get_db
 
 bp = Blueprint("auth", __name__)
 
 SAFE_METHODS = {"GET", "HEAD", "OPTIONS"}
-DESKTOP_USER = {"id": 0, "username": "desktop"}
+DESKTOP_USER = {"id": 0, "username": "desktop", "is_admin": 1}
 # Checked when the username is unknown so both failures take similar time.
 DUMMY_HASH = generate_password_hash("incus-console")
 
@@ -80,8 +82,15 @@ def gate():
     user_id = session.get("user_id")
     if user_id is not None:
         g.user = (
-            get_db().execute("SELECT id, username FROM users WHERE id = ?", (user_id,)).fetchone()
+            get_db()
+            .execute(
+                "SELECT id, username, is_admin FROM users WHERE id = ? AND disabled = 0",
+                (user_id,),
+            )
+            .fetchone()
         )
+        if g.user is None:
+            session.clear()
     if g.user is None and request.endpoint != "auth.login":
         target = request.full_path.rstrip("?") if request.method == "GET" else None
         return redirect(url_for("auth.login", next=target))
@@ -97,11 +106,14 @@ def login():
         password = request.form.get("password", "")
         user = get_db().execute("SELECT * FROM users WHERE username = ?", (username,)).fetchone()
         valid = check_password_hash(user["password_hash"] if user else DUMMY_HASH, password)
-        if user and valid:
+        if user and valid and not user["disabled"]:
             target = _safe_next(request.form.get("next"))
             session.clear()
+            session.permanent = True
             session["user_id"] = user["id"]
-            return redirect(target or url_for("servers.index"))
+            audit.record(username, "Logged in", status=200)
+            return redirect(target or url_for("servers.home"))
+        audit.record(username or "-", "Failed log in", status=401)
         flash("Wrong username or password.", "error")
     return render_template("login.html", next=_safe_next(request.values.get("next")))
 
@@ -112,21 +124,39 @@ def logout():
     return redirect(url_for("auth.login"))
 
 
+MIN_PASSWORD = 10
+
+
+def check_password(password: str) -> None:
+    if len(password) < MIN_PASSWORD:
+        raise ValueError(f"Use a password of at least {MIN_PASSWORD} characters.")
+
+
 @click.command("create-user")
+@with_appcontext
 @click.argument("username")
 @click.password_option()
-def create_user(username: str, password: str) -> None:
-    """Create a console user, or reset the password of an existing one."""
-    if len(password) < 8:
-        raise click.ClickException("Use a password of at least 8 characters.")
+@click.option("--admin", is_flag=True, help="Make the user a console admin.")
+def create_user(username: str, password: str, admin: bool) -> None:
+    """Create a console user, or reset the password of an existing one.
+
+    The first user is always an admin, so a new install can be set up.
+    """
+    try:
+        check_password(password)
+    except ValueError as error:
+        raise click.ClickException(str(error)) from error
     db = get_db()
+    if not db.execute("SELECT 1 FROM users WHERE is_admin = 1 AND disabled = 0").fetchone():
+        admin = True
     db.execute(
-        "INSERT INTO users (username, password_hash) VALUES (?, ?) "
-        "ON CONFLICT(username) DO UPDATE SET password_hash = excluded.password_hash",
-        (username, generate_password_hash(password)),
+        "INSERT INTO users (username, password_hash, is_admin) VALUES (?, ?, ?) "
+        "ON CONFLICT(username) DO UPDATE SET password_hash = excluded.password_hash, "
+        "is_admin = MAX(is_admin, excluded.is_admin), disabled = 0",
+        (username, generate_password_hash(password), int(admin)),
     )
     db.commit()
-    click.echo(f"User {username} saved.")
+    click.echo(f"User {username} saved{' as an admin' if admin else ''}.")
 
 
 def init_app(app) -> None:

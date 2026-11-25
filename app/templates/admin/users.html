@@ -1,0 +1,21 @@
+{% extends "base.html" %}
+{% from "macros.html" import empty %}
+{% block title %}Users{% endblock %}
+{% block controls %}<a class="p-button--positive u-no-margin--bottom" href="{{ url_for('admin.user_create') }}">Create user</a>{% endblock %}
+{% block content %}
+<table aria-label="Users">
+  <thead><tr><th>Username</th><th>Type</th><th>Access</th><th>Status</th><th>Created</th></tr></thead>
+  <tbody>
+  {% for u in rows %}
+    <tr>
+      <td><a href="{{ url_for('admin.user', user_id=u.id) }}">{{ u.username }}</a>{% if u.id == g.user.id %} <span class="u-text--muted">(you)</span>{% endif %}</td>
+      <td>{{ 'Console admin' if u.is_admin else 'User' }}</td>
+      <td>{% if u.is_admin %}Everything{% else %}{{ u.grant_count }} grant{{ '' if u.grant_count == 1 else 's' }}{% endif %}</td>
+      <td>{{ 'Disabled' if u.disabled else 'Active' }}</td>
+      <td>{{ u.created_at|when }}</td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+<p class="p-text--small u-text--muted">Roles: a <strong>Viewer</strong> sees a project but changes nothing and cannot open terminals or files. An <strong>Operator</strong> also starts and stops instances, takes snapshots, and uses terminals and files. A <strong>Project admin</strong> can do everything inside the project. Only console admins add servers, manage users, and create or configure projects.</p>
+{% endblock %}

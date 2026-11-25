@@ -4,10 +4,12 @@
 {% block title %}{{ bucket.name }}{% endblock %}
 {% block heading %}{{ crumbs([('Buckets', url_for('srv.all_buckets')), (bucket.name, None)]) }}{% endblock %}
 {% block controls %}
-<a class="p-button is-dense u-no-margin--bottom" href="{{ url_for('srv.bucket_edit', pool=pool, bucket=bucket.name) }}">Edit</a>
+{% if allowed('srv.bucket_edit') %}<a class="p-button is-dense u-no-margin--bottom" href="{{ url_for('srv.bucket_edit', pool=pool, bucket=bucket.name) }}">Edit</a>{% endif %}
+{% if allowed('srv.bucket_delete') %}
 <form class="inline" method="post" action="{{ url_for('srv.bucket_delete', pool=pool, bucket=bucket.name) }}" data-confirm="Delete bucket {{ bucket.name }} and everything in it? This cannot be undone.">
   {{ csrf() }}<button class="p-button--negative is-dense u-no-margin--bottom">Delete</button>
 </form>
+{% endif %}
 {% endblock %}
 {% block content %}
 <div class="row">
@@ -27,7 +29,7 @@
 <hr class="p-rule">
 <div class="section-bar">
   <h2 class="p-heading--5 section-heading">Access keys</h2>
-  <a class="p-button is-dense u-no-margin--bottom" href="{{ url_for('srv.bucket_key_create', pool=pool, bucket=bucket.name) }}">Create key</a>
+  {% if allowed('srv.bucket_key_create') %}<a class="p-button is-dense u-no-margin--bottom" href="{{ url_for('srv.bucket_key_create', pool=pool, bucket=bucket.name) }}">Create key</a>{% endif %}
 </div>
 {% if keys %}
 <table aria-label="Access keys">
@@ -41,10 +43,12 @@
       <td class="nowrap"><code>{{ key['access-key'] }}</code></td>
       <td class="secret-cell"><code class="secret" data-secret="{{ key['secret-key'] }}">Hidden</code> <button type="button" class="p-button--base is-dense u-no-margin--bottom" data-reveal>Show</button></td>
       <td class="u-align--right">
-        <a class="p-button is-dense u-no-margin--bottom" href="{{ url_for('srv.bucket_key_edit', pool=pool, bucket=bucket.name, key=key.name) }}">Edit</a>
+        {% if allowed('srv.bucket_key_edit') %}<a class="p-button is-dense u-no-margin--bottom" href="{{ url_for('srv.bucket_key_edit', pool=pool, bucket=bucket.name, key=key.name) }}">Edit</a>{% endif %}
+        {% if allowed('srv.bucket_key_delete') %}
         <form class="inline" method="post" action="{{ url_for('srv.bucket_key_delete', pool=pool, bucket=bucket.name, key=key.name) }}" data-confirm="Delete key {{ key.name }}? Clients using it lose access.">
           {{ csrf() }}<button class="p-button--negative is-dense u-no-margin--bottom">Delete</button>
         </form>
+        {% endif %}
       </td>
     </tr>
   {% endfor %}

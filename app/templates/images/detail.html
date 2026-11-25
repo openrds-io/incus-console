@@ -5,11 +5,13 @@
 {% block heading %}{{ crumbs([('Images', url_for('srv.images')), (label, None)]) }}{% endblock %}
 {% block controls %}
 {% if image.type != 'virtual-machine' %}
-<a class="p-button--positive is-dense u-no-margin--bottom" href="{{ url_for('srv.instance_create', image=image.fingerprint) }}">Create container</a>
+{% if allowed('srv.instance_create') %}<a class="p-button--positive is-dense u-no-margin--bottom" href="{{ url_for('srv.instance_create', image=image.fingerprint) }}">Create container</a>{% endif %}
 {% endif %}
+{% if allowed('srv.image_delete') %}
 <form class="inline" method="post" action="{{ url_for('srv.image_delete', fingerprint=image.fingerprint) }}" data-confirm="Delete this image? Instances already made from it are not affected.">
   {{ csrf() }}<button class="p-button--negative is-dense u-no-margin--bottom">Delete</button>
 </form>
+{% endif %}
 {% endblock %}
 {% block content %}
 <div class="row">
@@ -43,9 +45,11 @@
           <td><code>{{ a.name }}</code></td>
           <td>{{ a.description or '' }}</td>
           <td class="u-align--right">
+            {% if allowed('srv.image_alias_delete') %}
             <form class="inline" method="post" action="{{ url_for('srv.image_alias_delete', fingerprint=image.fingerprint, alias=a.name) }}">
               {{ csrf() }}<button class="p-button--negative is-dense u-no-margin--bottom">Remove</button>
             </form>
+            {% endif %}
           </td>
         </tr>
       {% endfor %}
@@ -54,12 +58,14 @@
     {% else %}
     <p class="u-text--muted empty-state">No aliases. An alias lets you create containers from this image by name.</p>
     {% endif %}
+    {% if allowed('srv.image_alias_create') %}
     <form class="inline-form" method="post" action="{{ url_for('srv.image_alias_create', fingerprint=image.fingerprint) }}">
       {{ csrf() }}
       <input type="text" name="alias" placeholder="Alias, e.g. web-base" aria-label="Alias" required>
       <input type="text" name="description" placeholder="Description" aria-label="Description">
       <button class="p-button">Add alias</button>
     </form>
+    {% endif %}
   </div>
 </div>
 <hr class="p-rule">

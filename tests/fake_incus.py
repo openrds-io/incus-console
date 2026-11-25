@@ -45,6 +45,9 @@ class FakeIncus:
         self.buckets: dict[str, dict[str, dict]] = {"default": {}}
         self.tokens: set[str] = set()
         self.trusted: list[str] = []  # fingerprints enrolled with a token
+        self.certificates: dict[str, dict] = {}  # trust store entries added by fingerprint
+        self.tls_context = None  # set by serve_tls, so added certificates can connect
+        self.callers: list[str | None] = []  # client certificate fingerprint per request
         self.sessions: dict[str, dict] = {}  # terminal sessions by operation id
         self.calls: list[tuple[str, str]] = []
         self.images: dict[str, dict] = {}
@@ -300,7 +303,71 @@ class FakeIncus:
             self.calls.append((method, parts.path))
             if segments[0] != "1.0":
                 return self.error(404, "not found")
-            return self._route(method, segments[1:], query, body or {}, peer_cert)
+            peer_fp = hashlib.sha256(peer_cert).hexdigest() if peer_cert else None
+            self.callers.append(peer_fp)
+            caller = self.certificates.get(peer_fp)
+            if caller and caller["restricted"]:
+                refused = self._restricted(method, segments[1:], query, caller)
+                if refused:
+                    return refused
+            status, payload = self._route(method, segments[1:], query, body or {}, peer_cert)
+            if caller and caller["restricted"] and segments[1:] == ["projects"]:
+                payload["metadata"] = [
+                    p for p in payload["metadata"] if p["name"] in caller["projects"]
+                ]
+            return status, payload
+
+    def _restricted(self, method, seg, query, caller):
+        """What Incus refuses a restricted certificate (TLS authorization)."""
+        allowed = caller["projects"]
+        denied = self.error(403, "Certificate is restricted")
+        if seg[:1] == ["certificates"]:
+            return denied
+        if seg[:1] == ["projects"]:
+            if method != "GET" or (len(seg) > 1 and seg[1] not in allowed):
+                return denied
+            return None
+        if seg and query.get("project", "default") not in allowed:
+            return denied
+        return None
+
+    def _certificate_op(self, method, seg, body, peer_cert):
+        if method == "GET" and not seg:
+            return self.sync(list(self.certificates.values()))
+        if method == "POST" and not seg:
+            der = base64.b64decode(body["certificate"])
+            fp = hashlib.sha256(der).hexdigest()
+            if fp in self.certificates:
+                return self.error(409, "Certificate already in trust store")
+            pem = ssl.DER_cert_to_PEM_cert(der)
+            self.certificates[fp] = {
+                "name": body.get("name", ""),
+                "type": body.get("type", "client"),
+                "restricted": bool(body.get("restricted")),
+                "projects": list(body.get("projects") or []),
+                "certificate": pem,
+                "fingerprint": fp,
+            }
+            if self.tls_context is not None:
+                self.tls_context.load_verify_locations(cadata=der)
+            return self.sync()
+        fp = seg[0]
+        if fp not in self.certificates:
+            return self.error(404, "Certificate not found")
+        if method == "GET":
+            return self.sync(self.certificates[fp])
+        if method == "PUT":
+            entry = self.certificates[fp]
+            entry.update(
+                name=body.get("name", entry["name"]),
+                restricted=bool(body.get("restricted")),
+                projects=list(body.get("projects") or []),
+            )
+            return self.sync()
+        if method == "DELETE":
+            del self.certificates[fp]
+            return self.sync()
+        return self.error(405, "not allowed")
 
     def _route(self, method, seg, query, body, peer_cert):
         match (method, seg):
@@ -317,6 +384,8 @@ class FakeIncus:
                         },
                     }
                 )
+            case (_, ["certificates", *rest]) if "trust_token" not in body:
+                return self._certificate_op(method, rest, body, peer_cert)
             case ("POST", ["certificates"]):
                 if body.get("trust_token") not in self.tokens:
                     return self.error(403, "Invalid trust token")
@@ -1201,6 +1270,7 @@ def serve_tls(fake: FakeIncus, crt: str, key: str, client_ca: str | None = None)
         context.verify_mode = ssl.CERT_OPTIONAL
         context.load_verify_locations(client_ca)
     server.socket = context.wrap_socket(server.socket, server_side=True)
+    fake.tls_context = context
     threading.Thread(target=server.serve_forever, args=(0.05,), daemon=True).start()
     return server
 

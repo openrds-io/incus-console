@@ -2,7 +2,7 @@
 {% set live = true %}
 {% from "macros.html" import empty %}
 {% block title %}Profiles{% endblock %}
-{% block controls %}<a class="p-button--positive u-no-margin--bottom" href="{{ url_for('srv.profile_create') }}">Create profile</a>{% endblock %}
+{% block controls %}{% if allowed('srv.profile_create') %}<a class="p-button--positive u-no-margin--bottom" href="{{ url_for('srv.profile_create') }}">Create profile</a>{% endif %}{% endblock %}
 {% block content %}
 {% if profiles %}
 <table aria-label="Profiles">

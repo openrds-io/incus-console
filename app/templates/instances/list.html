@@ -3,7 +3,7 @@
 {% from "instances/_actions.html" import actions %}
 {% from "macros.html" import status, empty %}
 {% block title %}Instances{% endblock %}
-{% block controls %}<a class="p-button--positive u-no-margin--bottom" href="{{ url_for('srv.instance_create') }}">Create container</a>{% endblock %}
+{% block controls %}{% if allowed('srv.instance_create') %}<a class="p-button--positive u-no-margin--bottom" href="{{ url_for('srv.instance_create') }}">Create container</a>{% endif %}{% endblock %}
 {% block content %}
 {% if instances %}
 <p class="u-text--muted">Showing all {{ instances|length }} instance{{ '' if instances|length == 1 else 's' }}</p>

@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+{% from "macros.html" import crumbs, csrf %}
+{% block title %}Create user{% endblock %}
+{% block heading %}{{ crumbs([('Users', url_for('admin.users')), ('Create user', None)]) }}{% endblock %}
+{% block content %}
+<form method="post" class="narrow-form">
+  {{ csrf() }}
+  <label for="username">Username</label>
+  <input type="text" id="username" name="username" value="{{ form.username or '' }}" autocomplete="off" required autofocus>
+  <label for="password">Password</label>
+  <input type="password" id="password" name="password" autocomplete="new-password" required minlength="10">
+  <p class="p-form-help-text">At least 10 characters. The user can change it under Account.</p>
+  <label for="confirm">Password again</label>
+  <input type="password" id="confirm" name="confirm" autocomplete="new-password" required>
+  <label class="p-checkbox">
+    <input type="checkbox" class="p-checkbox__input" name="is_admin" value="1"{% if form.is_admin %} checked{% endif %}>
+    <span class="p-checkbox__label">Console admin: every server and project, plus users and settings</span>
+  </label>
+  <button class="p-button--positive">Create user</button>
+  <a class="p-button--base" href="{{ url_for('admin.users') }}">Cancel</a>
+</form>
+<p class="u-text--muted">Give the user access to servers and projects on the next page.</p>
+{% endblock %}

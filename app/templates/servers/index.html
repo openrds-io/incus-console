@@ -4,25 +4,30 @@
 {% block content %}
 {% if servers %}
 <table aria-label="Servers">
-  <thead><tr><th>Name</th><th>Connection</th><th>Address</th><th class="u-align--right">Actions</th></tr></thead>
+  <thead><tr><th>Name</th><th>Connection</th><th>Address</th>{% if is_admin() %}<th class="u-align--right">Actions</th>{% endif %}</tr></thead>
   <tbody>
   {% for s in servers %}
     <tr>
       <td><a href="{{ url_for('srv.instances', sid=s.id) }}">{{ s.name }}</a></td>
       <td>{{ 'Local socket' if s.kind == 'unix' else 'HTTPS' }}</td>
       <td><code>{{ s.address }}</code></td>
+      {% if is_admin() %}
       <td class="u-align--right">
         <form class="inline" method="post" action="{{ url_for('servers.delete', server_id=s.id) }}" data-confirm="Remove {{ s.name }} from this console?">
           {{ csrf() }}<button class="p-button--negative is-dense u-no-margin--bottom">Remove</button>
         </form>
       </td>
+      {% endif %}
     </tr>
   {% endfor %}
   </tbody>
 </table>
-{% else %}
+{% elif is_admin() %}
 {{ empty("No servers yet. Add one below.") }}
+{% else %}
+{{ empty("You do not have access to any servers yet. Ask a console admin to give you access.") }}
 {% endif %}
+{% if is_admin() %}
 
 {% if detected %}
 <h2 class="p-heading--4">Found on this machine</h2>
@@ -88,4 +93,5 @@
   </div>
 </div>
 <p class="p-text--small u-text--muted">This console's client certificate fingerprint: <code>{{ client_fingerprint }}</code></p>
+{% endif %}
 {% endblock %}

@@ -4,13 +4,15 @@
 {% block title %}{{ profile.name }}{% endblock %}
 {% block heading %}{{ crumbs([('Profiles', url_for('srv.profiles')), (profile.name, None)]) }}{% endblock %}
 {% block controls %}
-<a class="p-button is-dense u-no-margin--bottom" href="{{ url_for('srv.profile_create', copy_from=profile.name) }}">Copy</a>
+{% if allowed('srv.profile_create') %}<a class="p-button is-dense u-no-margin--bottom" href="{{ url_for('srv.profile_create', copy_from=profile.name) }}">Copy</a>{% endif %}
 {% if not is_default %}
-<a class="p-button is-dense u-no-margin--bottom" href="{{ url_for('srv.profile_rename', name=profile.name) }}">Rename</a>
+{% if allowed('srv.profile_rename') %}<a class="p-button is-dense u-no-margin--bottom" href="{{ url_for('srv.profile_rename', name=profile.name) }}">Rename</a>{% endif %}
+{% if allowed('srv.profile_delete') %}
 <form class="inline" method="post" action="{{ url_for('srv.profile_delete', name=profile.name) }}" data-confirm="Delete profile {{ profile.name }}?">
   {{ csrf() }}
   <button class="p-button--negative is-dense u-no-margin--bottom"{% if instances %} disabled title="Instances still use it"{% endif %}>Delete</button>
 </form>
+{% endif %}
 {% endif %}
 {% endblock %}
 {% block content %}
@@ -31,8 +33,8 @@
 <div class="row">
   <div class="col-3">
     <h2 class="p-heading--5 section-heading">Configuration</h2>
-    <a class="p-button is-dense" href="{{ url_for('srv.profile_settings', name=profile.name) }}">Edit settings</a>
-    <a class="p-button--base is-dense" href="{{ url_for('srv.profile_edit', name=profile.name) }}">Edit YAML</a>
+    {% if allowed('srv.profile_settings') %}<a class="p-button is-dense" href="{{ url_for('srv.profile_settings', name=profile.name) }}">Edit settings</a>{% endif %}
+    {% if allowed('srv.profile_edit') %}<a class="p-button--base is-dense" href="{{ url_for('srv.profile_edit', name=profile.name) }}">Edit YAML</a>{% endif %}
   </div>
   <div class="col-9">
     <table aria-label="Configuration">
@@ -51,7 +53,7 @@
 <div class="row">
   <div class="col-3">
     <h2 class="p-heading--5 section-heading">Devices</h2>
-    <a class="p-button is-dense" href="{{ url_for('srv.profile_device_create', name=profile.name) }}">Add device</a>
+    {% if allowed('srv.profile_device_create') %}<a class="p-button is-dense" href="{{ url_for('srv.profile_device_create', name=profile.name) }}">Add device</a>{% endif %}
   </div>
   <div class="col-9">
     <table aria-label="Devices">
@@ -63,9 +65,11 @@
           <td>{{ device.type }}</td>
           <td>{% for key, value in device|dictsort if key != 'type' %}<code>{{ key }}={{ value }}</code> {% endfor %}</td>
           <td class="u-align--right">
+            {% if allowed('srv.profile_device_delete') %}
             <form class="inline" method="post" action="{{ url_for('srv.profile_device_delete', name=profile.name, device=name) }}" data-confirm="Remove device {{ name }} from profile {{ profile.name }}? Every instance using the profile loses it.">
               {{ csrf() }}<button class="p-button--negative is-dense u-no-margin--bottom">Remove</button>
             </form>
+            {% endif %}
           </td>
         </tr>
       {% else %}

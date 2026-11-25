@@ -354,6 +354,20 @@ class IncusClient:
     def projects(self) -> list:
         return self.get("projects", recursion=1) or []
 
+    # -- trust store -------------------------------------------------------
+
+    def certificate(self, fingerprint: str) -> dict:
+        return self.get("certificates", fingerprint)
+
+    def add_certificate(self, payload: dict) -> dict:
+        return self.request("POST", path("certificates"), body=payload)
+
+    def update_certificate(self, fingerprint: str, payload: dict) -> dict:
+        return self.request("PUT", path("certificates", fingerprint), body=payload)
+
+    def delete_certificate(self, fingerprint: str) -> dict:
+        return self.request("DELETE", path("certificates", fingerprint))
+
     def project_details(self, name: str) -> dict:
         return self.get("projects", name)
 

@@ -12,6 +12,8 @@ CREATE TABLE IF NOT EXISTS users (
     id INTEGER PRIMARY KEY,
     username TEXT NOT NULL UNIQUE,
     password_hash TEXT NOT NULL,
+    is_admin INTEGER NOT NULL DEFAULT 0,
+    disabled INTEGER NOT NULL DEFAULT 0,
     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 CREATE TABLE IF NOT EXISTS tracked_operations (
@@ -34,6 +36,34 @@ CREATE TABLE IF NOT EXISTS servers (
     fingerprint TEXT,
     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
+CREATE TABLE IF NOT EXISTS grants (
+    id INTEGER PRIMARY KEY,
+    user_id INTEGER NOT NULL REFERENCES users (id) ON DELETE CASCADE,
+    server_id INTEGER NOT NULL REFERENCES servers (id) ON DELETE CASCADE,
+    project TEXT NOT NULL,
+    role TEXT NOT NULL CHECK (role IN ('viewer', 'operator', 'project_admin')),
+    UNIQUE (user_id, server_id, project)
+);
+CREATE TABLE IF NOT EXISTS user_certs (
+    user_id INTEGER NOT NULL REFERENCES users (id) ON DELETE CASCADE,
+    server_id INTEGER NOT NULL REFERENCES servers (id) ON DELETE CASCADE,
+    fingerprint TEXT NOT NULL,
+    projects TEXT NOT NULL,
+    synced_at REAL NOT NULL,
+    PRIMARY KEY (user_id, server_id)
+);
+CREATE TABLE IF NOT EXISTS audit (
+    id INTEGER PRIMARY KEY,
+    at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    username TEXT NOT NULL,
+    server_id INTEGER,
+    project TEXT,
+    action TEXT NOT NULL,
+    path TEXT NOT NULL,
+    status INTEGER NOT NULL,
+    outcome TEXT
+);
+CREATE INDEX IF NOT EXISTS audit_at ON audit (at);
 """
 
 
@@ -44,6 +74,7 @@ def path_for(data_dir: str) -> Path:
 def connect(data_dir: str) -> sqlite3.Connection:
     db = sqlite3.connect(path_for(data_dir), timeout=10)
     db.row_factory = sqlite3.Row
+    db.execute("PRAGMA foreign_keys = ON")
     return db
 
 
@@ -59,7 +90,26 @@ def _close(_exc=None) -> None:
         db.close()
 
 
+def _migrate(db: sqlite3.Connection) -> None:
+    columns = {row["name"] for row in db.execute("PRAGMA table_info(users)")}
+    if "is_admin" not in columns:
+        # Before roles existed every user could do everything; keep it that way
+        # for them until an admin says otherwise.
+        db.execute("ALTER TABLE users ADD COLUMN is_admin INTEGER NOT NULL DEFAULT 0")
+        db.execute("ALTER TABLE users ADD COLUMN disabled INTEGER NOT NULL DEFAULT 0")
+        db.execute("UPDATE users SET is_admin = 1")
+        db.commit()
+
+
 def init_app(app) -> None:
     app.teardown_appcontext(_close)
     with app.app_context():
-        get_db().executescript(SCHEMA)
+        db = get_db()
+        # Older databases: give users their new columns before the schema indexes them.
+        if db.execute("SELECT 1 FROM sqlite_master WHERE name = 'users'").fetchone():
+            _migrate(db)
+        db.executescript(SCHEMA)
+        keep = int(app.config.get("AUDIT_KEEP_DAYS") or 0)
+        if keep > 0:
+            db.execute("DELETE FROM audit WHERE at < datetime('now', ?)", (f"-{keep} days",))
+            db.commit()

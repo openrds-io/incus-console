@@ -11,6 +11,8 @@ from urllib.parse import unquote, urlsplit
 
 from flask import flash, g, redirect, render_template, request, session, url_for
 
+from .. import access, user_certs
+from ..db import get_db
 from ..incus import IncusError
 from .config_forms import apply_settings, dump_yaml, load_yaml, settings_fields
 from .scoped import bp, run
@@ -161,9 +163,32 @@ def _crumbs(name: str, last: str | None = None) -> list:
     return [*items, (name, url_for("srv.project_detail", name=name)), (last, None)]
 
 
+def _resync() -> None:
+    """Users' restricted certificates list projects by name; bring them up to date."""
+    problems = user_certs.sync_server(g.server)
+    if problems:
+        flash("Some users' certificates were not updated: " + "; ".join(problems), "error")
+
+
+def _grants_follow(old: str, new: str | None) -> None:
+    """Access given in a renamed project moves with it; in a deleted one it goes."""
+    db = get_db()
+    if new is None:
+        db.execute("DELETE FROM grants WHERE server_id = ? AND project = ?", (g.sid, old))
+    else:
+        db.execute(
+            "UPDATE OR REPLACE grants SET project = ? WHERE server_id = ? AND project = ?",
+            (new, g.sid, old),
+        )
+    db.commit()
+    _resync()
+
+
 @bp.get("/projects")
 def projects():
     rows = sorted(g.incus.projects(), key=lambda p: (p["name"] != DEFAULT, p["name"]))
+    shown = set(access.visible_projects(g.sid, [row["name"] for row in rows]))
+    rows = [row for row in rows if row["name"] in shown]
     for row in rows:
         row["counts"] = _used(row)
     return render_template("projects/list.html", rows=rows)
@@ -186,6 +211,7 @@ def project_create():
         else:
             payload = {"name": name, "description": description, "config": config}
             if run(lambda: g.incus.create_project(payload), f"Project {name} created."):
+                _resync()
                 return redirect(url_for("srv.project_detail", name=name))
     return render_template("projects/form.html", form=form, fields=_fields(config), creating=True)
 
@@ -312,6 +338,7 @@ def project_rename(name):
         elif run(lambda: g.incus.rename_project(name, new_name), f"{name} renamed to {new_name}."):
             if session.get(f"project:{g.sid}") == name:
                 session[f"project:{g.sid}"] = new_name
+            _grants_follow(name, new_name)
             return redirect(url_for("srv.project_detail", name=new_name))
     return render_template(
         "projects/rename.html", name=name, form=request.form, crumbs=_crumbs(name, "Rename")
@@ -325,5 +352,6 @@ def project_delete(name):
     elif run(lambda: g.incus.delete_project(name), f"Project {name} deleted."):
         if session.get(f"project:{g.sid}") == name:
             session[f"project:{g.sid}"] = DEFAULT
+        _grants_follow(name, None)
         return redirect(url_for("srv.projects"))
     return redirect(url_for("srv.project_detail", name=name))

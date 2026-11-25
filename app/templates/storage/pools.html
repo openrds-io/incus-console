@@ -15,7 +15,7 @@
       <td>{{ (pool.used_by or [])|length }}</td>
       <td>{{ status(pool.status) }}</td>
       <td class="u-align--right">
-        <a class="p-button is-dense u-no-margin--bottom" href="{{ url_for('srv.volume_create', pool=pool.name) }}">New volume</a>
+        {% if allowed('srv.volume_create') %}<a class="p-button is-dense u-no-margin--bottom" href="{{ url_for('srv.volume_create', pool=pool.name) }}">New volume</a>{% endif %}
         <a class="p-button is-dense u-no-margin--bottom" href="{{ url_for('srv.buckets', pool=pool.name) }}">Buckets</a>
       </td>
     </tr>

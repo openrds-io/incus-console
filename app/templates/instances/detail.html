@@ -6,15 +6,17 @@
 {% block heading %}{{ crumbs([('Instances', url_for('srv.instances')), (instance.name, None)]) }} <span class="title-status">{{ status(instance.status) }}</span>{% endblock %}
 {% block controls %}
 {{ actions(instance, 'detail') }}
-<a class="p-button is-dense u-no-margin--bottom" href="{{ url_for('srv.files', name=instance.name, path='/') }}">Files</a>
+{% if allowed('srv.files') %}<a class="p-button is-dense u-no-margin--bottom" href="{{ url_for('srv.files', name=instance.name, path='/') }}">Files</a>{% endif %}
 <a class="p-button is-dense u-no-margin--bottom" href="{{ url_for('srv.instance_logs', name=instance.name) }}">Logs</a>
-<a class="p-button is-dense u-no-margin--bottom" href="{{ url_for('srv.instance_copy', name=instance.name) }}">Copy</a>
-<a class="p-button is-dense u-no-margin--bottom" href="{{ url_for('srv.instance_publish', name=instance.name) }}">Publish</a>
-<a class="p-button is-dense u-no-margin--bottom" href="{{ url_for('srv.instance_rename', name=instance.name) }}">Rename</a>
+{% if allowed('srv.instance_copy') %}<a class="p-button is-dense u-no-margin--bottom" href="{{ url_for('srv.instance_copy', name=instance.name) }}">Copy</a>{% endif %}
+{% if allowed('srv.instance_publish') %}<a class="p-button is-dense u-no-margin--bottom" href="{{ url_for('srv.instance_publish', name=instance.name) }}">Publish</a>{% endif %}
+{% if allowed('srv.instance_rename') %}<a class="p-button is-dense u-no-margin--bottom" href="{{ url_for('srv.instance_rename', name=instance.name) }}">Rename</a>{% endif %}
+{% if allowed('srv.instance_delete') %}
 <form class="inline" method="post" action="{{ url_for('srv.instance_delete', name=instance.name) }}" data-confirm="Delete {{ instance.name }} and its snapshots? This cannot be undone.">
   {{ csrf() }}
   <button class="p-button--negative is-dense u-no-margin--bottom"{% if instance.status != 'Stopped' %} disabled title="Stop it first"{% endif %}>Delete</button>
 </form>
+{% endif %}
 {% endblock %}
 {% block content %}
 {% set state = instance.state or {} %}
@@ -52,7 +54,7 @@
 <div class="row">
   <div class="col-3">
     <h2 class="p-heading--5 section-heading">Snapshots</h2>
-    <a class="p-button is-dense" href="{{ url_for('srv.instance_settings', name=instance.name) }}">Schedule</a>
+    {% if allowed('srv.instance_settings') %}<a class="p-button is-dense" href="{{ url_for('srv.instance_settings', name=instance.name) }}">Schedule</a>{% endif %}
   </div>
   <div class="col-9">
     {% set cfg = instance.expanded_config or {} %}
@@ -67,12 +69,16 @@
           <td>{{ snap.created_at|when }}</td>
           <td>{{ snap.expires_at|when }}</td>
           <td class="u-align--right">
+            {% if allowed('srv.snapshot_restore') %}
             <form class="inline" method="post" action="{{ url_for('srv.snapshot_restore', name=instance.name, snapshot=snap.name) }}" data-confirm="Restore {{ instance.name }} to {{ snap.name }}? Changes made since then are lost.">
               {{ csrf() }}<button class="p-button is-dense u-no-margin--bottom">Restore</button>
             </form>
+            {% endif %}
+            {% if allowed('srv.snapshot_delete') %}
             <form class="inline" method="post" action="{{ url_for('srv.snapshot_delete', name=instance.name, snapshot=snap.name) }}" data-confirm="Delete snapshot {{ snap.name }}?">
               {{ csrf() }}<button class="p-button--negative is-dense u-no-margin--bottom">Delete</button>
             </form>
+            {% endif %}
           </td>
         </tr>
       {% endfor %}
@@ -81,19 +87,21 @@
     {% else %}
     {{ empty("No snapshots.") }}
     {% endif %}
+    {% if allowed('srv.snapshot_create') %}
     <form class="inline-form" method="post" action="{{ url_for('srv.snapshot_create', name=instance.name) }}">
       {{ csrf() }}
       <input type="text" name="snapshot" placeholder="Snapshot name" aria-label="Snapshot name" required>
       <button class="p-button">Take snapshot</button>
     </form>
+    {% endif %}
   </div>
 </div>
 <hr class="p-rule">
 <div class="row">
   <div class="col-3">
     <h2 class="p-heading--5 section-heading">Configuration</h2>
-    <a class="p-button is-dense" href="{{ url_for('srv.instance_settings', name=instance.name) }}">Edit settings</a>
-    <a class="p-button--base is-dense" href="{{ url_for('srv.instance_edit', name=instance.name) }}">Edit YAML</a>
+    {% if allowed('srv.instance_settings') %}<a class="p-button is-dense" href="{{ url_for('srv.instance_settings', name=instance.name) }}">Edit settings</a>{% endif %}
+    {% if allowed('srv.instance_edit') %}<a class="p-button--base is-dense" href="{{ url_for('srv.instance_edit', name=instance.name) }}">Edit YAML</a>{% endif %}
   </div>
   <div class="col-9">
     <table aria-label="Configuration">
@@ -112,7 +120,7 @@
 <div class="row">
   <div class="col-3">
     <h2 class="p-heading--5 section-heading">Devices</h2>
-    <a class="p-button is-dense" href="{{ url_for('srv.device_create', name=instance.name) }}">Add device</a>
+    {% if allowed('srv.device_create') %}<a class="p-button is-dense" href="{{ url_for('srv.device_create', name=instance.name) }}">Add device</a>{% endif %}
   </div>
   <div class="col-9">
     {% set local = instance.devices or {} %}
@@ -127,9 +135,11 @@
           <td>{{ 'This instance' if name in local else 'Profile' }}</td>
           <td class="u-align--right">
             {% if name in local %}
+            {% if allowed('srv.device_delete') %}
             <form class="inline" method="post" action="{{ url_for('srv.device_delete', name=instance.name, device=name) }}" data-confirm="Remove device {{ name }} from {{ instance.name }}?">
               {{ csrf() }}<button class="p-button--negative is-dense u-no-margin--bottom">Remove</button>
             </form>
+            {% endif %}
             {% endif %}
           </td>
         </tr>

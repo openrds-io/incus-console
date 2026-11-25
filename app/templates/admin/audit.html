@@ -1,0 +1,8 @@
+{% extends "base.html" %}
+{% from "macros.html" import crumbs %}
+{% block title %}Audit log{% endblock %}
+{% block heading %}{% if user %}{{ crumbs([('Audit log', url_for('admin.audit_log')), (user, None)]) }}{% else %}Audit log{% endif %}{% endblock %}
+{% block content %}
+<p class="u-text--muted">Changes made through this console, sign-ins and opened terminals, newest first. Changes made with the incus command or other tools are not here.</p>
+{% include "admin/_audit_table.html" %}
+{% endblock %}

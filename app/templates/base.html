@@ -73,6 +73,17 @@
                 <a class="p-side-navigation__link" href="{{ url_for('servers.index') }}"{% if here.startswith('servers.') %} aria-current="page"{% endif %}>Servers</a>
               </li>
               {% if server_mode and g.user %}
+              {% if is_admin() %}
+              <li class="p-side-navigation__item">
+                <a class="p-side-navigation__link" href="{{ url_for('admin.users') }}"{% if here.startswith('admin.user') or here.startswith('admin.grant') %} aria-current="page"{% endif %}>Users</a>
+              </li>
+              <li class="p-side-navigation__item">
+                <a class="p-side-navigation__link" href="{{ url_for('admin.audit_log') }}"{% if here == 'admin.audit_log' %} aria-current="page"{% endif %}>Audit log</a>
+              </li>
+              {% endif %}
+              <li class="p-side-navigation__item">
+                <a class="p-side-navigation__link" href="{{ url_for('account.account') }}"{% if here == 'account.account' %} aria-current="page"{% endif %}>Account</a>
+              </li>
               <li class="p-side-navigation__item">
                 <form method="post" action="{{ url_for('auth.logout') }}">
                   <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">

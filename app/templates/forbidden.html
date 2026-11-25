@@ -1,0 +1,9 @@
+{% extends "base.html" %}
+{% block title %}Not allowed{% endblock %}
+{% block content %}
+<div class="p-notification--caution">
+  <div class="p-notification__content"><p class="p-notification__message">Your access does not include this. A console admin can change what you can do.</p></div>
+</div>
+<a class="p-button" href="{{ url_for('servers.home') }}">Home</a>
+{% if server_mode %}<a class="p-button--base" href="{{ url_for('account.account') }}">Your access</a>{% endif %}
+{% endblock %}

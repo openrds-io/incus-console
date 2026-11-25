@@ -2,7 +2,7 @@
 {% set live = true %}
 {% from "macros.html" import empty %}
 {% block title %}Projects{% endblock %}
-{% block controls %}<a class="p-button--positive u-no-margin--bottom" href="{{ url_for('srv.project_create') }}">Create project</a>{% endblock %}
+{% block controls %}{% if allowed('srv.project_create') %}<a class="p-button--positive u-no-margin--bottom" href="{{ url_for('srv.project_create') }}">Create project</a>{% endif %}{% endblock %}
 {% block content %}
 {% if rows %}
 <table aria-label="Projects">

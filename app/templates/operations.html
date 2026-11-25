@@ -15,9 +15,11 @@
       <td>{{ status(op.status) }}</td>
       <td class="u-align--right">
         {% if op.may_cancel and op.status == 'Running' %}
+        {% if allowed('srv.operation_cancel') %}
         <form class="inline" method="post" action="{{ url_for('srv.operation_cancel', op_id=op.id) }}">
           {{ csrf() }}<button class="p-button is-dense u-no-margin--bottom">Cancel</button>
         </form>
+        {% endif %}
         {% endif %}
       </td>
     </tr>
