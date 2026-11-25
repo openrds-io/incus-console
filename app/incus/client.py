@@ -183,6 +183,149 @@ class IncusClient:
             raise IncusConnectionError(f"Cannot reach Incus at {where}: {exc}") from exc
         return response.status, raw
 
+    # -- raw requests (instance files) ----------------------------------------
+
+    def _open(self, method, url_path, *, params=None, body=None, headers=None, timeout=None):
+        """Send a request and return (connection, response) with the body unread.
+
+        The caller reads the response and closes the connection.
+        """
+        query = {"project": self.project, **(params or {})}
+        target = f"{url_path}?{urlencode(query)}"
+        all_headers = {"User-Agent": "incus-console", **(headers or {})}
+        try:
+            conn = self._connect(timeout or self.timeout)
+            conn.request(method, target, body=body, headers=all_headers)
+            return conn, conn.getresponse()
+        except IncusError:
+            raise
+        except (OSError, http.client.HTTPException) as exc:
+            where = self.socket_path or self.url
+            raise IncusConnectionError(f"Cannot reach Incus at {where}: {exc}") from exc
+
+    @staticmethod
+    def _error_from(status: int, raw: bytes) -> IncusError:
+        try:
+            message = json.loads(raw).get("error")
+        except (ValueError, AttributeError):
+            message = None
+        return IncusError(status, message or f"Incus returned HTTP {status}")
+
+    @staticmethod
+    def file_info_from(headers) -> dict:
+        """What the X-Incus-* headers say about a file."""
+
+        def number(name):
+            value = headers.get(name)
+            return int(value) if value and value.lstrip("-").isdigit() else None
+
+        mode = headers.get("X-Incus-Mode")
+        return {
+            "type": headers.get("X-Incus-Type", "file"),
+            "uid": number("X-Incus-Uid"),
+            "gid": number("X-Incus-Gid"),
+            "mode": int(mode, 8) if mode and mode.isdigit() else None,
+            "size": number("Content-Length"),
+            "modified": headers.get("X-Incus-Modified") or headers.get("Last-Modified"),
+        }
+
+    def file_info(self, name: str, file_path: str) -> dict:
+        conn, response = self._open(
+            "HEAD", path("instances", name, "files"), params={"path": file_path}
+        )
+        try:
+            raw = response.read()
+        finally:
+            conn.close()
+        if response.status >= 400:
+            if raw:
+                raise self._error_from(response.status, raw)
+            # HEAD answers usually carry no body, so no message from Incus.
+            if response.status == 404:
+                raise IncusError(404, f"{file_path} does not exist.")
+            raise IncusError(response.status, f"Incus returned HTTP {response.status}")
+        return self.file_info_from(response.headers)
+
+    def list_directory(self, name: str, dir_path: str) -> list[str]:
+        conn, response = self._open(
+            "GET", path("instances", name, "files"), params={"path": dir_path}
+        )
+        try:
+            raw = response.read()
+        finally:
+            conn.close()
+        if response.status >= 400:
+            raise self._error_from(response.status, raw)
+        if response.headers.get("X-Incus-Type") != "directory":
+            raise IncusError(400, f"{dir_path} is not a folder.")
+        return sorted(json.loads(raw).get("metadata") or [])
+
+    def open_file(self, name: str, file_path: str):
+        """GET a file for streaming: returns (info, response, connection).
+
+        Read the response in chunks, then close the connection.
+        """
+        conn, response = self._open(
+            "GET", path("instances", name, "files"), params={"path": file_path}, timeout=300
+        )
+        if response.status >= 400:
+            try:
+                raise self._error_from(response.status, response.read())
+            finally:
+                conn.close()
+        return self.file_info_from(response.headers), response, conn
+
+    def write_file(
+        self,
+        name: str,
+        file_path: str,
+        data,
+        length: int,
+        *,
+        mode: int | None = None,
+        uid: int | None = None,
+        gid: int | None = None,
+        kind: str = "file",
+    ) -> None:
+        """Create or overwrite a file (data: bytes or a binary file object), or a folder."""
+        headers = {
+            "Content-Type": "application/octet-stream",
+            "Content-Length": str(length),
+            "X-Incus-Type": kind,
+            "X-Incus-Write": "overwrite",
+        }
+        if mode is not None:
+            headers["X-Incus-Mode"] = f"{mode:04o}"
+        if uid is not None:
+            headers["X-Incus-Uid"] = str(uid)
+        if gid is not None:
+            headers["X-Incus-Gid"] = str(gid)
+        conn, response = self._open(
+            "POST",
+            path("instances", name, "files"),
+            params={"path": file_path},
+            body=data,
+            headers=headers,
+            timeout=600,
+        )
+        try:
+            raw = response.read()
+        finally:
+            conn.close()
+        if response.status >= 400:
+            raise self._error_from(response.status, raw)
+
+    def delete_file(self, name: str, file_path: str) -> None:
+        conn, response = self._open(
+            "DELETE", path("instances", name, "files"), params={"path": file_path}
+        )
+        try:
+            raw = response.read()
+        finally:
+            conn.close()
+        if response.status >= 400:
+            raise self._error_from(response.status, raw)
+
     def get(self, *segments: str, **params) -> object:
         return self.request("GET", path(*segments), params=params).get("metadata")
 

@@ -1,0 +1,27 @@
+{% extends "base.html" %}
+{% from "macros.html" import crumbs as crumb_links, csrf %}
+{% block title %}{{ file_path }} - {{ name }}{% endblock %}
+{% block heading %}{{ crumb_links(crumbs) }}{% endblock %}
+{% block controls %}
+<a class="p-button is-dense u-no-margin--bottom" href="{{ url_for('srv.file_download', name=name, path=file_path) }}">Download</a>
+<form class="inline" method="post" action="{{ url_for('srv.file_delete', name=name, path=file_path) }}" data-confirm="Delete {{ file_path }}? This cannot be undone.">
+  {{ csrf() }}<button class="p-button--negative is-dense u-no-margin--bottom">Delete</button>
+</form>
+{% endblock %}
+{% block content %}
+<p class="file-location"><code>{{ file_path }}</code>{% if info.size is not none %}, {{ info.size|filesize }}{% endif %}{% if info.mode is not none %}, permissions <code>{{ '%04o'|format(info.mode) }}</code>{% endif %}{% if info.uid is not none %}, owner {{ info.uid }}:{{ info.gid }}{% endif %}</p>
+{% if text is not none %}
+<form method="post" action="{{ url_for('srv.file_edit', name=name, path=file_path) }}">
+  {{ csrf() }}
+  <textarea class="code-editor" name="content" rows="28" spellcheck="false" aria-label="Contents of {{ file_path }}">{{ text }}</textarea>
+  <div class="form-buttons wide">
+    <a class="p-button--base" href="{{ url_for('srv.files', name=name, path=folder) }}">Back to folder</a>
+    <button class="p-button--positive">Save</button>
+  </div>
+</form>
+<p class="p-form-help-text">Saving keeps the file's owner and permissions.</p>
+{% else %}
+<div class="p-notification--information"><div class="p-notification__content"><p class="p-notification__message">{% if too_big %}This file is larger than 512 KiB, too big to show here.{% else %}This file is not text.{% endif %} Download it instead.</p></div></div>
+<a class="p-button--base" href="{{ url_for('srv.files', name=name, path=folder) }}">Back to folder</a>
+{% endif %}
+{% endblock %}

@@ -6,6 +6,7 @@
 {% block heading %}{{ crumbs([('Instances', url_for('srv.instances')), (instance.name, None)]) }} <span class="title-status">{{ status(instance.status) }}</span>{% endblock %}
 {% block controls %}
 {{ actions(instance, 'detail') }}
+<a class="p-button is-dense u-no-margin--bottom" href="{{ url_for('srv.files', name=instance.name, path='/') }}">Files</a>
 <a class="p-button is-dense u-no-margin--bottom" href="{{ url_for('srv.instance_logs', name=instance.name) }}">Logs</a>
 <a class="p-button is-dense u-no-margin--bottom" href="{{ url_for('srv.instance_copy', name=instance.name) }}">Copy</a>
 <a class="p-button is-dense u-no-margin--bottom" href="{{ url_for('srv.instance_publish', name=instance.name) }}">Publish</a>

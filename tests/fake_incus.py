@@ -50,6 +50,8 @@ class FakeIncus:
         self.images: dict[str, dict] = {}
         self.op_done: dict[str, threading.Event] = {}
         self.subscribers: list = []  # /1.0/events websockets
+        self.fs: dict[str, dict] = {}  # instance files, by instance
+        self.writes: list = []  # (path, headers) of file writes
         self.volumes: dict[str, dict[str, dict]] = {}
         self.ended: dict[str, dict] = {}  # how finished operations ended
         self.forwards: dict[str, dict] = {"incusbr0": {}}
@@ -496,6 +498,97 @@ class FakeIncus:
         with self.lock:
             self.operations.pop(op_id, None)
             self.op_done.setdefault(op_id, threading.Event()).set()
+
+    # -- instance files ------------------------------------------------------
+
+    def filesystem(self, name):
+        """The instance's files: {path: {"type", "content", "mode", "uid", "gid"}}."""
+        if name not in self.fs:
+            entry = lambda kind, content=b"", mode=0o644: {  # noqa: E731
+                "type": kind,
+                "content": content,
+                "mode": 0o755 if kind == "directory" else mode,
+                "uid": 0,
+                "gid": 0,
+            }
+            self.fs[name] = {
+                "/": entry("directory"),
+                "/etc": entry("directory"),
+                "/etc/hostname": entry("file", f"{name}\n".encode()),
+                "/etc/motd": entry("file", b"Welcome <b>here</b>\n"),
+                "/root": entry("directory"),
+                "/usr": entry("directory"),
+                "/usr/bin": entry("directory"),
+                "/usr/bin/true": entry("file", b"\x7fELF\0\0binary", 0o755),
+                "/bin": entry("symlink", b"usr/bin", 0o777),
+            }
+        return self.fs[name]
+
+    def files(self, method, name, file_path, body, headers):
+        """The /1.0/instances/<name>/files endpoint: (status, body, headers)."""
+
+        def error(code, message):
+            data = json.dumps({"type": "error", "error_code": code, "error": message}).encode()
+            return code, data, {"Content-Type": "application/json"}
+
+        with self.lock:
+            self.calls.append((method, f"/1.0/instances/{name}/files?path={file_path}"))
+            if name not in self.instances:
+                return error(404, "Instance not found")
+            fs = self.filesystem(name)
+            entry = fs.get(file_path)
+            meta = (
+                {
+                    "X-Incus-Type": entry["type"],
+                    "X-Incus-Uid": str(entry["uid"]),
+                    "X-Incus-Gid": str(entry["gid"]),
+                    "X-Incus-Mode": f"{entry['mode']:04o}",
+                }
+                if entry
+                else {}
+            )
+            match method:
+                case "HEAD" | "GET":
+                    if entry is None:
+                        return error(404, "Not found")
+                    if entry["type"] == "directory":
+                        prefix = file_path.rstrip("/") + "/"
+                        children = sorted(
+                            p[len(prefix) :]
+                            for p in fs
+                            if p.startswith(prefix) and p != prefix and "/" not in p[len(prefix) :]
+                        )
+                        data = json.dumps(
+                            {"type": "sync", "status": "Success", "metadata": children}
+                        ).encode()
+                        return 200, data, {**meta, "Content-Type": "application/json"}
+                    content = entry["content"]
+                    return 200, content, {**meta, "Content-Type": "application/octet-stream"}
+                case "POST":
+                    parent = file_path.rsplit("/", 1)[0] or "/"
+                    if fs.get(parent, {}).get("type") != "directory":
+                        return error(404, "Parent folder does not exist")
+                    kind = headers.get("X-Incus-Type", "file")
+                    if entry and entry["type"] != kind:
+                        return error(400, "Path exists with a different type")
+                    fs[file_path] = {
+                        "type": kind,
+                        "content": body if kind == "file" else b"",
+                        "mode": int(headers.get("X-Incus-Mode") or "644", 8),
+                        "uid": int(headers.get("X-Incus-Uid") or 0),
+                        "gid": int(headers.get("X-Incus-Gid") or 0),
+                    }
+                    self.writes.append((file_path, dict(headers)))
+                    return 200, json.dumps({"type": "sync", "metadata": {}}).encode(), {}
+                case "DELETE":
+                    if entry is None:
+                        return error(404, "Not found")
+                    prefix = file_path.rstrip("/") + "/"
+                    if entry["type"] == "directory" and any(p.startswith(prefix) for p in fs):
+                        return error(400, "Directory not empty")
+                    del fs[file_path]
+                    return 200, json.dumps({"type": "sync", "metadata": {}}).encode(), {}
+        return error(405, "Method not allowed")
 
     def add_image(self, description="", aliases=(), kind="container"):
         fingerprint = secrets.token_hex(32)
@@ -952,9 +1045,29 @@ class _Handler(http.server.BaseHTTPRequestHandler):
         self.close_connection = True
         self.server.fake.websocket(self.path, _WebSocket(self.rfile, self.wfile))
 
+    def _serve_file(self, name):
+        length = int(self.headers.get("Content-Length") or 0)
+        body = self.rfile.read(length) if length else b""
+        query = {k: v[0] for k, v in parse_qs(urlsplit(self.path).query).items()}
+        status, data, headers = self.server.fake.files(
+            self.command, name, query.get("path", ""), body, self.headers
+        )
+        self.send_response(status)
+        for key, value in headers.items():
+            self.send_header(key, value)
+        self.send_header("Content-Length", str(headers.get("Content-Length", len(data))))
+        self.send_header("Connection", "close")
+        self.end_headers()
+        if self.command != "HEAD":
+            self.wfile.write(data)
+        self.close_connection = True
+
     def _serve(self):
         if self.headers.get("Upgrade", "").lower() == "websocket":
             return self._upgrade()
+        parts = urlsplit(self.path).path.split("/")
+        if len(parts) == 5 and parts[2] == "instances" and parts[4] == "files":
+            return self._serve_file(unquote(parts[3]))
         length = int(self.headers.get("Content-Length") or 0)
         body = json.loads(self.rfile.read(length)) if length else None
         peer = None
@@ -973,7 +1086,7 @@ class _Handler(http.server.BaseHTTPRequestHandler):
         self.wfile.write(data)
         self.close_connection = True
 
-    do_GET = do_POST = do_PUT = do_PATCH = do_DELETE = _serve
+    do_GET = do_POST = do_PUT = do_PATCH = do_DELETE = do_HEAD = _serve
 
     def log_message(self, *args):  # keep test output quiet
         pass

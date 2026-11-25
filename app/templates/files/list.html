@@ -1,0 +1,66 @@
+{% extends "base.html" %}
+{% from "macros.html" import crumbs as crumb_links, csrf, empty %}
+{% block title %}Files - {{ name }}{% endblock %}
+{% block heading %}{{ crumb_links(crumbs) }}{% endblock %}
+{% block controls %}
+{% if parent is not none %}<a class="p-button is-dense u-no-margin--bottom" href="{{ url_for('srv.files', name=name, path=parent) }}">Up one folder</a>{% endif %}
+{% endblock %}
+{% block content %}
+<p class="file-location"><code>{{ folder }}</code> on {{ name }}{% if instance.status != 'Running' %} ({{ instance.status|lower }}){% endif %}</p>
+{% if entries %}
+<table aria-label="Files">
+  <thead><tr><th>Name</th><th>Size</th><th>Permissions</th><th>Owner</th><th class="u-align--right">Actions</th></tr></thead>
+  <tbody>
+  {% for e in entries %}
+    <tr>
+      <td>
+        {% if e.type == 'directory' %}
+        <a class="file-name is-folder" href="{{ url_for('srv.files', name=name, path=e.path) }}">{{ e.name }}/</a>
+        {% elif e.type == 'file' %}
+        <a class="file-name" href="{{ url_for('srv.file_view', name=name, path=e.path) }}">{{ e.name }}</a>
+        {% else %}
+        <span class="file-name">{{ e.name }}</span> <span class="u-text--muted">({{ 'link' if e.type == 'symlink' else e.type }})</span>
+        {% endif %}
+      </td>
+      <td>{{ e.size|filesize if e.type == 'file' else '' }}</td>
+      <td><code>{{ '%04o'|format(e.mode) if e.mode is not none else '' }}</code></td>
+      <td>{% if e.uid is not none %}{{ e.uid }}:{{ e.gid }}{% endif %}</td>
+      <td class="u-align--right">
+        {% if e.type == 'file' %}
+        <a class="p-button is-dense u-no-margin--bottom" href="{{ url_for('srv.file_download', name=name, path=e.path) }}">Download</a>
+        {% endif %}
+        {% if e.type in ('file', 'directory', 'symlink') %}
+        <form class="inline" method="post" action="{{ url_for('srv.file_delete', name=name, path=e.path) }}" data-confirm="Delete {{ e.path }}?{% if e.type == 'directory' %} Only empty folders can be deleted.{% endif %} This cannot be undone.">
+          {{ csrf() }}<button class="p-button--negative is-dense u-no-margin--bottom">Delete</button>
+        </form>
+        {% endif %}
+      </td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% if more %}<p class="p-form-help-text">{{ more }} more entries are not shown. Use the Terminal for large folders.</p>{% endif %}
+{% else %}
+{{ empty("This folder is empty.") }}
+{% endif %}
+
+<div class="row">
+  <div class="col-6">
+    <h2 class="p-heading--5">Upload files here</h2>
+    <form class="inline-form" method="post" action="{{ url_for('srv.file_upload', name=name, path=folder) }}" enctype="multipart/form-data">
+      {{ csrf() }}
+      <input type="file" name="files" multiple required aria-label="Files to upload">
+      <button class="p-button--positive">Upload</button>
+    </form>
+    <p class="p-form-help-text">Files with the same name are replaced. New files belong to root, with permissions 0644.</p>
+  </div>
+  <div class="col-6">
+    <h2 class="p-heading--5">New folder</h2>
+    <form class="inline-form" method="post" action="{{ url_for('srv.file_mkdir', name=name, path=folder) }}">
+      {{ csrf() }}
+      <input type="text" name="folder" placeholder="Folder name" aria-label="Folder name" required>
+      <button class="p-button">Create folder</button>
+    </form>
+  </div>
+</div>
+{% endblock %}

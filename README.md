@@ -17,6 +17,8 @@ Early scaffold. Working today:
   for limits and common options, adding and removing devices, and full
   configuration editing as YAML; creating from the image server's catalog,
   with a storage pool and cloud-init user data
+- Files: browse a container's folders, view and edit text files, download,
+  upload, create folders and delete
 - Profiles: list, create (empty or as a copy), settings form, devices, YAML,
   rename, delete
 - Images: list, details, aliases, delete, and publishing a stopped container as
@@ -131,6 +133,8 @@ location / {
     proxy_set_header Upgrade $http_upgrade;
     proxy_set_header Connection "upgrade";
     proxy_read_timeout 1h;
+    # file browser uploads (MAX_CONTENT_LENGTH, default 1 GiB)
+    client_max_body_size 1g;
 }
 ```
 

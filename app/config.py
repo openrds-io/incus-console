@@ -19,6 +19,10 @@ DATA_DIR = "~/.incus-console"
 SESSION_COOKIE_NAME = "incus_console_session"
 SESSION_COOKIE_SAMESITE = "Lax"
 
+# Largest request body, i.e. the most one file-browser upload may send (bytes).
+# Behind nginx, raise client_max_body_size to match.
+MAX_CONTENT_LENGTH = 1024 * 1024 * 1024
+
 # Seconds allowed for one Incus API call.
 INCUS_TIMEOUT = 30
 

@@ -363,3 +363,15 @@ table.credentials code {
   padding: 0;
   background: none;
 }
+
+/* File browser. */
+.file-location {
+  color: #666;
+}
+.file-location code {
+  padding: 0;
+  background: none;
+}
+.file-name.is-folder {
+  font-weight: 550;
+}
