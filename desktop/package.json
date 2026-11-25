@@ -1,7 +1,7 @@
 {
   "name": "incus-console-desktop",
   "productName": "Incus Console",
-  "version": "26.11.1",
+  "version": "26.11.2",
   "description": "Desktop app for incus-console: a lean console for Incus",
   "license": "Apache-2.0",
   "author": "OpenRDS",

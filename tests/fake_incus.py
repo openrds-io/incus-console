@@ -31,6 +31,8 @@ class FakeIncus:
 
     def __init__(self):
         self.lock = threading.RLock()
+        # Clear to act like an Incus without OCI application containers.
+        self.extensions = ["instance_oci", "instance_oci_entrypoint"]
         self.instances: dict[str, dict] = {}
         self.operations: dict[str, dict] = {}
         self.pools = {
@@ -375,6 +377,7 @@ class FakeIncus:
                 return self.sync(
                     {
                         "api_version": "1.0",
+                        "api_extensions": list(self.extensions),
                         "auth": "trusted",
                         "config": {"core.storage_buckets_address": ":8555"},
                         "environment": {
@@ -502,11 +505,29 @@ class FakeIncus:
                         copied["snapshots"] = []
                     self.instances[name] = copied
                     return self.start_op(f"Creating instance {name}")
+                if source.get("protocol") == "oci" and "instance_oci" not in self.extensions:
+                    return self.error(400, "Unsupported protocol: oci")
                 self.created.append(json.loads(json.dumps(body)))
                 alias = body.get("source", {}).get("alias") or "local image"
+                oci = source.get("protocol") == "oci"
+                if oci:
+                    registry = source.get("server", "").removeprefix("https://")
+                    alias = f"{registry}/{alias} (OCI)"
                 self.add_instance(name, "Running" if body.get("start") else "Stopped", image=alias)
                 created = self.instances[name]
                 created["profiles"] = body.get("profiles") or ["default"]
+                if oci:
+                    # What Incus records from the image's own config.
+                    created["config"].update(
+                        {
+                            "image.type": "oci",
+                            "volatile.container.oci": "true",
+                            "oci.entrypoint": "/docker-entrypoint.sh nginx -g 'daemon off;'",
+                            "oci.cwd": "/",
+                            "oci.uid": "0",
+                            "oci.gid": "0",
+                        }
+                    )
                 created["config"].update(body.get("config") or {})
                 created["description"] = body.get("description", "")
                 return self.start_op(f"Creating instance {name}")

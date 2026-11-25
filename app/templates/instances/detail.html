@@ -25,7 +25,7 @@
   <div class="col-9">
     <table class="facts" aria-label="General">
       <tbody>
-        <tr><th>Type</th><td>{{ 'Virtual machine' if instance.type == 'virtual-machine' else 'System container' }}</td></tr>
+        <tr><th>Type</th><td>{{ kind_labels[instance|instance_kind] }}</td></tr>
         <tr><th>Description</th><td>{{ instance.description or '-' }}</td></tr>
         <tr><th>Image</th><td>{{ (instance.config or {}).get('image.description', '-') }}</td></tr>
         <tr><th>Architecture</th><td>{{ instance.architecture or '-' }}</td></tr>
@@ -36,6 +36,28 @@
     </table>
   </div>
 </div>
+{% if instance|instance_kind == 'oci' %}
+{% set cfg_local = instance.config or {} %}
+{% set env_names = cfg_local|environment_names %}
+<hr class="p-rule">
+<div class="row">
+  <div class="col-3">
+    <h2 class="p-heading--5 section-heading">Application</h2>
+    {% if allowed('srv.instance_settings') %}<a class="p-button is-dense" href="{{ url_for('srv.instance_settings', name=instance.name) }}">Settings</a>{% endif %}
+  </div>
+  <div class="col-9">
+    <table class="facts" aria-label="Application">
+      <tbody>
+        <tr><th>Command</th><td><code>{{ cfg_local.get('oci.entrypoint') or '-' }}</code></td></tr>
+        <tr><th>Working directory</th><td>{{ cfg_local.get('oci.cwd') or '-' }}</td></tr>
+        <tr><th>User and group</th><td>{{ cfg_local.get('oci.uid', '0') }}:{{ cfg_local.get('oci.gid', '0') }}</td></tr>
+        <tr><th>Environment</th><td>{% for env in env_names %}<code>{{ env }}</code>{{ ' ' if not loop.last }}{% else %}-{% endfor %}</td></tr>
+      </tbody>
+    </table>
+    {% if env_names and not allowed('srv.instance_settings') %}<p class="p-text--small u-text--muted">Environment values often hold passwords, so only project admins see them.</p>{% endif %}
+  </div>
+</div>
+{% endif %}
 <hr class="p-rule">
 <div class="row">
   <div class="col-3"><h2 class="p-heading--5 section-heading">Usage</h2></div>
@@ -108,7 +130,7 @@
       <thead><tr><th>Key</th><th>Value</th></tr></thead>
       <tbody>
       {% for key, value in (instance.expanded_config or instance.config or {})|dictsort if not key.startswith(('volatile.', 'image.')) %}
-        <tr><td><code>{{ key }}</code></td><td>{{ value }}</td></tr>
+        <tr><td><code>{{ key }}</code></td><td>{% if key.startswith('environment.') and not allowed('srv.instance_settings') %}<span class="u-text--muted">Hidden</span>{% else %}{{ value }}{% endif %}</td></tr>
       {% else %}
         <tr><td colspan="2" class="u-text--muted">Nothing set beyond the defaults.</td></tr>
       {% endfor %}

@@ -10,6 +10,12 @@
   <label for="description">Description</label>
   <input type="text" id="description" name="description" value="{{ description }}">
   {{ settings_inputs(fields) }}
+  {% if environment is defined %}
+  <h3 class="p-heading--5 settings-group">Environment</h3>
+  <label for="environment">Variables <code class="key-name">environment.*</code></label>
+  <textarea class="code-editor" id="environment" name="environment" rows="4" spellcheck="false" placeholder="NAME=value">{{ environment }}</textarea>
+  <p class="p-form-help-text">One <code>NAME=value</code> per line. Set when the instance starts and for terminals; restart to apply.</p>
+  {% endif %}
   <div class="form-buttons">
     <a class="p-button--base" href="{{ back }}">Cancel</a>
     <button class="p-button--positive">Save</button>

@@ -6,13 +6,20 @@ from urllib.parse import urlsplit
 from flask import current_app, flash, g, redirect, render_template, request, url_for
 
 from .. import catalog, terminal
+from ..filters import instance_kind
 from ..incus import IncusError
 from .config_forms import (
     DEVICE_TYPES,
+    GROUPS,
+    OCI_SETTINGS,
+    SETTINGS,
+    apply_environment,
     apply_settings,
     dump_yaml,
+    environment_text,
     load_yaml,
     new_device,
+    parse_environment,
     settings_fields,
 )
 from .scoped import DONE, RUNNING, bp, run, start
@@ -49,28 +56,76 @@ def _catalog() -> tuple[list, str | None]:
     return groups, None
 
 
+KINDS = ("container", "oci")
+OCI_IMAGE = re.compile(r"[a-z0-9][a-z0-9._/-]*(:[A-Za-z0-9._-]+)?(@sha256:[a-f0-9]{64})?")
+
+
+def supports_oci() -> bool:
+    return "instance_oci" in (g.incus.server_info().get("api_extensions") or [])
+
+
+def oci_source(reference: str, default_registry: str) -> tuple[str, str]:
+    """(registry URL, image) from ``nginx:alpine`` or ``ghcr.io/owner/app:tag``."""
+    reference = reference.strip().removeprefix("docker://").removeprefix("https://")
+    first, slash, rest = reference.partition("/")
+    if slash and ("." in first or ":" in first or first == "localhost"):
+        return f"https://{first}", rest
+    return default_registry.rstrip("/"), reference
+
+
+def _is_oci_image(image: dict) -> bool:
+    return (image.get("properties") or {}).get("type") == "oci"
+
+
 @bp.route("/create-instance", methods=["GET", "POST"])
 def instance_create():
     config = current_app.config
-    groups, catalog_problem = _catalog()
     form = request.form
+    images = g.incus.images()
+    image = request.args.get("image", "")
+    picked = next((i for i in images if i["fingerprint"] == image), None)
+    kind = form.get("kind") or request.args.get("type", "")
+    if kind not in KINDS:
+        kind = "oci" if picked and _is_oci_image(picked) else "container"
+    oci_ok = supports_oci()
+    groups, catalog_problem = _catalog() if kind == "container" else ([], None)
     if request.method == "POST":
         name = form.get("name", "").strip()
+        chosen = form.get("source", "catalog" if kind == "container" else "remote")
         source = {"type": "image"}
-        chosen = form.get("source", "catalog")
-        if chosen == "local":
-            source["fingerprint"] = form.get("fingerprint", "")
-        else:
-            alias = form.get("catalog_alias" if chosen == "catalog" else "alias", "").strip()
-            server = config["DEFAULT_IMAGE_SERVER"]
-            if chosen == "remote":
-                server = form.get("image_server", "").strip() or server
-            source.update(mode="pull", protocol="simplestreams", server=server, alias=alias)
+        problem = None
         settings = {
             "limits.cpu": form.get("cpu", "").strip(),
             "limits.memory": form.get("memory", "").strip(),
-            "cloud-init.user-data": form.get("user_data", "").strip(),
         }
+        if kind == "oci":
+            if not oci_ok:
+                problem = "This server cannot run application containers (Incus 6.3 or later)."
+            elif chosen == "local":
+                source["fingerprint"] = form.get("fingerprint", "")
+            else:
+                server, alias = oci_source(form.get("oci_image", ""), config["OCI_REGISTRY"])
+                if not alias:
+                    problem = "Choose an image."
+                elif not OCI_IMAGE.fullmatch(alias):
+                    problem = f"{alias!r} is not an image name, such as nginx:alpine."
+                source.update(mode="pull", protocol="oci", server=server, alias=alias)
+            try:
+                settings.update(parse_environment(form.get("environment", "")))
+            except IncusError as error:
+                problem = problem or error.message
+        else:
+            settings["cloud-init.user-data"] = form.get("user_data", "").strip()
+            if chosen == "local":
+                source["fingerprint"] = form.get("fingerprint", "")
+            else:
+                alias = form.get("catalog_alias" if chosen == "catalog" else "alias", "").strip()
+                server = config["DEFAULT_IMAGE_SERVER"]
+                if chosen == "remote":
+                    server = form.get("image_server", "").strip() or server
+                source.update(mode="pull", protocol="simplestreams", server=server, alias=alias)
+                if not alias:
+                    problem = "Choose an image."
         payload = {
             "name": name,
             "type": "container",
@@ -85,27 +140,32 @@ def instance_create():
             payload["devices"] = {"root": {"type": "disk", "path": "/", "pool": pool}}
         if not NAME.fullmatch(name):
             flash(NAME_RULE, "error")
-        elif chosen != "local" and not source["alias"]:
-            flash("Choose an image.", "error")
+        elif problem:
+            flash(problem, "error")
         else:
             # Incus makes the instance only after fetching the image, so while that
             # is still running there is no instance page to show yet.
-            outcome = start(lambda: g.incus.create_instance(payload), f"Container {name} created.")
+            what = "Application container" if kind == "oci" else "Container"
+            outcome = start(lambda: g.incus.create_instance(payload), f"{what} {name} created.")
             if outcome == DONE:
                 return redirect(url_for("srv.instance", name=name))
             if outcome == RUNNING:
                 return redirect(url_for("srv.operations"))
-    image = request.args.get("image", "")
-    default_source = "local" if image else ("catalog" if groups else "remote")
+    local = [i for i in images if _is_oci_image(i) == (kind == "oci")]
+    default_source = "local" if picked else ("catalog" if groups else "remote")
     return render_template(
         "instances/new.html",
+        kind=kind,
+        oci_ok=oci_ok,
         profiles=[p["name"] for p in g.incus.profiles()],
         pools=[p["name"] for p in g.incus.pools()],
-        images=g.incus.images(),
+        images=local,
         groups=groups,
         catalog_problem=catalog_problem,
         image_server=config["DEFAULT_IMAGE_SERVER"],
         suggestions=config["IMAGE_SUGGESTIONS"],
+        oci_registry=config["OCI_REGISTRY"],
+        oci_suggestions=config["OCI_SUGGESTIONS"],
         default_source=default_source,
         default_alias=config["IMAGE_SUGGESTIONS"][0],
         default_image=image,
@@ -198,7 +258,12 @@ def instance_terminal(name):
 
 
 def instance_terminal_ws(name):
-    return terminal.relay(g.incus, name, current_app.config["TERMINAL_COMMAND"])
+    try:
+        oci = instance_kind(g.incus.instance(name)) == "oci"
+    except IncusError:
+        oci = False  # the relay tells the browser what is wrong
+    command = current_app.config["TERMINAL_COMMAND_OCI" if oci else "TERMINAL_COMMAND"]
+    return terminal.relay(g.incus, name, command)
 
 
 bp.add_url_rule(
@@ -308,14 +373,20 @@ def _crumbs(instance: dict, last: str) -> list:
 @bp.route("/instances/<name>/settings", methods=["GET", "POST"])
 def instance_settings(name):
     instance = g.incus.instance(name)
+    settings = OCI_SETTINGS + SETTINGS if instance_kind(instance) == "oci" else SETTINGS
+    environment = environment_text(instance.get("config"))
     if request.method == "POST":
         payload = _editable(instance)
         payload["description"] = request.form.get("description", "").strip()
+        environment = request.form.get("environment", "")
         try:
-            payload["config"] = apply_settings(payload.get("config"), request.form)
+            config = apply_settings(payload.get("config"), request.form, settings)
+            payload["config"] = apply_environment(config, environment)
         except IncusError as error:
             flash(error.message, "error")
-            payload["config"] = apply_settings(payload.get("config"), request.form, check=False)
+            payload["config"] = apply_settings(
+                payload.get("config"), request.form, settings, check=False
+            )
         else:
             if _save(name, payload, f"{name} updated."):
                 return redirect(url_for("srv.instance", name=name))
@@ -327,7 +398,10 @@ def instance_settings(name):
         back=url_for("srv.instance", name=name),
         yaml_href=url_for("srv.instance_edit", name=name),
         description=instance.get("description") or "",
-        fields=settings_fields(instance.get("config"), instance.get("expanded_config")),
+        fields=settings_fields(
+            instance.get("config"), instance.get("expanded_config"), settings, groups=GROUPS
+        ),
+        environment=environment,
         inherits=True,
     )
 

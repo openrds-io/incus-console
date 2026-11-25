@@ -1,15 +1,64 @@
 {% extends "base.html" %}
 {% from "macros.html" import crumbs, csrf %}
-{% block title %}Create container{% endblock %}
-{% block heading %}{{ crumbs([('Instances', url_for('srv.instances')), ('Create container', None)]) }}{% endblock %}
+{% set heading = 'Create application container' if kind == 'oci' else 'Create container' %}
+{% block title %}{{ heading }}{% endblock %}
+{% block heading %}{{ crumbs([('Instances', url_for('srv.instances')), (heading, None)]) }}{% endblock %}
 {% block content %}
+<nav class="p-tabs" aria-label="Instance type">
+  <ul class="p-tabs__list">
+    <li class="p-tabs__item"><a class="p-tabs__link" href="{{ url_for('srv.instance_create') }}"{% if kind == 'container' %} aria-selected="true"{% endif %}>System container</a></li>
+    <li class="p-tabs__item"><a class="p-tabs__link" href="{{ url_for('srv.instance_create', type='oci') }}"{% if kind == 'oci' %} aria-selected="true"{% endif %}>Application container (OCI)</a></li>
+  </ul>
+</nav>
+{% if kind == 'oci' and not oci_ok %}
+<div class="p-notification--caution"><div class="p-notification__content"><p class="p-notification__message">This server cannot run application containers. They need Incus 6.3 or later, with <code>skopeo</code> and <code>umoci</code> installed on the server.</p></div></div>
+{% else %}
 <form class="narrow-form" method="post">
   {{ csrf() }}
+  <input type="hidden" name="kind" value="{{ kind }}">
   <label for="name">Name</label>
   <input type="text" id="name" name="name" value="{{ form.get('name', '') }}" required autofocus pattern="[A-Za-z][A-Za-z0-9\-]*" title="Letters, digits and dashes, starting with a letter">
   <label for="description">Description</label>
   <input type="text" id="description" name="description" value="{{ form.get('description', '') }}">
 
+  {% if kind == 'oci' %}
+  {% set source = form.get('source', default_source) %}
+  <fieldset>
+    <legend>Image</legend>
+    {% if images %}
+    <label class="p-radio">
+      <input type="radio" class="p-radio__input" name="source" value="remote"{% if source != 'local' %} checked{% endif %}>
+      <span class="p-radio__label">From a registry</span>
+    </label>
+    {% else %}
+    <input type="hidden" name="source" value="remote">
+    {% endif %}
+    <label for="oci_image">Image</label>
+    <input type="text" id="oci_image" name="oci_image" list="oci-images" value="{{ form.get('oci_image', '') }}" placeholder="nginx:alpine" autocomplete="off">
+    <datalist id="oci-images">{% for ref in oci_suggestions %}<option value="{{ ref }}">{% endfor %}</datalist>
+    <p class="p-form-help-text">A name from {{ oci_registry|replace('https://', '') }}, such as <code>nginx:alpine</code>, or a full reference with the registry, such as <code>ghcr.io/owner/app:tag</code>. The Incus server pulls it.</p>
+    {% if images %}
+    <label class="p-radio">
+      <input type="radio" class="p-radio__input" name="source" value="local"{% if source == 'local' %} checked{% endif %}>
+      <span class="p-radio__label">Already on this server</span>
+    </label>
+    {% set chosen_fp = form.get('fingerprint', default_image) %}
+    <select id="fingerprint" name="fingerprint" aria-label="Local image">
+      {% for image in images %}
+      <option value="{{ image.fingerprint }}"{% if image.fingerprint == chosen_fp %} selected{% endif %}>{{ (image.properties or {}).get('description') or image.fingerprint[:12] }}</option>
+      {% endfor %}
+    </select>
+    {% endif %}
+  </fieldset>
+
+  <fieldset>
+    <legend>Environment</legend>
+    <label for="environment">Variables</label>
+    <textarea class="code-editor" id="environment" name="environment" rows="4" spellcheck="false" placeholder="POSTGRES_PASSWORD=change-me&#10;TZ=America/New_York">{{ form.get('environment', '') }}</textarea>
+    <p class="p-form-help-text">One <code>NAME=value</code> per line, as the image's documentation describes. Change them later under Settings.</p>
+  </fieldset>
+
+  {% else %}
   {% set source = form.get('source', default_source) %}
   <fieldset>
     <legend>Image</legend>
@@ -56,6 +105,7 @@
     {% endif %}
   </fieldset>
 
+  {% endif %}
   <fieldset>
     <legend>Profiles</legend>
     {% set chosen = form.getlist('profiles') or ['default'] %}
@@ -76,7 +126,7 @@
   </fieldset>
 
   <fieldset>
-    <legend>Storage and first boot</legend>
+    <legend>{{ 'Storage' if kind == 'oci' else 'Storage and first boot' }}</legend>
     <label for="pool">Storage pool</label>
     <select id="pool" name="pool">
       <option value="">From the profiles</option>
@@ -84,9 +134,11 @@
       <option value="{{ pool }}"{% if form.get('pool') == pool %} selected{% endif %}>{{ pool }}</option>
       {% endfor %}
     </select>
+    {% if kind != 'oci' %}
     <label for="user_data">Cloud-init user data</label>
     <textarea class="code-editor" id="user_data" name="user_data" rows="6" spellcheck="false" placeholder="#cloud-config&#10;packages:&#10;  - nginx">{{ form.get('user_data', '') }}</textarea>
     <p class="p-form-help-text">Optional. Runs on first boot in images with cloud-init (the <em>cloud</em> variants).</p>
+    {% endif %}
   </fieldset>
 
   <label class="p-checkbox">
@@ -98,4 +150,5 @@
     <button class="p-button--positive">Create</button>
   </div>
 </form>
+{% endif %}
 {% endblock %}
