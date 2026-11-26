@@ -84,17 +84,66 @@ def gate():
         g.user = (
             get_db()
             .execute(
-                "SELECT id, username, is_admin FROM users WHERE id = ? AND disabled = 0",
+                "SELECT id, username, is_admin, session_epoch FROM users "
+                "WHERE id = ? AND disabled = 0",
                 (user_id,),
             )
             .fetchone()
         )
-        if g.user is None:
+        # A session from before a password change or "sign out everywhere" is over.
+        if g.user is None or session.get("epoch", 0) != g.user["session_epoch"]:
+            g.user = None
             session.clear()
     if g.user is None and request.endpoint != "auth.login":
         target = request.full_path.rstrip("?") if request.method == "GET" else None
         return redirect(url_for("auth.login", next=target))
     return None
+
+
+FAILED = "Failed log in"
+LOCKED = "Too many failed attempts. Try again later, or ask a console admin to unlock the account."
+
+
+def is_locked(username: str) -> bool:
+    """Has this username had too many failed sign-ins lately?
+
+    Counted from the audit log, for names that are not users too, so the answer
+    does not tell an attacker which usernames exist.
+    """
+    most = int(current_app.config["LOGIN_MAX_FAILURES"] or 0)
+    if most <= 0 or not username:
+        return False
+    db = get_db()
+    user = db.execute(
+        "SELECT failures_reset_at FROM users WHERE username = ?", (username,)
+    ).fetchone()
+    since = (user["failures_reset_at"] if user else None) or ""
+    window = f"-{int(current_app.config['LOGIN_LOCKOUT_SECONDS'])} seconds"
+    failures = db.execute(
+        "SELECT COUNT(*) FROM audit WHERE action = ? AND username = ? "
+        "AND at >= datetime('now', ?) AND at > ?",
+        (FAILED, username, window, since),
+    ).fetchone()[0]
+    return failures >= most
+
+
+def forget_failures(user_id: int) -> None:
+    """Start counting failed sign-ins afresh (after a sign-in, a reset, or an unlock)."""
+    db = get_db()
+    # Failures are compared with "later than this second", so move just past now.
+    db.execute(
+        "UPDATE users SET failures_reset_at = datetime('now', '+1 second') WHERE id = ?",
+        (user_id,),
+    )
+    db.commit()
+
+
+def end_sessions(user_id: int) -> int:
+    """Sign the user out everywhere; returns the number new sessions must carry."""
+    db = get_db()
+    db.execute("UPDATE users SET session_epoch = session_epoch + 1 WHERE id = ?", (user_id,))
+    db.commit()
+    return db.execute("SELECT session_epoch FROM users WHERE id = ?", (user_id,)).fetchone()[0]
 
 
 @bp.route("/login", methods=["GET", "POST"])
@@ -106,15 +155,22 @@ def login():
         password = request.form.get("password", "")
         user = get_db().execute("SELECT * FROM users WHERE username = ?", (username,)).fetchone()
         valid = check_password_hash(user["password_hash"] if user else DUMMY_HASH, password)
-        if user and valid and not user["disabled"]:
+        if is_locked(username):
+            # Not counted as another failure, or the lock would never run out.
+            audit.record(username, "Refused log in (locked)", status=429)
+            flash(LOCKED, "error")
+        elif user and valid and not user["disabled"]:
             target = _safe_next(request.form.get("next"))
             session.clear()
             session.permanent = True
             session["user_id"] = user["id"]
+            session["epoch"] = user["session_epoch"]
+            forget_failures(user["id"])
             audit.record(username, "Logged in", status=200)
             return redirect(target or url_for("servers.home"))
-        audit.record(username or "-", "Failed log in", status=401)
-        flash("Wrong username or password.", "error")
+        else:
+            audit.record(username or "-", FAILED, status=401)
+            flash("Wrong username or password.", "error")
     return render_template("login.html", next=_safe_next(request.values.get("next")))
 
 

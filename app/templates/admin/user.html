@@ -150,6 +150,23 @@
       <input type="password" name="confirm" placeholder="Again" aria-label="New password again" autocomplete="new-password" required>
       <button class="p-button">Set password</button>
     </form>
+    <p class="p-form-help-text">Setting a password also ends the user's sessions.</p>
+  </div>
+</div>
+<hr class="p-rule">
+<div class="row">
+  <div class="col-3"><h2 class="p-heading--5 section-heading">Signing in</h2></div>
+  <div class="col-9">
+    {% if locked %}
+    <div class="p-notification--caution"><div class="p-notification__content"><p class="p-notification__message">Locked for now: too many failed sign-ins for this username.</p></div></div>
+    <form class="inline" method="post" action="{{ url_for('admin.user_unlock', user_id=user.id) }}">
+      {{ csrf() }}<button class="p-button">Unlock</button>
+    </form>
+    {% endif %}
+    <form class="inline" method="post" action="{{ url_for('admin.user_sign_out', user_id=user.id) }}" data-confirm="Sign {{ user.username }} out of every browser?">
+      {{ csrf() }}<button class="p-button">Sign out everywhere</button>
+    </form>
+    <p class="p-form-help-text">Ends every session of this user; they can sign in again with their password.</p>
   </div>
 </div>
 <hr class="p-rule">

@@ -107,6 +107,7 @@ class FakeIncus:
         self.members: dict[str, dict] = {}  # cluster members by name; empty: not clustered
         self.groups: dict[str, dict] = {}  # cluster groups by name
         self.pending_networks: dict[str, set] = {}  # members a network is defined on
+        self.pending_pools: dict[str, dict] = {}  # per-member config of pools being defined
         self.targets: list[tuple[str, str, str]] = []  # (method, path, ?target=) of requests
 
     # -- helpers -----------------------------------------------------------
@@ -574,6 +575,10 @@ class FakeIncus:
                         "environment": {
                             "server_name": next(iter(self.members), "fake"),
                             "server_clustered": bool(self.members),
+                            "storage_supported_drivers": [
+                                {"Name": name, "Version": "1", "Remote": name == "ceph"}
+                                for name in ("dir", "zfs", "btrfs", "ceph")
+                            ],
                             "server_version": "6.0",
                             "architectures": ["aarch64"],
                         },
@@ -801,6 +806,56 @@ class FakeIncus:
                 if name not in self.networks:
                     return self.error(404, "Network not found")
                 return self._network_op(method, name, rest, body)
+            case ("POST", ["storage-pools"]):
+                name = body.get("name", "")
+                if name in self.pools:
+                    return self.error(409, "Storage pool already exists")
+                config = dict(body.get("config") or {})
+                sources = {}
+                if self.members:
+                    defined = self.pending_pools.setdefault(name, {})
+                    if target:
+                        if target not in self.members:
+                            return self.error(404, f'Cluster member "{target}" not found')
+                        if target in defined:
+                            return self.error(400, "The pool is already defined on member")
+                        defined[target] = config
+                        return self.sync()
+                    if set(defined) != set(self.members):
+                        return self.error(400, "Pool not defined on nodes")
+                    if "source" in config or "size" in config:
+                        return self.error(400, 'Config key "source" is cluster member specific')
+                    sources = self.pending_pools.pop(name)
+                self.pools[name] = {
+                    "name": name,
+                    "driver": body.get("driver", "dir"),
+                    "status": "Created",
+                    "description": body.get("description", ""),
+                    "config": config,
+                    "member_config": sources,
+                    "used_by": [],
+                }
+                self.buckets.setdefault(name, {})
+                return self.start_op(f"Creating storage pool {name}")
+            case ("GET", ["storage-pools", pool]) if pool in self.pools:
+                found = dict(self.pools[pool])
+                per_member = found.pop("member_config", {})
+                found["config"] = {**(found.get("config") or {}), **per_member.get(target, {})}
+                used = [
+                    f"/1.0/storage-pools/{pool}/volumes/custom/{v}"
+                    for v in self.volumes.get(pool, {})
+                ]
+                found["used_by"] = [*found.get("used_by", []), *used]
+                return self.sync(found)
+            case ("GET", ["storage-pools", pool, "resources"]) if pool in self.pools:
+                gib = 1024**3
+                used = (3 if target == "node2" else 5) * gib
+                return self.sync({"space": {"used": used, "total": 20 * gib}, "inodes": {}})
+            case ("DELETE", ["storage-pools", pool]) if pool in self.pools:
+                if self.volumes.get(pool) or self.pools[pool].get("used_by"):
+                    return self.error(400, "The storage pool is currently in use")
+                del self.pools[pool]
+                return self.start_op(f"Deleting storage pool {pool}")
             case ("GET", ["storage-pools"]):
                 return self.sync(list(self.pools.values()))
             case (_, ["storage-pools", pool, "volumes", *rest]):
@@ -984,7 +1039,21 @@ class FakeIncus:
             case ("GET", []):
                 return self.sync(self._network(name))
             case ("GET", ["state"]):
-                return self.sync({"hwaddr": "10:66:6a:aa:bb:cc", "state": "up", "mtu": 1500})
+                return self.sync(
+                    {
+                        "hwaddr": "10:66:6a:aa:bb:cc",
+                        "state": "up",
+                        "mtu": 1500,
+                        "addresses": [
+                            {
+                                "family": "inet",
+                                "address": "10.0.3.1",
+                                "netmask": "24",
+                                "scope": "global",
+                            }
+                        ],
+                    }
+                )
             case ("GET", ["leases"]):
                 if not managed:
                     return self.error(400, "Network is not managed")

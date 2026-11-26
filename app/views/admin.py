@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import csv
+import io
 import re
 
 from flask import (
@@ -10,15 +12,17 @@ from flask import (
     current_app,
     flash,
     g,
+    make_response,
     redirect,
     render_template,
     request,
+    session,
     url_for,
 )
 from werkzeug.security import check_password_hash, generate_password_hash
 
 from .. import access, audit, servers, user_certs
-from ..auth import check_password
+from ..auth import check_password, end_sessions, forget_failures, is_locked
 from ..db import get_db
 from ..incus import IncusError
 
@@ -181,6 +185,7 @@ def user(user_id):
         project_names=_project_names(),
         roles=access.ROLE_LABELS,
         entries=audit.recent(20, target["username"]),
+        locked=is_locked(target["username"]),
         certs={
             row["server_id"]: row
             for row in db.execute("SELECT * FROM user_certs WHERE user_id = ?", (user_id,))
@@ -228,7 +233,30 @@ def user_password(user_id):
             (generate_password_hash(password), user_id),
         )
         db.commit()
-        flash(f"Password for {target['username']} changed.", "success")
+        # Whoever knew the old password is out, and old failed attempts are forgiven.
+        epoch = end_sessions(user_id)
+        forget_failures(user_id)
+        if user_id == g.user["id"]:
+            session["epoch"] = epoch
+        flash(f"Password for {target['username']} changed. Their sessions were ended.", "success")
+    return redirect(url_for("admin.user", user_id=user_id))
+
+
+@bp.post("/users/<int:user_id>/sign-out")
+def user_sign_out(user_id):
+    target = _user(user_id)
+    end_sessions(user_id)
+    flash(f"{target['username']} is signed out everywhere.", "success")
+    if user_id == g.user["id"]:
+        return redirect(url_for("auth.login"))
+    return redirect(url_for("admin.user", user_id=user_id))
+
+
+@bp.post("/users/<int:user_id>/unlock")
+def user_unlock(user_id):
+    target = _user(user_id)
+    forget_failures(user_id)
+    flash(f"{target['username']} can sign in again.", "success")
     return redirect(url_for("admin.user", user_id=user_id))
 
 
@@ -507,10 +535,62 @@ def group_grant_delete(group_id, grant_id):
     return redirect(url_for("admin.group", group_id=group_id))
 
 
+DAY = re.compile(r"\d{4}-\d{2}-\d{2}")
+AUDIT_PAGE = 500
+AUDIT_EXPORT = 100_000
+
+
+def _audit_filters() -> dict:
+    """The audit log's filters from the address; anything malformed is dropped."""
+    args = request.args
+    server = args.get("server", "")
+    return {
+        "username": args.get("user", "").strip() or None,
+        "server_id": int(server) if server.isdecimal() else None,
+        "action": args.get("action", "").strip() or None,
+        "since": args.get("since") if DAY.fullmatch(args.get("since", "")) else None,
+        "until": args.get("until") if DAY.fullmatch(args.get("until", "")) else None,
+    }
+
+
 @bp.get("/audit")
 def audit_log():
-    username = request.args.get("user") or None
-    return render_template("admin/audit.html", entries=audit.recent(500, username), user=username)
+    filters = _audit_filters()
+    entries = audit.recent(AUDIT_PAGE, **filters)
+    return render_template(
+        "admin/audit.html",
+        entries=entries,
+        user=filters["username"],
+        filters=filters,
+        filtered=any(filters.values()),
+        servers=servers.all_servers(),
+        full=len(entries) >= AUDIT_PAGE,
+        page=AUDIT_PAGE,
+        query=request.query_string.decode(),
+    )
+
+
+def _csv_cell(value) -> str:
+    """A cell that a spreadsheet will not run as a formula."""
+    text = "" if value is None else str(value)
+    return "'" + text if text[:1] in ("=", "+", "-", "@", "\t", "\r") else text
+
+
+@bp.get("/audit.csv")
+def audit_csv():
+    """The audit log, with the same filters as the page, as a CSV file."""
+    out = io.StringIO()
+    writer = csv.writer(out)
+    writer.writerow(
+        ["when_utc", "user", "server", "project", "action", "path", "status", "outcome"]
+    )
+    for e in audit.recent(AUDIT_EXPORT, **_audit_filters()):
+        row = (e["at"], e["username"], e["server_name"], e["project"], e["action"], e["path"])
+        writer.writerow([_csv_cell(cell) for cell in (*row, e["status"], e["outcome"])])
+    response = make_response(out.getvalue())
+    response.headers["Content-Type"] = "text/csv; charset=utf-8"
+    response.headers["Content-Disposition"] = 'attachment; filename="incus-console-audit.csv"'
+    return response
 
 
 @account_bp.route("/account", methods=["GET", "POST"])
@@ -533,7 +613,9 @@ def account():
                 (generate_password_hash(password), user["id"]),
             )
             db.commit()
-            flash("Password changed.", "success")
+            # Every other session of theirs ends; this one carries on.
+            session["epoch"] = end_sessions(user["id"])
+            flash("Password changed. You are signed out everywhere else.", "success")
             return redirect(url_for("account.account"))
     return render_template(
         "account.html",

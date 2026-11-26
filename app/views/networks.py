@@ -112,8 +112,19 @@ def network(name):
     except IncusError as error:
         if error.status == 0:
             raise
+    per_member = []
+    for member in cluster_members() if found.get("managed") else []:
+        row = {"name": member["server_name"], "status": member.get("status"), "state": {}}
+        if member.get("status") == "Online":
+            try:
+                row["state"] = g.incus.network_state(name, target=member["server_name"])
+            except IncusError as error:
+                if error.status == 0:
+                    raise
+        per_member.append(row)
     return render_template(
         "networks/detail.html",
+        per_member=per_member,
         network=found,
         users=used_by(found.get("used_by")),
         leases=sorted(leases, key=lambda lease: lease.get("hostname") or ""),

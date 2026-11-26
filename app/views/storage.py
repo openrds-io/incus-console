@@ -7,7 +7,7 @@ import re
 from flask import flash, g, make_response, redirect, render_template, request, url_for
 
 from ..incus import IncusError
-from .scoped import bp, run
+from .scoped import bp, cluster_members, run
 
 # Incus follows S3's rules for bucket names.
 BUCKET_NAME = re.compile(r"[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]")
@@ -18,9 +18,136 @@ BUCKET_RULE = (
 ROLES = {"read-only": "Read-only", "admin": "Admin"}
 
 
+# Drivers the create form offers, where the server supports them. The others
+# (ceph, cephfs, linstor, ...) need settings a form like this cannot guess.
+DRIVERS = {
+    "dir": "Directory (dir)",
+    "zfs": "ZFS",
+    "btrfs": "Btrfs",
+    "lvm": "LVM",
+}
+POOL_NAME = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.-]{0,62}")
+POOL_RULE = "Use letters, digits, dashes, dots and underscores (at most 63)."
+POOL_SIZE = re.compile(r"\d+(\.\d+)?\s*([KMGTPE]i?B)", re.IGNORECASE)
+
+
 @bp.get("/storage")
 def pools():
     return render_template("storage/pools.html", pools=g.incus.pools())
+
+
+def _drivers() -> dict[str, str]:
+    """The drivers this server can use, of those the form knows."""
+    environment = g.incus.server_info().get("environment") or {}
+    supported = {
+        str(d.get("Name") or d.get("name") or "").lower()
+        for d in environment.get("storage_supported_drivers") or []
+    }
+    offered = {name: label for name, label in DRIVERS.items() if name in supported}
+    # A server that does not say (or says it another way) gets the whole list.
+    return offered or dict(DRIVERS)
+
+
+def _create_pool(payload: dict, sources: dict[str, str]) -> dict:
+    """Create a pool; in a cluster, define it on every member first.
+
+    Where the data lives (source) and how big a new one is (size) belong to
+    each member, so in a cluster they go with the member's own step.
+    """
+    members = [m["server_name"] for m in cluster_members()]
+    if not members:
+        return g.incus.create_pool(payload)
+    local = {k: v for k, v in payload["config"].items() if k == "size"}
+    for member in members:
+        config = dict(local)
+        if sources.get(member):
+            config["source"] = sources[member]
+        pending = {"name": payload["name"], "driver": payload["driver"], "config": config}
+        try:
+            g.incus.create_pool(pending, target=member)
+        except IncusError as error:
+            # Left over from an earlier attempt that did not get to the last step.
+            if "already" not in error.message.lower():
+                raise
+    final = {**payload, "config": {}}
+    return g.incus.create_pool(final)
+
+
+@bp.route("/storage/new", methods=["GET", "POST"])
+def pool_create():
+    drivers = _drivers()
+    members = [m["server_name"] for m in cluster_members()]
+    form = request.form
+    if request.method == "POST":
+        name = form.get("name", "").strip()
+        driver = form.get("driver", "")
+        size = form.get("size", "").strip().replace(" ", "")
+        sources = {m: form.get(f"source:{m}", "").strip() for m in members}
+        config = {}
+        if size:
+            config["size"] = size
+        if not members and form.get("source", "").strip():
+            config["source"] = form.get("source", "").strip()
+        payload = {
+            "name": name,
+            "driver": driver,
+            "description": form.get("description", "").strip(),
+            "config": config,
+        }
+        if not POOL_NAME.fullmatch(name):
+            flash(POOL_RULE, "error")
+        elif driver not in drivers:
+            flash("Choose a storage driver.", "error")
+        elif size and not POOL_SIZE.fullmatch(size):
+            flash("Write a size such as 20GiB.", "error")
+        elif size and driver == "dir":
+            flash("A directory pool has no size of its own: leave the size empty.", "error")
+        elif run(lambda: _create_pool(payload, sources), f"Storage pool {name} created."):
+            return redirect(url_for("srv.pool", pool=name))
+    return render_template("storage/pool_new.html", drivers=drivers, members=members, form=form)
+
+
+def _usage(pool: str, member: str | None = None) -> dict:
+    """{"used", "total"} in bytes, or {} where the pool cannot say."""
+    try:
+        return (g.incus.pool_resources(pool, target=member).get("space")) or {}
+    except IncusError as error:
+        if error.status == 0:
+            raise
+        return {}
+
+
+@bp.get("/storage/<pool>")
+def pool(pool):
+    found = g.incus.pool(pool)
+    per_member = []
+    for member in cluster_members():
+        name = member["server_name"]
+        row = {"name": name, "status": member.get("status"), "source": "", "usage": {}}
+        if member.get("status") == "Online":
+            try:
+                row["source"] = (g.incus.pool(pool, target=name).get("config") or {}).get(
+                    "source", ""
+                )
+            except IncusError as error:
+                if error.status == 0:
+                    raise
+            row["usage"] = _usage(pool, name)
+        per_member.append(row)
+    return render_template(
+        "storage/pool.html",
+        pool=found,
+        usage={} if per_member else _usage(pool),
+        per_member=per_member,
+        in_use=len(found.get("used_by") or []),
+    )
+
+
+@bp.post("/storage/<pool>/delete")
+def pool_delete(pool):
+    if run(lambda: g.incus.delete_pool(pool), f"Storage pool {pool} deleted."):
+        return redirect(url_for("srv.pools"))
+    return redirect(url_for("srv.pool", pool=pool))
 
 
 def _endpoint():

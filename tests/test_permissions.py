@@ -197,3 +197,126 @@ def test_pages_show_who_is_signed_in(server_app, setup, admin):
     page = text(login(server_app, "vic").get("/servers"))
     assert 'whoami__name">vic<' in page and 'whoami__role">User<' in page
     assert "(console admin)" not in page
+
+
+def test_repeated_failed_sign_ins_lock_the_username(server_app, admin):
+    def attempt(username, password="wrong"):
+        return Browser(server_app).post("/login", {"username": username, "password": password})
+
+    for _ in range(5):
+        assert "Wrong username or password" in text(attempt("vic"))
+    # Locked: even the right password is refused, and a name that is no user behaves the same.
+    assert "Too many failed attempts" in text(attempt("vic", PASSWORD))
+    for _ in range(5):
+        attempt("nobody")
+    assert "Too many failed attempts" in text(attempt("nobody"))
+    assert attempt("otto", PASSWORD).status_code == 302
+    # An admin sees it and unlocks.
+    uid = user_id(server_app, "vic")
+    assert "Locked for now" in text(admin.get(f"/admin/users/{uid}"))
+    assert "can sign in again" in text(
+        admin.post(f"/admin/users/{uid}/unlock", follow_redirects=True)
+    )
+    assert attempt("vic", PASSWORD).status_code == 302
+    assert "Refused log in (locked)" in text(admin.get("/admin/audit?user=vic"))
+
+
+def test_a_sign_in_starts_the_count_again(server_app):
+    for _ in range(4):
+        Browser(server_app).post("/login", {"username": "vic", "password": "wrong"})
+    login(server_app, "vic")
+    import time
+
+    time.sleep(1.1)  # failures are timed to the second
+    for _ in range(4):
+        Browser(server_app).post("/login", {"username": "vic", "password": "wrong"})
+    login(server_app, "vic")
+
+
+def test_lockout_can_be_turned_off(server_app):
+    server_app.config["LOGIN_MAX_FAILURES"] = 0
+    for _ in range(8):
+        Browser(server_app).post("/login", {"username": "vic", "password": "wrong"})
+    login(server_app, "vic")
+
+
+def test_changing_a_password_ends_other_sessions(server_app, admin):
+    here, elsewhere = login(server_app, "vic"), login(server_app, "vic")
+    new = "another long password"
+    changed = here.post(
+        "/account", {"current": PASSWORD, "password": new, "confirm": new}, follow_redirects=True
+    )
+    assert "signed out everywhere else" in text(changed)
+    assert here.get("/account").status_code == 200
+    assert elsewhere.get("/account").status_code == 302
+    # An admin's reset ends them all.
+    uid = user_id(server_app, "vic")
+    admin.post(f"/admin/users/{uid}/password", {"password": PASSWORD, "confirm": PASSWORD})
+    assert here.get("/account").status_code == 302
+    assert login(server_app, "vic").get("/account").status_code == 200
+
+
+def test_admin_signs_a_user_out_everywhere(server_app, admin):
+    one, two = login(server_app, "otto"), login(server_app, "otto")
+    uid = user_id(server_app, "otto")
+    done = admin.post(f"/admin/users/{uid}/sign-out", follow_redirects=True)
+    assert "otto is signed out everywhere." in text(done)
+    assert one.get("/account").status_code == 302 and two.get("/account").status_code == 302
+    assert admin.get("/admin/users").status_code == 200
+    assert login(server_app, "otto").get("/account").status_code == 200
+    assert login(server_app, "vic").post(f"/admin/users/{uid}/sign-out").status_code == 403
+
+
+def test_older_databases_gain_the_session_columns(tmp_path):
+    import sqlite3
+
+    from app import create_app
+    from app.db import SCHEMA, path_for
+
+    data = tmp_path / "data"
+    data.mkdir()
+    old = sqlite3.connect(path_for(str(data)))
+    old.executescript(
+        SCHEMA.replace("    session_epoch INTEGER NOT NULL DEFAULT 0,\n", "")
+        .replace(
+            ",\n    -- Sessions carry this number; raising it signs the user out everywhere.", ""
+        )
+        .replace(
+            "    -- Failed sign-ins before this moment no longer count towards a lockout.\n", ""
+        )
+        .replace("    failures_reset_at TEXT\n", "")
+    )
+    old.execute("INSERT INTO users (username, password_hash, is_admin) VALUES ('root', 'x', 1)")
+    old.commit()
+    old.close()
+    app = create_app({"TESTING": True, "SERVER_MODE": True, "DATA_DIR": str(data)})
+    with app.app_context():
+        from app.db import get_db
+
+        row = get_db().execute("SELECT session_epoch, failures_reset_at FROM users").fetchone()
+        assert row["session_epoch"] == 0 and row["failures_reset_at"] is None
+
+
+def test_audit_filters_and_csv(server_app, setup, admin, fake):
+    otto = login(server_app, "otto")
+    otto.post(f"/servers/{setup}/instances/web-1/action", {"action": "stop", "back": "detail"})
+    page = text(admin.get("/admin/audit?action=instance+action"))
+    assert "instance action: stop" in page and "grant add" not in page
+    assert "instance action: stop" in text(admin.get(f"/admin/audit?server={setup}&user=otto"))
+    assert "Nothing recorded" in text(admin.get("/admin/audit?since=2099-01-01"))
+    assert "instance action: stop" in text(
+        admin.get("/admin/audit?since=2000-01-01&until=2099-01-01")
+    )
+    assert "Nothing recorded" in text(admin.get("/admin/audit?until=2000-01-01"))
+    # Nonsense in the address is ignored, and % is not a wildcard.
+    assert "grant add" in text(admin.get("/admin/audit?since=yesterday&server=x"))
+    assert "Nothing recorded" in text(admin.get("/admin/audit?action=%25"))
+    assert "audit.csv?action=stop" in text(admin.get("/admin/audit?action=stop"))
+    export = admin.get("/admin/audit.csv?user=otto")
+    assert export.headers["Content-Type"].startswith("text/csv")
+    assert "attachment" in export.headers["Content-Disposition"]
+    lines = export.get_data(as_text=True).splitlines()
+    assert lines[0] == "when_utc,user,server,project,action,path,status,outcome"
+    assert any("otto,Lab,default,instance action: stop" in line for line in lines)
+    assert not any(",root," in line for line in lines[1:])
+    assert otto.get("/admin/audit.csv").status_code == 403

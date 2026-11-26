@@ -62,7 +62,7 @@
                 ('srv.profiles', 'Profiles', 'profile' in here),
                 ('srv.images', 'Images', here.startswith('srv.image')),
                 ('srv.networks', 'Networks', 'network' in here or 'forward' in here),
-                ('srv.pools', 'Storage pools', here == 'srv.pools'),
+                ('srv.pools', 'Storage pools', here in ('srv.pools', 'srv.pool', 'srv.pool_create')),
                 ('srv.volumes', 'Volumes', 'volume' in here),
                 ('srv.all_buckets', 'Buckets', 'bucket' in here),
                 ('srv.operations', 'Operations', 'operation' in here),

@@ -1,0 +1,68 @@
+{% extends "base.html" %}
+{% set live = true %}
+{% from "macros.html" import status, crumbs, csrf, empty %}
+{% block title %}{{ pool.name }}{% endblock %}
+{% block heading %}{{ crumbs([('Storage pools', url_for('srv.pools')), (pool.name, None)]) }} <span class="title-status">{{ status(pool.status) }}</span>{% endblock %}
+{% block controls %}
+{% if allowed('srv.volume_create') %}<a class="p-button is-dense u-no-margin--bottom" href="{{ url_for('srv.volume_create', pool=pool.name) }}">New volume</a>{% endif %}
+<a class="p-button is-dense u-no-margin--bottom" href="{{ url_for('srv.buckets', pool=pool.name) }}">Buckets</a>
+{% if allowed('srv.pool_delete') %}
+<form class="inline" method="post" action="{{ url_for('srv.pool_delete', pool=pool.name) }}" data-confirm="Delete storage pool {{ pool.name }}? This cannot be undone.">
+  {{ csrf() }}
+  <button class="p-button--negative is-dense u-no-margin--bottom"{% if in_use %} disabled title="Still used by {{ in_use }} thing{{ '' if in_use == 1 else 's' }}"{% endif %}>Delete</button>
+</form>
+{% endif %}
+{% endblock %}
+{% block content %}
+{% set cfg = pool.config or {} %}
+<div class="row">
+  <div class="col-3"><h2 class="p-heading--5 section-heading">General</h2></div>
+  <div class="col-9">
+    <table class="facts" aria-label="General">
+      <tbody>
+        <tr><th>Driver</th><td>{{ pool.driver }}</td></tr>
+        <tr><th>Description</th><td>{{ pool.description or '-' }}</td></tr>
+        {% if not per_member %}
+        <tr><th>Source</th><td>{% if cfg.get('source') %}<code>{{ cfg['source'] }}</code>{% else %}-{% endif %}</td></tr>
+        <tr><th>Space</th><td>{% if usage.total %}{{ usage.used|filesize }} used of {{ usage.total|filesize }}{% else %}-{% endif %}</td></tr>
+        {% endif %}
+        <tr><th>Used by</th><td>{{ in_use }} instance{{ '' if in_use == 1 else 's' }}, volume{{ '' if in_use == 1 else 's' }}, image{{ '' if in_use == 1 else 's' }} or profile{{ '' if in_use == 1 else 's' }}</td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+{% if per_member %}
+<hr class="p-rule">
+<div class="row">
+  <div class="col-3"><h2 class="p-heading--5 section-heading">On each member</h2></div>
+  <div class="col-9">
+    <table aria-label="On each member">
+      <thead><tr><th>Member</th><th>Source</th><th>Space</th></tr></thead>
+      <tbody>
+      {% for m in per_member %}
+        <tr>
+          <td><a href="{{ url_for('srv.cluster_member', member=m.name) }}">{{ m.name }}</a></td>
+          <td>{% if m.source %}<code>{{ m.source }}</code>{% elif m.status != 'Online' %}<span class="u-text--muted">{{ m.status }}</span>{% else %}-{% endif %}</td>
+          <td>{% if m.usage.total %}{{ m.usage.used|filesize }} used of {{ m.usage.total|filesize }}{% else %}-{% endif %}</td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endif %}
+{% set other = cfg|dictsort|rejectattr('0', 'equalto', 'source')|list %}
+{% if other %}
+<hr class="p-rule">
+<div class="row">
+  <div class="col-3"><h2 class="p-heading--5 section-heading">Configuration</h2></div>
+  <div class="col-9">
+    <table class="facts" aria-label="Configuration">
+      <tbody>
+        {% for key, value in other %}<tr><th><code>{{ key }}</code></th><td>{{ value }}</td></tr>{% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endif %}
+{% endblock %}
