@@ -11,6 +11,7 @@
 #   dev/cluster.sh token      print a trust token to add the cluster to the console
 #   dev/cluster.sh status     the machines and the cluster's members
 #   dev/cluster.sh shell N    a root shell on member N
+#   dev/cluster.sh doctor     network checks, for when members cannot reach each other
 #   dev/cluster.sh stop       stop the machines (start again with "up")
 #   dev/cluster.sh delete     delete the machines and everything in them
 #
@@ -68,6 +69,71 @@ start_machine() {
   limactl start --tty=false --name "$name" --vm-type=vz --network=vzNAT \
     --cpus "$CPUS" --memory "$MEMORY" --disk "$DISK" \
     --containerd=none --set '.mounts = []' "template://$TEMPLATE"
+}
+
+# Lima sends a machine's internet traffic out through vzNAT (lima0) when it
+# has one. VPNs and firewalls on the Mac often block that path, while Lima's
+# ordinary network (eth0) goes out through the Mac's own connections and
+# works. So: eth0 for the internet, lima0 for the members and the Mac.
+prefer_eth0() {
+  local name="$1"
+  root "$name" bash -s <<'REMOTE'
+set -eu
+metric=1000
+file="$(networkctl status lima0 2>/dev/null | sed -n 's/.*Network File: *//p' | head -n1)"
+if [ -n "$file" ]; then
+  # Managed by systemd-networkd: a drop-in survives restarts and lease renewals.
+  dropin="/etc/systemd/network/$(basename "$file").d"
+  if [ ! -f "$dropin/50-cluster-sh.conf" ]; then
+    mkdir -p "$dropin"
+    printf '[DHCPv4]\nRouteMetric=%s\n\n[IPv6AcceptRA]\nRouteMetric=%s\n' "$metric" "$metric" \
+      > "$dropin/50-cluster-sh.conf"
+    networkctl reload
+    networkctl reconfigure lima0
+  fi
+fi
+# Whatever manages it: wait for the address, then make sure no default route
+# through lima0 outranks eth0's (metric 200).
+for _ in $(seq 1 30); do
+  ip -4 -o addr show dev lima0 | grep -q inet && break
+  sleep 1
+done
+ip -4 route show default dev lima0 | while read -r route; do
+  case "$route" in *"metric $metric"*) continue ;; esac
+  plain="$(echo "$route" | sed 's/ metric [0-9]*//')"
+  # shellcheck disable=SC2086
+  ip -4 route del $route || true
+  # shellcheck disable=SC2086
+  ip -4 route add $plain metric "$metric" 2>/dev/null || true
+done
+ip -6 route show default dev lima0 2>/dev/null | while read -r route; do
+  case "$route" in *"metric $metric"*) continue ;; esac
+  # shellcheck disable=SC2086
+  ip -6 route del $route || true
+done
+REMOTE
+  root "$name" curl -fsS -m 20 -o /dev/null https://pkgs.zabbly.com/key.asc ||
+    die "$name cannot reach the internet (https://pkgs.zabbly.com). Check: limactl shell $name ip route"
+}
+
+# macOS puts every vzNAT machine on a "private" port of its bridge: each can
+# talk to the Mac, but not directly to another machine. So the members reach
+# each other through the Mac, which routes between them: send everything for
+# the vzNAT subnet to the gateway instead of straight to the neighbour.
+relay_via_mac() {
+  local name="$1"
+  root "$name" bash -s <<'REMOTE'
+set -eu
+gateway="$(ip -4 route show default dev lima0 | awk '{print $3; exit}')"
+address="$(ip -4 -o addr show dev lima0 | awk '{print $4; exit}' | cut -d/ -f1)"
+[ -n "$gateway" ] && [ -n "$address" ] || exit 0
+prefix="${address%.*}"
+# The Mac will say "talk to it directly"; that is exactly what does not work.
+sysctl -qw net.ipv4.conf.all.accept_redirects=0 net.ipv4.conf.lima0.accept_redirects=0
+ip -4 route replace "$gateway/32" dev lima0 scope link
+ip -4 route replace "$prefix.0/25" via "$gateway" dev lima0
+ip -4 route replace "$prefix.128/25" via "$gateway" dev lima0
+REMOTE
 }
 
 install_incus() {
@@ -133,7 +199,7 @@ join() {
   local name="$1" ip="$2" first="$3" first_ip="$4" token
   # The members must reach each other, not just the Mac.
   root "$name" timeout 5 bash -c "exec 3<>/dev/tcp/$first_ip/$PORT" 2>/dev/null ||
-    die "$name cannot reach $first at $first_ip:$PORT. The machines must be on the same vzNAT network."
+    die "$name cannot reach $first at $first_ip:$PORT through the Mac. Run: dev/cluster.sh doctor"
   say "Joining $name ($ip) to the cluster"
   token="$(root "$first" incus cluster add "$name" | tr -d '\r' | awk 'NF' | tail -n1)"
   [ -n "$token" ] || die "no join token from $first"
@@ -153,9 +219,17 @@ PRESEED
 up() {
   local count="${1:-3}" first="${PREFIX}1" first_ip name ip i
   [[ "$count" =~ ^[1-9][0-9]*$ ]] || die "up takes a number of members, such as 3"
+  if [ "$count" -gt 1 ] && [ "$(sysctl -n net.inet.ip.forwarding 2>/dev/null)" != "1" ]; then
+    # See relay_via_mac. Not done here: it needs sudo and is yours to decide.
+    die "the members reach each other through the Mac, which is not forwarding packets.
+Turn it on (until the next restart of the Mac) with:
+    sudo sysctl -w net.inet.ip.forwarding=1"
+  fi
   for i in $(seq 1 "$count"); do
     name="${PREFIX}${i}"
     start_machine "$name"
+    prefer_eth0 "$name"
+    relay_via_mac "$name"
     install_incus "$name"
     ip="$(address "$name")"
     [ -n "$ip" ] || die "$name has no address on lima0 (vzNAT)"
@@ -190,10 +264,51 @@ status() {
   fi
 }
 
+# Everything here reads nothing from the terminal, so the whole report comes
+# out even when the command was pasted along with others.
+doctor() {
+  local name other ip
+  for name in $(machines); do
+    echo "===== $name"
+    [ "$(state "$name")" = "Running" ] || { echo "not running"; continue; }
+    ip="$(address "$name" </dev/null)"
+    echo "lima0 address: ${ip:-none}"
+    limactl shell --workdir / "$name" ip -4 route </dev/null || true
+    limactl shell --workdir / "$name" ip -br link </dev/null || true
+    echo "--- listening"
+    root "$name" ss -ltn </dev/null 2>&1 | grep -E ':8443|State' || echo "nothing on $PORT"
+    echo "--- gateway"
+    limactl shell --workdir / "$name" ping -c 1 -W 2 192.168.64.1 </dev/null 2>&1 | tail -n 2 || true
+    for other in $(machines); do
+      [ "$other" = "$name" ] && continue
+      ip="$(address "$other" </dev/null)"
+      [ -n "$ip" ] || continue
+      echo "--- $name -> $other ($ip)"
+      limactl shell --workdir / "$name" ping -c 1 -W 2 "$ip" </dev/null 2>&1 | tail -n 2 || true
+      root "$name" timeout 3 bash -c "exec 3<>/dev/tcp/$ip/$PORT" </dev/null 2>&1 &&
+        echo "port $PORT: open" || echo "port $PORT: no answer"
+    done
+    echo "--- neighbours"
+    limactl shell --workdir / "$name" ip neigh show dev lima0 </dev/null || true
+    echo "--- Mac -> $name"
+    ip="$(address "$name" </dev/null)"
+    if [ -n "$ip" ]; then
+      ping -c 1 -t 2 "$ip" 2>&1 | tail -n 2 || true
+      nc -vz -G 3 "$ip" "$PORT" 2>&1 || true
+    fi
+  done
+  echo "===== Mac"
+  ifconfig 2>/dev/null | grep -E '^(bridge|vmenet)[0-9]+:|inet 192\.168\.64\.|member:' || true
+  sysctl net.inet.ip.forwarding 2>/dev/null || true
+  limactl --version
+  sw_vers 2>/dev/null || true
+}
+
 case "${1:-}" in
   up) up "${2:-}" ;;
   token) token ;;
   status) status ;;
+  doctor) doctor ;;
   shell)
     [ -n "${2:-}" ] || die "shell takes a member number, such as 2"
     limactl shell --workdir / "${PREFIX}${2}" sudo -i

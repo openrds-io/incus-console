@@ -99,8 +99,17 @@ Add `--cluster` and the fake is a three-member cluster.
 
 `dev/cluster.sh` builds a small Incus cluster out of [Lima](https://lima-vm.io)
 virtual machines (`brew install lima`; Colima already brought it along). Each
-member runs Debian 13 with Incus from the Zabbly repository, on Lima's vzNAT
-network, where the Mac and the members all reach each other.
+member runs Debian 13 with Incus from the Zabbly repository, and has an
+address on Lima's vzNAT network that the Mac can reach.
+
+macOS keeps vzNAT machines from talking to each other directly, so the members
+reach each other through the Mac, which has to forward their packets. That is
+off by default and resets when the Mac restarts; `up` tells you when it is
+needed:
+
+```bash
+sudo sysctl -w net.inet.ip.forwarding=1
+```
 
 ```bash
 dev/cluster.sh up 3      # create incus1..incus3 and form the cluster
@@ -108,6 +117,10 @@ dev/cluster.sh token     # a trust token: paste it under Servers > Remote, with 
 dev/cluster.sh status
 dev/cluster.sh stop      # "up" starts them again; "delete" removes them
 ```
+
+Start the cluster with `up` rather than `limactl start`: it also sets the
+members' routes. If members cannot reach each other, `dev/cluster.sh doctor`
+prints what each one can and cannot reach.
 
 Each member takes 2 CPUs, 2 GiB of memory and up to 20 GiB of disk; see the
 top of the script for the settings. The pool is a plain directory on each
