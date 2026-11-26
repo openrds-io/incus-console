@@ -40,14 +40,11 @@ def addresses(instance: dict, family: str = "inet") -> list[str]:
 KIND_LABELS = {
     "container": "System container",
     "oci": "Application container (OCI)",
-    "vm": "Virtual machine",
 }
 
 
 def instance_kind(instance: dict) -> str:
-    """container, oci (an application container from an OCI image) or vm."""
-    if instance.get("type") == "virtual-machine":
-        return "vm"
+    """container, or oci (an application container from an OCI image)."""
     config = instance.get("config") or {}
     if config.get("volatile.container.oci") == "true" or config.get("image.type") == "oci":
         return "oci"

@@ -32,6 +32,18 @@ class IncusError(Exception):
         self.message = message
 
 
+def _is_vm(thing: dict) -> bool:
+    return thing.get("type") == "virtual-machine"
+
+
+def _containers_only(thing: dict, what: str) -> dict:
+    """The console manages containers only: a virtual machine (or a VM image)
+    on the server is treated as if it were not there."""
+    if _is_vm(thing):
+        raise IncusError(404, f"{what} not found")
+    return thing
+
+
 class IncusConnectionError(IncusError):
     """The server could not be reached or the TLS checks failed."""
 
@@ -405,10 +417,10 @@ class IncusClient:
         return self.request("DELETE", path("profiles", name))
 
     def images(self) -> list:
-        return self.get("images", recursion=1) or []
+        return [i for i in self.get("images", recursion=1) or [] if not _is_vm(i)]
 
     def image(self, fingerprint: str) -> dict:
-        return self.get("images", fingerprint)
+        return _containers_only(self.get("images", fingerprint), "Image")
 
     def delete_image(self, fingerprint: str) -> dict:
         return self.request("DELETE", path("images", fingerprint))
@@ -455,10 +467,10 @@ class IncusClient:
     # -- instances ---------------------------------------------------------
 
     def instances(self) -> list:
-        return self.get("instances", recursion=2) or []
+        return [i for i in self.get("instances", recursion=2) or [] if not _is_vm(i)]
 
     def instance(self, name: str) -> dict:
-        return self.get("instances", name, recursion=1)
+        return _containers_only(self.get("instances", name, recursion=1), "Instance")
 
     def create_instance(self, payload: dict) -> dict:
         return self.request("POST", path("instances"), body=payload)

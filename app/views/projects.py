@@ -41,9 +41,8 @@ FEATURE_DEFAULTS = {
     "features.networks.zones": "false",
 }
 LIMITS = [
-    ("limits.instances", "Instances", "text", "The most instances of any kind."),
+    ("limits.instances", "Instances", "text", ""),
     ("limits.containers", "Containers", "text", ""),
-    ("limits.virtual-machines", "Virtual machines", "text", ""),
     ("limits.cpu", "CPUs", "text", "The total of the instances' limits.cpu."),
     ("limits.memory", "Memory", "text", "The total of the instances' limits.memory, e.g. 16GiB."),
     ("limits.disk", "Disk", "text", "The total size of the project's volumes, e.g. 200GiB."),
@@ -62,7 +61,6 @@ RESTRICTIONS = [
     ("restricted.containers.privilege", "Container privilege", "choice", ""),
     ("restricted.containers.lowlevel", "Low-level container options", "choice", ""),
     ("restricted.containers.interception", "System call interception", "choice", ""),
-    ("restricted.virtual-machines.lowlevel", "Low-level VM options", "choice", ""),
     ("restricted.snapshots", "Snapshots", "choice", ""),
     ("restricted.devices.disk", "Disk devices", "choice", "managed: only the pools' volumes."),
     (
@@ -90,7 +88,6 @@ CHOICES = {
     "restricted.containers.privilege": ("unprivileged", "isolated", "allow"),
     "restricted.containers.lowlevel": ALLOW_BLOCK,
     "restricted.containers.interception": ("allow", "block", "full"),
-    "restricted.virtual-machines.lowlevel": ALLOW_BLOCK,
     "restricted.snapshots": ALLOW_BLOCK,
     "restricted.devices.disk": ("allow", "managed", "block"),
     "restricted.devices.nic": ("allow", "managed", "block"),
@@ -105,7 +102,6 @@ RESTRICTION_DEFAULTS = {
     "restricted.containers.privilege": "unprivileged",
     "restricted.containers.lowlevel": "block",
     "restricted.containers.interception": "block",
-    "restricted.virtual-machines.lowlevel": "block",
     "restricted.snapshots": "allow",
     "restricted.devices.disk": "managed",
     "restricted.devices.nic": "managed",
@@ -125,7 +121,6 @@ SECTIONS = (("Features", FEATURES), ("Resource limits", LIMITS), ("Restrictions"
 USAGE = (
     ("instances", "Instances", False),
     ("containers", "Containers", False),
-    ("virtual-machines", "Virtual machines", False),
     ("cpu", "CPUs", False),
     ("memory", "Memory", True),
     ("disk", "Disk", True),

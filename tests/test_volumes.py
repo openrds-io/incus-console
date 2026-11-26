@@ -82,29 +82,14 @@ def test_attach_and_detach(browser, sid, fake):
     assert "from a profile" in text(nothing)
 
 
-def test_block_volume_needs_no_path(browser, sid, fake):
-    fake.add_instance("vm-1")
-    fake.add_volume("default", "raw", content_type="block")
-    base = f"/servers/{sid}/storage/default/volumes/raw"
-    assert 'name="path"' not in text(browser.get(base))
-    browser.post(f"{base}/attach", {"instance": "vm-1"})
-    assert fake.instances["vm-1"]["devices"]["raw"] == {
-        "type": "disk",
-        "pool": "default",
-        "source": "raw",
-    }
-
-
-def test_block_volumes_are_offered_to_vms_only(browser, sid, fake):
+def test_block_volumes_are_not_offered_to_containers(browser, sid, fake):
     """Incus attaches block (and ISO) volumes to virtual machines only."""
     fake.add_instance("c1")
-    fake.add_instance("vm1", kind="virtual-machine")
     fake.add_volume("default", "raw", content_type="block")
     fake.add_volume("default", "data")
     block = text(browser.get(f"/servers/{sid}/storage/default/volumes/raw"))
-    assert 'value="vm1"' in block and 'value="c1"' not in block
-    filesystem = text(browser.get(f"/servers/{sid}/storage/default/volumes/data"))
-    assert 'value="vm1"' in filesystem and 'value="c1"' in filesystem
+    assert 'value="c1"' not in block
+    assert 'value="c1"' in text(browser.get(f"/servers/{sid}/storage/default/volumes/data"))
 
 
 def test_snapshots(browser, sid, fake):

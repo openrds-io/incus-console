@@ -13,7 +13,7 @@
   {% for i in instances %}
     <tr>
       <td><a href="{{ url_for('srv.instance', name=i.name) }}">{{ i.name }}</a></td>
-      <td>{{ {'vm': 'VM', 'oci': 'App (OCI)'}.get(i|instance_kind, 'Container') }}</td>
+      <td>{{ 'App (OCI)' if i|instance_kind == 'oci' else 'Container' }}</td>
       <td>{{ i.description or (i.config or {}).get('image.description', '') }}</td>
       <td>{{ i|addresses|join(', ') }}</td>
       <td>{{ (i.snapshots or [])|length }}</td>

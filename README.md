@@ -4,9 +4,10 @@ A web and desktop console for [Incus](https://linuxcontainers.org/incus/).
 It is a front end to the Incus REST API: a small Python 3.13 / Flask app that
 renders pages on the server and talks to Incus over a local unix socket or HTTPS.
 
-It manages all three kinds of Incus instances: **system containers**,
-**virtual machines** and **OCI application containers**, side by side in one
-list and with the same pages. It also covers storage (including S3-compatible
+It manages Incus containers: **system containers** and **OCI application
+containers**, side by side in one list and with the same pages, on any number
+of Incus servers. Virtual machines are out of scope: those on a server are
+left alone and not shown. It also covers storage (including S3-compatible
 object storage), networks, profiles, images, projects, and users with roles.
 
 ## Status
@@ -14,7 +15,7 @@ object storage), networks, profiles, images, projects, and users with roles.
 Working today:
 
 - Servers: register a local socket, or a remote server with a trust token
-- Instances, whichever kind: list, start, stop, restart, freeze, delete,
+- Instances, of either kind: list, start, stop, restart, freeze, delete,
   rename, copy, snapshots (by hand or on a schedule, with expiry), logs
   (console and Incus log files), a settings form for limits and common
   options, adding and removing devices, full configuration editing as YAML,
@@ -25,14 +26,6 @@ Working today:
 - System containers: create from the image server's catalog, an alias or a
   local image, with a storage pool and cloud-init user data; settings for
   nesting, privileged mode and process limits
-- Virtual machines: first-class, next to containers. Create from the image
-  server's VM images (only those with a VM build for the server's CPU are
-  offered) or a local VM image, with CPUs, memory, root disk size, Secure Boot
-  and cloud-init; VM settings (CPUs, memory, Secure Boot, legacy BIOS,
-  autostart, scheduled snapshots); a text console that works from the first
-  line of boot, without the Incus agent; and, once the agent runs, a terminal
-  and the file browser just as for containers. Custom volumes attach to VMs,
-  and port forwards reach them
 - Application containers (OCI): create from Docker Hub, ghcr.io, quay.io or
   another registry (the Incus server pulls the image), with environment
   variables; the command, working directory, user and environment are
@@ -43,14 +36,13 @@ Working today:
 - Consoles: a text console for every running instance (boot messages, then
   the login prompt), opening with what the instance printed before you
   attached
-- Terminal: a root shell in a running instance (xterm.js over a websocket);
-  in a VM it goes through the Incus agent
+- Terminal: a root shell in a running instance (xterm.js over a websocket)
 - Files: browse an instance's folders, view and edit text files, download,
-  upload, create folders and delete (in a VM, through the Incus agent)
+  upload, create folders and delete
 - Profiles: list, create (empty or as a copy), settings form, devices, YAML,
   rename, delete
-- Images: list, details (container or VM image), aliases, delete, and
-  creating an instance of the right kind from an image
+- Images: list, details, aliases, delete, and creating an instance of the
+  right kind from an image
 - Networks: list, create bridges, settings, YAML, rename, delete, DHCP leases,
   and port forwards from a host address to instances
 - Volumes: custom storage volumes across pools; create, resize, rename, delete,
@@ -319,11 +311,8 @@ wsgi.py           entry point for gunicorn
 
 ## Roadmap
 
-1. Virtual machines, next steps: live migration settings. Installing from ISO
-   images was tried and set aside for now: most installers' boot menus need
-   the VM's screen and a keyboard the firmware understands (a graphical
-   console), which was not worth its complexity. Perhaps test again on an
-   amd64 Incus server
+1. Multiple servers: Incus clusters (members, placement, moving instances,
+   evacuate and restore), then copying and moving between registered servers
 2. OCI application containers, next steps: private registries (credentials),
    updating an instance to a newer image (rebuild), and presets for common
    images (ports, volumes)
@@ -332,7 +321,6 @@ wsgi.py           entry point for gunicorn
 4. deb (Debian 13, Ubuntu 26.04) and rpm (EL10) packages with nginx and systemd
    units; container image
 5. More permissions work: see [Permissions: still to do](#permissions-still-to-do)
-6. Later: cluster support
 
 ## License
 
