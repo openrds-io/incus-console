@@ -54,6 +54,8 @@ def _incus(sid: int | None) -> list[tuple[str, str]]:
         ),
         ("Connection", "Local socket" if server["kind"] == "unix" else "HTTPS"),
     ]
+    if env.get("server_clustered"):
+        rows.insert(2, ("Cluster", f"Reached through member {env.get('server_name') or '-'}"))
     if server["kind"] == "https":
         per_user = user_certs.applies(server) and not access.is_admin()
         rows.append(
