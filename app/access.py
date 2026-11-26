@@ -37,6 +37,8 @@ REQUIRED = {
     "srv.project_rename": "admin",
     "srv.project_delete": "admin",
     "srv.project_use": "view",
+    "srv.pool_create": "admin",
+    "srv.pool_delete": "admin",
     # Taking a cluster member out of service affects every project on it.
     "srv.cluster_evacuate": "admin",
     "srv.cluster_restore": "admin",

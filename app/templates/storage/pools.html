@@ -2,6 +2,7 @@
 {% set live = true %}
 {% from "macros.html" import status, empty %}
 {% block title %}Storage pools{% endblock %}
+{% block controls %}{% if allowed('srv.pool_create') %}<a class="p-button--positive u-no-margin--bottom" href="{{ url_for('srv.pool_create') }}">Create pool</a>{% endif %}{% endblock %}
 {% block content %}
 {% if pools %}
 <table aria-label="Storage pools">
@@ -9,7 +10,7 @@
   <tbody>
   {% for pool in pools %}
     <tr>
-      <td>{{ pool.name }}</td>
+      <td><a href="{{ url_for('srv.pool', pool=pool.name) }}">{{ pool.name }}</a></td>
       <td>{{ pool.driver }}</td>
       <td>{{ pool.description or '' }}</td>
       <td>{{ (pool.used_by or [])|length }}</td>

@@ -14,7 +14,11 @@ CREATE TABLE IF NOT EXISTS users (
     password_hash TEXT NOT NULL,
     is_admin INTEGER NOT NULL DEFAULT 0,
     disabled INTEGER NOT NULL DEFAULT 0,
-    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    -- Sessions carry this number; raising it signs the user out everywhere.
+    session_epoch INTEGER NOT NULL DEFAULT 0,
+    -- Failed sign-ins before this moment no longer count towards a lockout.
+    failures_reset_at TEXT
 );
 CREATE TABLE IF NOT EXISTS tracked_operations (
     id INTEGER PRIMARY KEY,
@@ -120,6 +124,10 @@ def _migrate(db: sqlite3.Connection) -> None:
         db.execute("ALTER TABLE users ADD COLUMN is_admin INTEGER NOT NULL DEFAULT 0")
         db.execute("ALTER TABLE users ADD COLUMN disabled INTEGER NOT NULL DEFAULT 0")
         db.execute("UPDATE users SET is_admin = 1")
+        db.commit()
+    if "session_epoch" not in columns:
+        db.execute("ALTER TABLE users ADD COLUMN session_epoch INTEGER NOT NULL DEFAULT 0")
+        db.execute("ALTER TABLE users ADD COLUMN failures_reset_at TEXT")
         db.commit()
 
 

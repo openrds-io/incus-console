@@ -71,6 +71,13 @@ LOCAL_SOCKETS = [
 # Server mode: days of audit log to keep (0 keeps everything).
 AUDIT_KEEP_DAYS = 365
 
+# Server mode: after this many failed sign-ins for one username within
+# LOGIN_LOCKOUT_SECONDS, further attempts for it are refused until the oldest
+# of them is that old (or an admin unlocks it). 0 turns this off. Limit
+# requests per address at nginx as well; the console counts per username only.
+LOGIN_MAX_FAILURES = 5
+LOGIN_LOCKOUT_SECONDS = 15 * 60
+
 # Server mode: sign people out after this many seconds.
 PERMANENT_SESSION_LIFETIME = 12 * 60 * 60
 

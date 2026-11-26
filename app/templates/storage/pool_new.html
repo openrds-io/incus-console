@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+{% from "macros.html" import crumbs, csrf %}
+{% block title %}Create storage pool{% endblock %}
+{% block heading %}{{ crumbs([('Storage pools', url_for('srv.pools')), ('Create pool', None)]) }}{% endblock %}
+{% block content %}
+<form class="narrow-form" method="post">
+  {{ csrf() }}
+  <div class="row">
+    <div class="col-4"><label for="name">Name</label><input type="text" id="name" name="name" value="{{ form.get('name', '') }}" required autofocus></div>
+    <div class="col-4">
+      <label for="driver">Driver</label>
+      <select id="driver" name="driver" required>
+        {% for value, label in drivers.items() %}<option value="{{ value }}"{% if form.get('driver') == value %} selected{% endif %}>{{ label }}</option>{% endfor %}
+      </select>
+    </div>
+  </div>
+  <label for="description">Description</label>
+  <input type="text" id="description" name="description" value="{{ form.get('description', '') }}">
+  <label for="size">Size</label>
+  <input type="text" id="size" name="size" value="{{ form.get('size', '') }}" placeholder="e.g. 20GiB">
+  <p class="p-form-help-text">For ZFS, Btrfs and LVM without a source: Incus makes a file of this size to hold the pool. Empty lets Incus decide. A directory pool takes no size.</p>
+  {% if members %}
+  <fieldset>
+    <legend>Source on each member</legend>
+    {% for member in members %}
+    <label for="source-{{ loop.index }}">{{ member }}</label>
+    <input type="text" id="source-{{ loop.index }}" name="source:{{ member }}" value="{{ form.get('source:' ~ member, '') }}" placeholder="Empty: Incus makes its own">
+    {% endfor %}
+    <p class="p-form-help-text">Where the pool keeps its data on that member: a folder for a directory pool; a disk such as <code>/dev/sdb</code> or an existing pool or volume group for the others. The pool is created on every member, so all of them must be online.</p>
+  </fieldset>
+  {% else %}
+  <label for="source">Source</label>
+  <input type="text" id="source" name="source" value="{{ form.get('source', '') }}" placeholder="Empty: Incus makes its own">
+  <p class="p-form-help-text">Where the pool keeps its data: a folder for a directory pool; a disk such as <code>/dev/sdb</code> or an existing pool or volume group for the others.</p>
+  {% endif %}
+  <div class="form-buttons">
+    <a class="p-button--base" href="{{ url_for('srv.pools') }}">Cancel</a>
+    <button class="p-button--positive" data-busy="Creating…">Create</button>
+  </div>
+</form>
+{% endblock %}

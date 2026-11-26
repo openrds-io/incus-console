@@ -2,7 +2,21 @@
 {% from "macros.html" import crumbs %}
 {% block title %}Audit log{% endblock %}
 {% block heading %}{% if user %}{{ crumbs([('Audit log', url_for('admin.audit_log')), (user, None)]) }}{% else %}Audit log{% endif %}{% endblock %}
+{% block controls %}<a class="p-button is-dense u-no-margin--bottom" href="{{ url_for('admin.audit_csv') }}{% if query %}?{{ query }}{% endif %}">Export CSV</a>{% endblock %}
 {% block content %}
 <p class="u-text--muted">Changes made through this console, sign-ins and opened terminals, newest first. Changes made with the incus command or other tools are not here.</p>
+<form class="inline-form audit-filters" method="get">
+  <input type="text" name="user" value="{{ filters.username or '' }}" placeholder="User" aria-label="User">
+  <select name="server" aria-label="Server">
+    <option value="">Any server</option>
+    {% for s in servers %}<option value="{{ s.id }}"{% if filters.server_id == s.id %} selected{% endif %}>{{ s.name }}</option>{% endfor %}
+  </select>
+  <input type="text" name="action" value="{{ filters.action or '' }}" placeholder="Action contains" aria-label="Action contains">
+  <label class="audit-filters__date">From <input type="date" name="since" value="{{ filters.since or '' }}"></label>
+  <label class="audit-filters__date">To <input type="date" name="until" value="{{ filters.until or '' }}"></label>
+  <button class="p-button">Filter</button>
+  {% if filtered %}<a class="p-button--base" href="{{ url_for('admin.audit_log') }}">Clear</a>{% endif %}
+</form>
 {% include "admin/_audit_table.html" %}
+{% if full %}<p class="p-text--small u-text--muted">Showing the newest {{ page }} entries. Narrow the filters, or export the CSV for all of them. Dates are UTC.</p>{% endif %}
 {% endblock %}

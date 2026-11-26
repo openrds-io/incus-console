@@ -91,7 +91,7 @@ def test_a_network_is_defined_on_every_member_first(browser, sid, fake):
         follow_redirects=True,
     )
     assert "Network appnet created." in text(done)
-    assert [t[2] for t in fake.targets] == ["node1", "node2"]
+    assert [t[2] for t in fake.targets if t[0] == "POST"] == ["node1", "node2"]
     assert fake.networks["appnet"]["status"] == "Created"
 
 

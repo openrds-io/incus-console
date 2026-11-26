@@ -58,7 +58,11 @@ Working today:
   and port forwards from a host address to instances
 - Volumes: custom storage volumes across pools; create, resize, rename, delete,
   attach to and detach from instances, and snapshots (also scheduled)
-- Object storage: storage pools; buckets across all pools or per pool;
+- Storage pools: list, details with space used, and (console admins) create
+  with the dir, ZFS, Btrfs or LVM driver and delete. In a cluster the pool is
+  defined on every member with its own source, and its page shows the source
+  and space per member; a network's page shows its state on each member
+- Object storage: buckets across all pools or per pool;
   create (credentials shown once), edit size and description, delete; access
   keys with admin or read-only roles, custom or generated access and secret
   keys, edit and delete
@@ -69,7 +73,9 @@ Working today:
 - Users and access (server mode): console admins, and Viewer, Operator or
   Project admin roles per server and project, given to users directly or
   through groups; user and group management, own password change, and an
-  audit log
+  audit log that filters by user, server, action and date and exports as CSV.
+  Repeated failed sign-ins lock a username for a while; a password change
+  ends the user's other sessions, and admins can sign a user out everywhere
 - Live updates: lists, detail pages and Operations refresh themselves when
   something changes on the server (Incus's event stream, relayed as
   server-sent events), but never while you are typing in a form
@@ -204,15 +210,12 @@ Pending work, roughly in the order planned:
   scriptlet or OpenFGA)
 - [ ] **Access tab:** show who can reach a project or instance, from Incus's
   `/1.0/projects/<name>/access` and `/1.0/instances/<name>/access`
-- [ ] **Sign-in hardening:** rate-limit and temporarily lock out repeated
-  failed logins; optional TOTP second factor for local accounts
-- [ ] **Sessions:** a password change or reset signs out the user's other
-  sessions; admins can sign a user out everywhere
+- [ ] **Sign-in hardening:** optional TOTP second factor for local accounts;
+  limiting attempts per address (today: per username, see below)
 - [ ] **Per-user certificates:** rotate them before they expire (today they
   last 10 years); a "re-sync" button per user and per server; tidy up trust
   entries left behind when a server was unreachable
-- [ ] **Audit log:** filter by date, server and action; export as CSV; optionally
-  also send entries to syslog or the journal
+- [ ] **Audit log:** optionally also send entries to syslog or the journal
 - [ ] **Later, if needed:** OIDC tokens passed through to Incus (Incus sees the
   real user, with OpenFGA syncing grants); LDAP or a trusted proxy header
   (`X-Remote-User`) for single sign-on at nginx; letting non-admins create
@@ -222,7 +225,15 @@ The audit log (**Audit log**, admins only) records every change made through
 the console with its outcome, sign-ins, failed sign-ins and opened terminals.
 `AUDIT_KEEP_DAYS` (default 365) sets how long entries are kept. Sessions end
 after `PERMANENT_SESSION_LIFETIME` seconds (default 12 hours), and disabling a
-user signs them out at once.
+user signs them out at once. So does **Sign out everywhere** on the user's
+page, and a password change or reset ends every other session of that user.
+
+After `LOGIN_MAX_FAILURES` failed sign-ins (default 5) for one username within
+`LOGIN_LOCKOUT_SECONDS` (default 15 minutes), further attempts for that
+username are refused until the oldest of them is that old, or an admin clicks
+**Unlock** on the user's page. Names that are not users are treated the same,
+so the answer does not reveal which usernames exist. The count is per
+username; limit requests per address at nginx (`limit_req`) as well.
 
 ## Desktop app
 
@@ -358,10 +369,10 @@ wsgi.py           entry point for gunicorn
 
 ## Roadmap
 
-1. Clusters, next steps: trying all of it against a real cluster
-   (`dev/cluster.sh`), and member-specific network and storage pool
-   settings. Copying
-   and moving between separately registered servers is out of scope for now
+1. Clusters, next steps: member-specific network settings (such as a
+   bridge's external interfaces), shared storage drivers (Ceph), and OVN
+   networks. Copying and moving between separately registered servers is out
+   of scope for now
 2. OCI application containers, next steps: private registries (credentials),
    updating an instance to a newer image (rebuild), and presets for common
    images (ports, volumes)

@@ -67,15 +67,39 @@ def _after(response):
     return response
 
 
-def recent(limit: int = 200, username: str | None = None):
+def recent(
+    limit: int = 200,
+    username: str | None = None,
+    *,
+    server_id: int | None = None,
+    action: str | None = None,
+    since: str | None = None,
+    until: str | None = None,
+):
+    """Entries, newest first. ``since`` and ``until`` are YYYY-MM-DD days (UTC), inclusive."""
     sql = (
         "SELECT audit.*, servers.name AS server_name FROM audit "
         "LEFT JOIN servers ON servers.id = audit.server_id"
     )
-    args: list = []
+    where, args = [], []
     if username:
-        sql += " WHERE audit.username = ?"
+        where.append("audit.username = ?")
         args.append(username)
+    if server_id is not None:
+        where.append("audit.server_id = ?")
+        args.append(server_id)
+    if action:
+        where.append("audit.action LIKE ? ESCAPE '!'")
+        escaped = action.replace("!", "!!").replace("%", "!%").replace("_", "!_")
+        args.append(f"%{escaped}%")
+    if since:
+        where.append("audit.at >= ?")
+        args.append(since)
+    if until:
+        where.append("audit.at < date(?, '+1 day')")
+        args.append(until)
+    if where:
+        sql += " WHERE " + " AND ".join(where)
     sql += " ORDER BY audit.id DESC LIMIT ?"
     args.append(limit)
     return get_db().execute(sql, args).fetchall()

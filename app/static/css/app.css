@@ -488,3 +488,16 @@ td code {
   overflow-wrap: break-word;
   vertical-align: middle;
 }
+
+/* Audit log filters: one row, dates with their words. */
+.audit-filters {
+  flex-wrap: wrap;
+  margin-bottom: 1rem;
+}
+.audit-filters__date {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  margin: 0;
+  white-space: nowrap;
+}

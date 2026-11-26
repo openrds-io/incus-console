@@ -687,8 +687,8 @@ class IncusClient:
     def network(self, name: str) -> dict:
         return self.get("networks", name)
 
-    def network_state(self, name: str) -> dict:
-        return self.get("networks", name, "state") or {}
+    def network_state(self, name: str, target: str | None = None) -> dict:
+        return self.get("networks", name, "state", **(_target(target) or {})) or {}
 
     def network_leases(self, name: str) -> list:
         return self.get("networks", name, "leases") or []
@@ -726,6 +726,22 @@ class IncusClient:
 
     def pools(self) -> list:
         return self.get("storage-pools", recursion=1) or []
+
+    def pool(self, name: str, target: str | None = None) -> dict:
+        """``target``: a cluster member, for the settings that differ between members."""
+        return self.get("storage-pools", name, **(_target(target) or {}))
+
+    def pool_resources(self, name: str, target: str | None = None) -> dict:
+        """Space used and available in the pool (on one cluster member, with ``target``)."""
+        return self.get("storage-pools", name, "resources", **(_target(target) or {})) or {}
+
+    def create_pool(self, payload: dict, target: str | None = None) -> dict:
+        """In a cluster a pool is first defined on each member (``target``, with
+        that member's source), then created with one more call without it."""
+        return self.request("POST", path("storage-pools"), params=_target(target), body=payload)
+
+    def delete_pool(self, name: str) -> dict:
+        return self.request("DELETE", path("storage-pools", name))
 
     def volumes(self, pool: str) -> list:
         """The pool's volumes of every type (custom, container, image, ...)."""
