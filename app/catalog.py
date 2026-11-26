@@ -28,8 +28,6 @@ ARCHITECTURES = {
     "riscv64": "riscv64",
 }
 CONTAINER_FILES = {"squashfs", "root.tar.xz"}
-VM_FILES = {"disk-kvm.img"}
-FILES = {"container": CONTAINER_FILES, "virtual-machine": VM_FILES}
 
 _cache: dict[str, tuple[float, dict]] = {}
 _lock = threading.Lock()
@@ -76,9 +74,8 @@ def _has_files(product: dict, files: set[str]) -> bool:
     return False
 
 
-def container_images(index: dict, architectures: list[str], kind: str = "container") -> list[dict]:
-    """Images of one kind (container or virtual-machine) for these Incus
-    architectures, grouped by OS.
+def container_images(index: dict, architectures: list[str]) -> list[dict]:
+    """Container images for these Incus architectures, grouped by OS.
 
     Returns ``[{"os": "Debian", "images": [{"alias", "label", "variant"}, ...]}, ...]``
     with releases newest first.
@@ -86,7 +83,7 @@ def container_images(index: dict, architectures: list[str], kind: str = "contain
     wanted = {ARCHITECTURES.get(a, a) for a in architectures}
     by_os: dict[str, list[dict]] = {}
     for product in (index.get("products") or {}).values():
-        if product.get("arch") not in wanted or not _has_files(product, FILES[kind]):
+        if product.get("arch") not in wanted or not _has_files(product, CONTAINER_FILES):
             continue
         aliases = [a.strip() for a in (product.get("aliases") or "").split(",") if a.strip()]
         if not aliases:
@@ -116,5 +113,5 @@ def container_images(index: dict, architectures: list[str], kind: str = "contain
     return groups
 
 
-def for_server(server: str, architectures: list[str], kind: str = "container") -> list[dict]:
-    return container_images(_index(server), architectures, kind)
+def for_server(server: str, architectures: list[str]) -> list[dict]:
+    return container_images(_index(server), architectures)

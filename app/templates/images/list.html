@@ -11,7 +11,7 @@
     <tr>
       <td><a href="{{ url_for('srv.image', fingerprint=i.fingerprint) }}">{{ label(i) }}</a>{% if i.cached %} <span class="u-text--muted">(cached)</span>{% endif %}</td>
       <td>{% for a in i.aliases or [] %}<code>{{ a.name }}</code> {% else %}-{% endfor %}</td>
-      <td>{{ 'VM' if i.type == 'virtual-machine' else 'Container' }}</td>
+      <td>{{ 'App (OCI)' if (i.properties or {}).get('type') == 'oci' else 'Container' }}</td>
       <td>{{ i.architecture or '-' }}</td>
       <td>{{ i.size|filesize }}</td>
       <td>{{ i.uploaded_at|when }}</td>

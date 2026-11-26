@@ -57,6 +57,61 @@ def _authorize() -> None:
         abort(403)
 
 
+def cluster_members() -> list[dict]:
+    """The members of the cluster this server belongs to; [] when it stands alone."""
+    if "cluster_members" in g:
+        return g.cluster_members
+    g.cluster_members = []
+    if g.get("incus_failed"):
+        return g.cluster_members
+    try:
+        environment = g.incus.server_info().get("environment") or {}
+        if environment.get("server_clustered"):
+            g.cluster_members = sorted(_members(), key=lambda m: m["server_name"])
+    except IncusError:
+        pass
+    return g.cluster_members
+
+
+def _as_console(read):
+    """``read(client)`` as the user, or as the console where Incus refuses the user.
+
+    A certificate restricted to projects may not be shown the cluster's members
+    and groups. Their names are no secret to someone placing an instance.
+    """
+    try:
+        return read(g.incus)
+    except IncusError as error:
+        if error.status != 403:
+            raise
+    return read(servers.client_for(g.server, g.project))
+
+
+def _members() -> list[dict]:
+    return _as_console(lambda client: client.cluster_members())
+
+
+def cluster_groups() -> list[dict]:
+    """The cluster's groups of members; [] on a server that stands alone."""
+    if not cluster_members():
+        return []
+    if "cluster_groups" not in g:
+        found = _as_console(lambda client: client.cluster_groups())
+        g.cluster_groups = sorted(found, key=lambda group: group["name"])
+    return g.cluster_groups
+
+
+def placement_groups() -> list[str]:
+    """Names of the groups with a member that can take an instance now."""
+    online = set(online_members())
+    return [x["name"] for x in cluster_groups() if online & set(x.get("members") or [])]
+
+
+def online_members() -> list[str]:
+    """Names of the members that can take an instance or a volume now."""
+    return [m["server_name"] for m in cluster_members() if m.get("status") == "Online"]
+
+
 @bp.context_processor
 def _server_context():
     if "incus" not in g:
@@ -68,7 +123,12 @@ def _server_context():
         except IncusError:
             pass
     projects = access.visible_projects(g.sid, projects) or [g.project]
-    return {"server": g.server, "project": g.project, "projects": projects}
+    return {
+        "server": g.server,
+        "project": g.project,
+        "projects": projects,
+        "cluster_members": cluster_members(),
+    }
 
 
 DONE, RUNNING = "done", "running"

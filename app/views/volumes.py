@@ -9,13 +9,12 @@ from flask import flash, g, redirect, render_template, request, url_for
 from ..incus import IncusError
 from .config_forms import check_expiry, check_schedule
 from .networks import used_by
-from .scoped import bp, run
+from .scoped import bp, online_members, run
 
 NAME = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.-]{0,62}")
 NAME_RULE = "Use letters, digits, dashes, dots and underscores (at most 63)."
 SIZE = re.compile(r"\d+(\.\d+)?\s*(B|[KMGTPE]i?B)?")
 SIZE_RULE = "Write a size such as 10GiB or 500MB."
-CONTENT_TYPES = {"filesystem": "Filesystem", "block": "Block device"}
 
 
 def _custom(volumes: list) -> list:
@@ -67,30 +66,33 @@ def volume_create():
     if request.method == "POST":
         pool = form.get("pool", "")
         name = form.get("name", "").strip()
-        content = form.get("content_type", "filesystem")
         try:
             if pool not in pools:
                 raise IncusError(400, "Choose a storage pool.")
             if not NAME.fullmatch(name):
                 raise IncusError(400, NAME_RULE)
-            if content not in CONTENT_TYPES:
-                raise IncusError(400, "Choose filesystem or block.")
             size = _size(form)
+            target = form.get("target", "").strip() or None
+            if target and target not in online_members():
+                raise IncusError(400, f"{target} is not a cluster member that is online.")
         except IncusError as error:
             flash(error.message, "error")
         else:
             payload = {
                 "name": name,
                 "description": form.get("description", "").strip(),
-                "content_type": content,
+                "content_type": "filesystem",
                 "config": {"size": size} if size else {},
             }
-            if run(lambda: g.incus.create_volume(pool, payload), f"Volume {name} created."):
+            if run(
+                lambda: g.incus.create_volume(pool, payload, target=target),
+                f"Volume {name} created.",
+            ):
                 return redirect(url_for("srv.volume", pool=pool, name=name))
     return render_template(
         "volumes/new.html",
         pools=pools,
-        types=CONTENT_TYPES,
+        members=online_members(),
         form=form,
         chosen_pool=form.get("pool") or request.args.get("pool", ""),
     )
@@ -100,12 +102,11 @@ def volume_create():
 def volume(pool, name):
     found = g.incus.volume(pool, name)
     attached = used_by(found.get("used_by"))["instances"]
-    # Block and ISO volumes attach to virtual machines only.
-    vms_only = found.get("content_type") in ("block", "iso")
+    # Containers mount filesystem volumes only; block and ISO volumes are for
+    # virtual machines, which the console does not manage.
+    mountable = found.get("content_type") not in ("block", "iso")
     instances = sorted(
-        i["name"]
-        for i in g.incus.instances()
-        if i["name"] not in attached and (i.get("type") == "virtual-machine" or not vms_only)
+        i["name"] for i in g.incus.instances() if mountable and i["name"] not in attached
     )
     return render_template(
         "volumes/detail.html",
@@ -200,11 +201,13 @@ def volume_attach(pool, name):
     device = form.get("device", "").strip() or name
     back = redirect(url_for("srv.volume", pool=pool, name=name))
     found = g.incus.volume(pool, name)
-    is_block = found.get("content_type") in ("block", "iso")
+    if found.get("content_type") in ("block", "iso"):
+        flash("Block and ISO volumes cannot be attached to containers.", "error")
+        return back
     if not target:
         flash("Choose an instance.", "error")
         return back
-    if not is_block and not mount.startswith("/"):
+    if not mount.startswith("/"):
         flash("Give the path to mount it at, such as /data.", "error")
         return back
     try:
@@ -216,9 +219,7 @@ def volume_attach(pool, name):
     if device in devices or device in (instance.get("expanded_devices") or {}):
         flash(f"{target} already has a device named {device}. Give it another name.", "error")
         return back
-    devices[device] = {"type": "disk", "pool": pool, "source": name}
-    if not is_block:
-        devices[device]["path"] = mount
+    devices[device] = {"type": "disk", "pool": pool, "source": name, "path": mount}
     payload = {**_instance_payload(instance), "devices": devices}
     run(lambda: g.incus.update_instance(target, payload), f"{name} attached to {target}.")
     return back

@@ -2,18 +2,19 @@
 {% set live = true %}
 {% from "instances/_actions.html" import actions %}
 {% from "macros.html" import status, empty %}
-{% block title %}Instances{% endblock %}
+{% block title %}{{ 'Cluster instances' if cluster_members else 'Instances' }}{% endblock %}
 {% block controls %}{% if allowed('srv.instance_create') %}<a class="p-button--positive u-no-margin--bottom" href="{{ url_for('srv.instance_create') }}">Create instance</a>{% endif %}{% endblock %}
 {% block content %}
 {% if instances %}
 <p class="u-text--muted">Showing all {{ instances|length }} instance{{ '' if instances|length == 1 else 's' }}</p>
 <table aria-label="Instances">
-  <thead><tr><th>Name</th><th>Type</th><th>Description</th><th>IPv4</th><th>Snapshots</th><th>Status</th><th class="u-align--right">Actions</th></tr></thead>
+  <thead><tr><th>Name</th><th>Type</th>{% if cluster_members %}<th>Member</th>{% endif %}<th>Description</th><th>IPv4</th><th>Snapshots</th><th>Status</th><th class="u-align--right">Actions</th></tr></thead>
   <tbody>
   {% for i in instances %}
     <tr>
       <td><a href="{{ url_for('srv.instance', name=i.name) }}">{{ i.name }}</a></td>
-      <td>{{ {'vm': 'VM', 'oci': 'App (OCI)'}.get(i|instance_kind, 'Container') }}</td>
+      <td>{{ 'App (OCI)' if i|instance_kind == 'oci' else 'Container' }}</td>
+      {% if cluster_members %}<td>{{ i.location or '-' }}</td>{% endif %}
       <td>{{ i.description or (i.config or {}).get('image.description', '') }}</td>
       <td>{{ i|addresses|join(', ') }}</td>
       <td>{{ (i.snapshots or [])|length }}</td>

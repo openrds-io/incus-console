@@ -26,7 +26,7 @@
   <option value="false"{% if f.value == 'false' %} selected{% endif %}>No</option>
 </select>
 {% else %}
-<input type="text" id="cfg-{{ loop.index }}" name="cfg:{{ f.key }}" value="{{ f.value }}" placeholder="{{ ('From profile: ' ~ f.inherited) if f.inherited else f.empty }}">
+<input type="text" id="cfg-{{ loop.index }}" name="cfg:{{ f.key }}" value="{{ f.value }}" placeholder="{{ ('From profile: ' ~ f.inherited) if f.inherited else f.empty }}"{% if f.key == 'limits.memory' %} data-gib="{{ config.MEMORY_GIB_UP_TO }}"{% endif %}>
 {% endif %}
 {% if f.help %}<p class="p-form-help-text">{{ f.help }}</p>{% endif %}
 {% endfor %}

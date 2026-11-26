@@ -2,9 +2,10 @@
 
 {% macro status(value) -%}
 {%- set kind = {
-  'running': 'positive', 'success': 'positive', 'created': 'positive',
-  'frozen': 'caution', 'pending': 'caution', 'cancelling': 'caution',
+  'running': 'positive', 'success': 'positive', 'created': 'positive', 'online': 'positive',
+  'frozen': 'caution', 'pending': 'caution', 'cancelling': 'caution', 'evacuated': 'caution',
   'error': 'negative', 'failure': 'negative', 'cancelled': 'negative', 'unknown': 'caution',
+  'offline': 'negative', 'blocked': 'negative',
 }.get((value or '')|lower, 'neutral') -%}
 <span class="status-label"><span class="status-dot is-{{ kind }}" aria-hidden="true"></span>{{ value or '-' }}</span>
 {%- endmacro %}

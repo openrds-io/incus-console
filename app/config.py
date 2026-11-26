@@ -29,14 +29,15 @@ INCUS_TIMEOUT = 30
 # Seconds a page waits for an Incus operation before handing off to Operations.
 ACTION_WAIT = 30
 
+# Memory fields: a whole number up to this, typed without a unit, means GiB.
+MEMORY_GIB_UP_TO = 512
+
 DEFAULT_IMAGE_SERVER = "https://images.linuxcontainers.org"
 
 # Offer the default image server's catalog on the create form. The console
 # fetches the server's index (several MB) and keeps it for an hour.
 IMAGE_CATALOG = True
 IMAGE_SUGGESTIONS = ["debian/13", "debian/12", "ubuntu/26.04", "ubuntu/24.04", "almalinux/10"]
-# Virtual machines: what the create form suggests for a new VM's root disk.
-VM_DISK_SUGGESTION = "20GiB"
 
 # OCI application containers (Incus 6.3 and later, with skopeo and umoci on the
 # Incus server): image names without a registry come from this one. The server

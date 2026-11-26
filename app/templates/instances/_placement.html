@@ -1,0 +1,22 @@
+{# The "Cluster member" choice of the create and copy forms; nothing on a server that stands alone. #}
+{% macro placement(members, groups_of_members, form) %}
+{% if cluster_members %}
+<label for="target">Cluster member</label>
+<select id="target" name="target">
+  <option value="">Let Incus choose</option>
+  <optgroup label="Members">
+  {% for member in members %}
+  <option value="{{ member }}"{% if form.get('target') == member %} selected{% endif %}>{{ member }}</option>
+  {% endfor %}
+  </optgroup>
+  {% if groups_of_members %}
+  <optgroup label="Any member of a group">
+  {% for name in groups_of_members %}
+  <option value="@{{ name }}"{% if form.get('target') == '@' ~ name %} selected{% endif %}>{{ name }}</option>
+  {% endfor %}
+  </optgroup>
+  {% endif %}
+</select>
+<p class="p-form-help-text">Which member of the cluster runs it. Only members that are online are listed.</p>
+{% endif %}
+{% endmacro %}

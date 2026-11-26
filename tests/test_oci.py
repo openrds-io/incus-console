@@ -166,8 +166,8 @@ def test_terminal_runs_sh_in_application_containers(app, browser, sid, fake):
 def test_create_form_has_a_tab_per_kind(browser, sid, fake):
     assert "Create instance" in text(browser.get(f"/servers/{sid}/instances"))
     form = text(browser.get(f"/servers/{sid}/create-instance"))
-    for kind in ("oci", "vm"):
-        assert re.search(rf"create-instance\?type={kind}", form)
+    assert re.search(r"create-instance\?type=oci", form)
+    assert "type=vm" not in form and "Virtual machine" not in form
 
 
 def test_environment_values_are_hidden_from_viewers_and_operators(server_app, setup, admin, fake):

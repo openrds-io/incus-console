@@ -37,6 +37,14 @@ REQUIRED = {
     "srv.project_rename": "admin",
     "srv.project_delete": "admin",
     "srv.project_use": "view",
+    # Taking a cluster member out of service affects every project on it.
+    "srv.cluster_evacuate": "admin",
+    "srv.cluster_restore": "admin",
+    "srv.cluster_member_edit": "admin",
+    "srv.cluster_member_remove": "admin",
+    "srv.cluster_group_create": "admin",
+    "srv.cluster_group_edit": "admin",
+    "srv.cluster_group_delete": "admin",
     # Day-to-day work on instances.
     "srv.instance_action": "operate",
     "srv.instance_terminal": "operate",

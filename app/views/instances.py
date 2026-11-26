@@ -3,7 +3,7 @@ from __future__ import annotations
 import re
 from urllib.parse import urlsplit
 
-from flask import current_app, flash, g, redirect, render_template, request, url_for
+from flask import abort, current_app, flash, g, redirect, render_template, request, url_for
 
 from .. import catalog, terminal
 from ..filters import instance_kind
@@ -13,18 +13,26 @@ from .config_forms import (
     GROUPS,
     OCI_SETTINGS,
     SETTINGS,
-    VM_DEFAULTS,
-    VM_SETTINGS,
     apply_environment,
     apply_settings,
     dump_yaml,
     environment_text,
     load_yaml,
+    memory_size,
     new_device,
     parse_environment,
     settings_fields,
 )
-from .scoped import DONE, RUNNING, bp, run, start
+from .scoped import (
+    DONE,
+    RUNNING,
+    bp,
+    cluster_members,
+    online_members,
+    placement_groups,
+    run,
+    start,
+)
 
 ACTIONS = {
     "start": "started",
@@ -43,8 +51,25 @@ def instances():
     return render_template("instances/list.html", instances=rows)
 
 
-def _catalog(kind: str = "container") -> tuple[list, str | None]:
-    """The image server's images of this kind for this host, or why there are none."""
+def _placement(form) -> tuple[str | None, str | None]:
+    """(where in the cluster to create it, problem). Nowhere lets Incus choose.
+
+    A member's name, or ``@group`` for any member of a cluster group.
+    """
+    target = form.get("target", "").strip()
+    if not target:
+        return None, None
+    if target.startswith("@"):
+        if target[1:] not in placement_groups():
+            return None, f"{target[1:]} is not a cluster group with a member online."
+        return target, None
+    if target not in online_members():
+        return None, f"{target} is not a cluster member that is online."
+    return target, None
+
+
+def _catalog() -> tuple[list, str | None]:
+    """The image server's container images for this host, or why there are none."""
     if not current_app.config["IMAGE_CATALOG"]:
         return [], None
     environment = g.incus.server_info().get("environment") or {}
@@ -52,7 +77,6 @@ def _catalog(kind: str = "container") -> tuple[list, str | None]:
         groups = catalog.for_server(
             current_app.config["DEFAULT_IMAGE_SERVER"],
             environment.get("architectures") or [],
-            kind,
         )
     except Exception as error:  # noqa: BLE001 - offline, blocked, or a bad index
         current_app.logger.warning("image catalog unavailable: %s", error)
@@ -60,8 +84,9 @@ def _catalog(kind: str = "container") -> tuple[list, str | None]:
     return groups, None
 
 
-KINDS = ("container", "oci", "vm")
-SIZE = re.compile(r"\d+(\.\d+)?\s*(B|kB|MB|GB|TB|KiB|MiB|GiB|TiB)", re.IGNORECASE)
+KINDS = ("container", "oci")
+
+
 OCI_IMAGE = re.compile(r"[a-z0-9][a-z0-9._/-]*(:[A-Za-z0-9._-]+)?(@sha256:[a-f0-9]{64})?")
 
 
@@ -83,21 +108,8 @@ def _is_oci_image(image: dict) -> bool:
 
 
 def image_kind(image: dict) -> str:
-    """Which create form an image belongs to: container, oci or vm."""
-    if image.get("type") == "virtual-machine":
-        return "vm"
+    """Which create form an image belongs to: container or oci."""
     return "oci" if _is_oci_image(image) else "container"
-
-
-def _root_pool(profile_names: list[str]) -> str | None:
-    """The pool of the root disk the chosen profiles give (the last one wins)."""
-    pool = None
-    by_name = {p["name"]: p for p in g.incus.profiles()}
-    for name in profile_names:
-        root = ((by_name.get(name) or {}).get("devices") or {}).get("root") or {}
-        if root.get("type") == "disk" and root.get("pool"):
-            pool = root["pool"]
-    return pool
 
 
 @bp.route("/create-instance", methods=["GET", "POST"])
@@ -114,7 +126,7 @@ def instance_create():
     if kind == "oci":
         groups, catalog_problem = [], None
     else:
-        groups, catalog_problem = _catalog("virtual-machine" if kind == "vm" else "container")
+        groups, catalog_problem = _catalog()
     if request.method == "POST":
         name = form.get("name", "").strip()
         chosen = form.get("source", "catalog" if kind == "container" else "remote")
@@ -122,7 +134,7 @@ def instance_create():
         problem = None
         settings = {
             "limits.cpu": form.get("cpu", "").strip(),
-            "limits.memory": form.get("memory", "").strip(),
+            "limits.memory": memory_size(form.get("memory", "")),
         }
         if kind == "oci":
             if not oci_ok:
@@ -140,10 +152,8 @@ def instance_create():
                 settings.update(parse_environment(form.get("environment", "")))
             except IncusError as error:
                 problem = problem or error.message
-        else:  # a system container or a virtual machine, from a system image
+        else:  # a system container, from a system image
             settings["cloud-init.user-data"] = form.get("user_data", "").strip()
-            if kind == "vm" and not form.get("secureboot"):
-                settings["security.secureboot"] = "false"
             if chosen == "local":
                 source["fingerprint"] = form.get("fingerprint", "")
             else:
@@ -156,25 +166,18 @@ def instance_create():
                     problem = "Choose an image."
         payload = {
             "name": name,
-            "type": "virtual-machine" if kind == "vm" else "container",
+            "type": "container",
             "description": form.get("description", "").strip(),
             "profiles": form.getlist("profiles") or ["default"],
             "config": {key: value for key, value in settings.items() if value},
             "source": source,
             "start": bool(form.get("start")),
         }
+        target, misplaced = _placement(form)
+        problem = problem or misplaced
         pool = form.get("pool", "").strip()
-        disk = form.get("disk_size", "").strip() if kind == "vm" else ""
-        if disk and not SIZE.fullmatch(disk):
-            problem = problem or f"{disk!r} is not a size, such as 20GiB."
-        if disk and not pool:
-            # A root device of the instance's own needs a pool: keep the profiles' one.
-            pool = _root_pool(payload["profiles"]) or "default"
         if pool:
-            root = {"type": "disk", "path": "/", "pool": pool}
-            if disk:
-                root["size"] = disk
-            payload["devices"] = {"root": root}
+            payload["devices"] = {"root": {"type": "disk", "path": "/", "pool": pool}}
         if not NAME.fullmatch(name):
             flash(NAME_RULE, "error")
         elif problem:
@@ -182,8 +185,10 @@ def instance_create():
         else:
             # Incus makes the instance only after fetching the image, so while that
             # is still running there is no instance page to show yet.
-            what = {"oci": "Application container", "vm": "Virtual machine"}.get(kind, "Container")
-            outcome = start(lambda: g.incus.create_instance(payload), f"{what} {name} created.")
+            what = "Application container" if kind == "oci" else "Container"
+            outcome = start(
+                lambda: g.incus.create_instance(payload, target=target), f"{what} {name} created."
+            )
             if outcome == DONE:
                 return redirect(url_for("srv.instance", name=name))
             if outcome == RUNNING:
@@ -205,8 +210,9 @@ def instance_create():
         oci_suggestions=config["OCI_SUGGESTIONS"],
         default_source=default_source,
         default_alias=config["IMAGE_SUGGESTIONS"][0],
-        vm_disk=config["VM_DISK_SUGGESTION"],
         default_image=image,
+        members=online_members(),
+        groups_of_members=placement_groups(),
         form=form,
     )
 
@@ -317,7 +323,7 @@ bp.add_url_rule(
 
 @bp.get("/instances/<name>/console")
 def instance_console(name):
-    """The text console: boot messages and a login prompt, without the Incus agent."""
+    """The text console: boot messages and a login prompt."""
     ws_path = urlsplit(url_for("srv.instance_console_ws", name=name)).path
     return render_template(
         "instances/terminal.html",
@@ -359,21 +365,48 @@ def instance_rename(name):
     return render_template("instances/rename.html", instance=instance, form=request.form)
 
 
+@bp.route("/instances/<name>/move", methods=["GET", "POST"])
+def instance_move(name):
+    """Move a stopped instance to another member of the cluster."""
+    if not cluster_members():
+        abort(404)
+    instance = g.incus.instance(name)
+    here = instance.get("location") or ""
+    members = [m for m in online_members() if m != here]
+    if request.method == "POST":
+        target = request.form.get("target", "")
+        if target not in members:
+            flash("Choose a cluster member that is online.", "error")
+        else:
+            outcome = start(
+                lambda: g.incus.move_instance(name, target), f"{name} moved to {target}."
+            )
+            if outcome == DONE:
+                return redirect(url_for("srv.instance", name=name))
+            if outcome == RUNNING:
+                return redirect(url_for("srv.operations"))
+    return render_template("instances/move.html", instance=instance, members=members)
+
+
 @bp.route("/instances/<name>/copy", methods=["GET", "POST"])
 def instance_copy(name):
     instance = g.incus.instance(name)
     if request.method == "POST":
         form = request.form
         new_name = form.get("new_name", "").strip()
+        target, misplaced = _placement(form)
         if not NAME.fullmatch(new_name):
             flash(NAME_RULE, "error")
+        elif misplaced:
+            flash(misplaced, "error")
         else:
             outcome = start(
                 lambda: g.incus.copy_instance(
-                    name,
+                    instance,
                     new_name,
                     snapshots=bool(form.get("snapshots")),
                     start=bool(form.get("start")),
+                    target=target,
                 ),
                 f"{name} copied to {new_name}.",
             )
@@ -381,7 +414,13 @@ def instance_copy(name):
                 return redirect(url_for("srv.instance", name=new_name))
             if outcome == RUNNING:
                 return redirect(url_for("srv.operations"))
-    return render_template("instances/copy.html", instance=instance, form=request.form)
+    return render_template(
+        "instances/copy.html",
+        instance=instance,
+        members=online_members(),
+        groups_of_members=placement_groups(),
+        form=request.form,
+    )
 
 
 # -- logs -----------------------------------------------------------------
@@ -438,8 +477,7 @@ def _crumbs(instance: dict, last: str) -> list:
 @bp.route("/instances/<name>/settings", methods=["GET", "POST"])
 def instance_settings(name):
     instance = g.incus.instance(name)
-    kind = instance_kind(instance)
-    settings = {"oci": OCI_SETTINGS + SETTINGS, "vm": VM_SETTINGS}.get(kind, SETTINGS)
+    settings = OCI_SETTINGS + SETTINGS if instance_kind(instance) == "oci" else SETTINGS
     environment = environment_text(instance.get("config"))
     if request.method == "POST":
         payload = _editable(instance)
@@ -469,7 +507,6 @@ def instance_settings(name):
             instance.get("expanded_config"),
             settings,
             groups=GROUPS,
-            defaults=VM_DEFAULTS if kind == "vm" else None,
         ),
         environment=environment,
         inherits=True,

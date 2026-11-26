@@ -24,6 +24,14 @@ document.addEventListener("change", (event) => {
   if (event.target.matches("[data-autosubmit]")) {
     event.target.form.submit();
   }
+  // A memory field: a whole number up to data-gib means GiB, so show it that
+  // way. The server does the same for a form sent without this script.
+  if (event.target.matches("[data-gib]")) {
+    const text = event.target.value.trim();
+    if (/^\d+$/.test(text) && Number(text) > 0 && Number(text) <= Number(event.target.dataset.gib)) {
+      event.target.value = Number(text) + "GiB";
+    }
+  }
 });
 
 document.addEventListener("click", (event) => {

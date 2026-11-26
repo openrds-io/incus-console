@@ -175,3 +175,13 @@ def test_unreachable_server_is_reported(remote, fake):
         db.commit()
     page = text(grant(admin, remote, "default"))
     assert "trust store was not updated" in page
+
+
+def test_a_restricted_user_still_sees_cluster_members(remote, fake):
+    """Incus hides the members from a restricted certificate; the console names them."""
+    fake.make_cluster("node1", "node2")
+    admin = login(remote, "root")
+    grant(admin, remote, "default", role="project_admin")
+    vic = login(remote, "vic")
+    assert 'value="node2"' in text(vic.get("/servers/1/create-instance"))
+    assert "node2" in text(vic.get("/servers/1/cluster"))

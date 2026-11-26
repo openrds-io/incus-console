@@ -14,16 +14,18 @@
       </select>
     </div>
   </div>
-  <div class="row">
-    <div class="col-4"><label for="size">Size</label><input type="text" id="size" name="size" value="{{ form.get('size', '') }}" placeholder="e.g. 10GiB"></div>
-    <div class="col-4">
-      <label for="content_type">Content</label>
-      <select id="content_type" name="content_type">
-        {% for value, label in types.items() %}<option value="{{ value }}"{% if form.get('content_type') == value %} selected{% endif %}>{{ label }}</option>{% endfor %}
-      </select>
-    </div>
-  </div>
-  <p class="p-form-help-text">Leave the size empty for the pool's default. Containers mount filesystem volumes; block volumes are for virtual machines.</p>
+  <label for="size">Size</label><input type="text" id="size" name="size" value="{{ form.get('size', '') }}" placeholder="e.g. 10GiB">
+  <p class="p-form-help-text">Leave the size empty for the pool's default.</p>
+  {% if cluster_members %}
+  <label for="target">Cluster member</label>
+  <select id="target" name="target">
+    <option value="">The member that answers</option>
+    {% for member in members %}
+    <option value="{{ member }}"{% if form.get('target') == member %} selected{% endif %}>{{ member }}</option>
+    {% endfor %}
+  </select>
+  <p class="p-form-help-text">On a pool that keeps its data on each member (dir, zfs, btrfs, lvm), the volume lives on one member and only instances there can use it. Shared pools such as Ceph ignore this: leave it as it is.</p>
+  {% endif %}
   <label for="description">Description</label>
   <input type="text" id="description" name="description" value="{{ form.get('description', '') }}">
   <div class="form-buttons">

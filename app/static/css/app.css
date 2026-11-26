@@ -39,6 +39,19 @@ label code {
   padding: 0 0.25em;
   font-size: 0.875em;
 }
+/* Inline code in a sentence wraps like the words around it: between words where
+   it can, inside a long path or fingerprint only when that cannot fit a line.
+   Each line of a wrapped one keeps its own box. */
+p code {
+  max-height: none;
+  overflow: visible;
+  padding: 0 0.25em;
+  white-space: normal;
+  word-break: normal;
+  overflow-wrap: anywhere;
+  -webkit-box-decoration-break: clone;
+  box-decoration-break: clone;
+}
 /* An introduction at the top of a page (Vanilla pulls help text up under its field). */
 .u-fixed-width > .p-form-help-text {
   margin-top: 0;

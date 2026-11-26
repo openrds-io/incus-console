@@ -32,6 +32,22 @@ class IncusError(Exception):
         self.message = message
 
 
+def _target(member: str | None) -> dict | None:
+    return {"target": member} if member else None
+
+
+def _is_vm(thing: dict) -> bool:
+    return thing.get("type") == "virtual-machine"
+
+
+def _containers_only(thing: dict, what: str) -> dict:
+    """The console manages containers only: a virtual machine (or a VM image)
+    on the server is treated as if it were not there."""
+    if _is_vm(thing):
+        raise IncusError(404, f"{what} not found")
+    return thing
+
+
 class IncusConnectionError(IncusError):
     """The server could not be reached or the TLS checks failed."""
 
@@ -351,6 +367,50 @@ class IncusClient:
     def server_info(self) -> dict:
         return self.get()
 
+    # -- cluster -------------------------------------------------------------
+
+    def cluster_members(self) -> list:
+        return self.get("cluster", "members", recursion=1) or []
+
+    def cluster_member(self, member: str) -> dict:
+        return self.get("cluster", "members", member)
+
+    def update_cluster_member(self, member: str, payload: dict) -> dict:
+        return self.request("PUT", path("cluster", "members", member), body=payload)
+
+    def remove_cluster_member(self, member: str) -> dict:
+        """Take a member out of the cluster for good. Incus refuses while it holds instances."""
+        return self.request("DELETE", path("cluster", "members", member))
+
+    def cluster_member_resources(self, member: str) -> dict:
+        """Load, memory and storage pool usage of one member."""
+        return self.get("cluster", "members", member, "state") or {}
+
+    def cluster_groups(self) -> list:
+        return self.get("cluster", "groups", recursion=1) or []
+
+    def cluster_group(self, name: str) -> dict:
+        return self.get("cluster", "groups", name)
+
+    def create_cluster_group(self, payload: dict) -> dict:
+        return self.request("POST", path("cluster", "groups"), body=payload)
+
+    def update_cluster_group(self, name: str, payload: dict) -> dict:
+        return self.request("PUT", path("cluster", "groups", name), body=payload)
+
+    def rename_cluster_group(self, name: str, new_name: str) -> dict:
+        return self.request("POST", path("cluster", "groups", name), body={"name": new_name})
+
+    def delete_cluster_group(self, name: str) -> dict:
+        return self.request("DELETE", path("cluster", "groups", name))
+
+    def cluster_member_state(self, member: str, action: str, mode: str = "") -> dict:
+        """Evacuate a member (move or stop its instances) or restore it."""
+        body = {"action": action}
+        if mode:
+            body["mode"] = mode
+        return self.request("POST", path("cluster", "members", member, "state"), body=body)
+
     def projects(self) -> list:
         return self.get("projects", recursion=1) or []
 
@@ -405,10 +465,10 @@ class IncusClient:
         return self.request("DELETE", path("profiles", name))
 
     def images(self) -> list:
-        return self.get("images", recursion=1) or []
+        return [i for i in self.get("images", recursion=1) or [] if not _is_vm(i)]
 
     def image(self, fingerprint: str) -> dict:
-        return self.get("images", fingerprint)
+        return _containers_only(self.get("images", fingerprint), "Image")
 
     def delete_image(self, fingerprint: str) -> dict:
         return self.request("DELETE", path("images", fingerprint))
@@ -455,13 +515,19 @@ class IncusClient:
     # -- instances ---------------------------------------------------------
 
     def instances(self) -> list:
-        return self.get("instances", recursion=2) or []
+        return [i for i in self.get("instances", recursion=2) or [] if not _is_vm(i)]
 
     def instance(self, name: str) -> dict:
-        return self.get("instances", name, recursion=1)
+        return _containers_only(self.get("instances", name, recursion=1), "Instance")
 
-    def create_instance(self, payload: dict) -> dict:
-        return self.request("POST", path("instances"), body=payload)
+    def create_instance(self, payload: dict, target: str | None = None) -> dict:
+        """``target`` names the cluster member to place it on; Incus chooses otherwise."""
+        return self.request("POST", path("instances"), params=_target(target), body=payload)
+
+    def move_instance(self, name: str, target: str) -> dict:
+        """Move a stopped instance to another member of the cluster."""
+        body = {"name": name, "migration": True, "live": False}
+        return self.request("POST", path("instances", name), params=_target(target), body=body)
 
     def update_instance(self, name: str, payload: dict) -> dict:
         return self.request("PUT", path("instances", name), body=payload)
@@ -477,14 +543,42 @@ class IncusClient:
         return self.request("POST", path("instances", name), body={"name": new_name})
 
     def copy_instance(
-        self, name: str, new_name: str, *, snapshots: bool = True, start: bool = False
+        self,
+        source: dict,
+        new_name: str,
+        *,
+        snapshots: bool = True,
+        start: bool = False,
+        target: str | None = None,
     ) -> dict:
+        """Copy an instance (``source`` is what ``instance()`` returned).
+
+        The copy's configuration is sent along, as ``incus copy`` does. Left out,
+        Incus fills it in from the source only when the copy stays on the same
+        cluster member; on another one (``target``) it would come up bare.
+        """
+        config = {
+            key: value
+            for key, value in (source.get("config") or {}).items()
+            # A new instance gets its own addresses and ids, but is still of that image.
+            if not key.startswith("volatile.") or key == "volatile.base_image"
+        }
         body = {
             "name": new_name,
-            "source": {"type": "copy", "source": name, "instance_only": not snapshots},
+            "architecture": source.get("architecture") or "",
+            "config": config,
+            "devices": source.get("devices") or {},
+            "profiles": source.get("profiles") or [],
+            "description": source.get("description") or "",
+            "ephemeral": bool(source.get("ephemeral")),
+            "source": {
+                "type": "copy",
+                "source": source["name"],
+                "instance_only": not snapshots,
+            },
             "start": start,
         }
-        return self.request("POST", path("instances"), body=body)
+        return self.request("POST", path("instances"), params=_target(target), body=body)
 
     def instance_log_files(self, name: str) -> list[str]:
         """Names of the instance's log files (lxc.log, lxc.conf, ...)."""
@@ -599,8 +693,10 @@ class IncusClient:
     def network_leases(self, name: str) -> list:
         return self.get("networks", name, "leases") or []
 
-    def create_network(self, payload: dict) -> dict:
-        return self.request("POST", path("networks"), body=payload)
+    def create_network(self, payload: dict, target: str | None = None) -> dict:
+        """In a cluster a network is first defined on each member (``target``),
+        then created with one more call without it."""
+        return self.request("POST", path("networks"), params=_target(target), body=payload)
 
     def update_network(self, name: str, payload: dict) -> dict:
         return self.request("PUT", path("networks", name), body=payload)
@@ -638,8 +734,13 @@ class IncusClient:
     def volume(self, pool: str, name: str) -> dict:
         return self.get("storage-pools", pool, "volumes", "custom", name)
 
-    def create_volume(self, pool: str, payload: dict) -> dict:
-        return self.request("POST", path("storage-pools", pool, "volumes", "custom"), body=payload)
+    def create_volume(self, pool: str, payload: dict, target: str | None = None) -> dict:
+        return self.request(
+            "POST",
+            path("storage-pools", pool, "volumes", "custom"),
+            params=_target(target),
+            body=payload,
+        )
 
     def update_volume(self, pool: str, name: str, payload: dict) -> dict:
         url = path("storage-pools", pool, "volumes", "custom", name)

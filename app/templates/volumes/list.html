@@ -9,12 +9,13 @@
 {% endfor %}
 {% if volumes %}
 <table aria-label="Volumes">
-  <thead><tr><th>Name</th><th>Pool</th><th>Size</th><th>Content</th><th>Attached to</th><th>Description</th></tr></thead>
+  <thead><tr><th>Name</th><th>Pool</th>{% if cluster_members %}<th>Member</th>{% endif %}<th>Size</th><th>Content</th><th>Attached to</th><th>Description</th></tr></thead>
   <tbody>
   {% for v in volumes %}
     <tr>
       <td><a href="{{ url_for('srv.volume', pool=v.pool, name=v.name) }}">{{ v.name }}</a></td>
       <td>{{ v.pool }}</td>
+      {% if cluster_members %}<td>{{ v.location if v.location and v.location != 'none' else 'All' }}</td>{% endif %}
       <td>{{ (v.config or {}).get('size', 'No limit') }}</td>
       <td>{{ {'block': 'Block', 'iso': 'ISO image'}.get(v.content_type, 'Filesystem') }}</td>
       <td>{% for name in v.instances %}<a href="{{ url_for('srv.instance', name=name) }}">{{ name }}</a>{% if not loop.last %}, {% endif %}{% else %}-{% endfor %}</td>

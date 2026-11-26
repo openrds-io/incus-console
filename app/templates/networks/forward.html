@@ -3,7 +3,7 @@
 {% block title %}{% if listen %}Forward {{ listen }}{% else %}Add port forward{% endif %}{% endblock %}
 {% block heading %}{{ crumb_links(crumbs) }}{% endblock %}
 {% block content %}
-<p class="p-form-help-text">Traffic arriving at the listen address goes to containers on {{ name }}. The listen address must be one of the host's own addresses (not the bridge's). Inside a VM such as Colima, use the VM's address.</p>
+<p class="p-form-help-text">Traffic arriving at the listen address goes to containers on {{ name }}. The listen address must be one of the host's own addresses (not the bridge's). When Incus itself runs inside a virtual machine such as Colima, use that machine's address.</p>
 <form method="post">
   {{ csrf() }}
   <div class="row">
