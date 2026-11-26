@@ -10,7 +10,7 @@
   <tbody>
   {% for m in members %}
     <tr>
-      <td>{{ m.server_name }}{% if m.description %}<br><span class="p-text--small u-text--muted">{{ m.description }}</span>{% endif %}</td>
+      <td><a href="{{ url_for('srv.cluster_member', member=m.server_name) }}">{{ m.server_name }}</a>{% if m.description %}<br><span class="p-text--small u-text--muted">{{ m.description }}</span>{% endif %}</td>
       <td><code>{{ (m.url or '')|replace('https://', '') }}</code></td>
       <td>{{ (m.roles or [])|join(', ') or '-' }}</td>
       <td>{{ (m.groups or [])|join(', ') or '-' }}</td>
@@ -40,6 +40,38 @@
   </tbody>
 </table>
 <p class="p-text--small u-text--muted">The instance counts are for project {{ project }}.{% if is_admin() %} Evacuate a member before maintenance on it: its instances are moved to other members or stopped. Restore brings them back.{% endif %}</p>
+
+<h2 class="p-heading--4">Groups</h2>
+<p class="u-text--muted">A group names a set of members, such as those with fast disks. An instance can be placed on "any member of" a group.</p>
+<table aria-label="Cluster groups">
+  <thead><tr><th>Name</th><th>Description</th><th>Members</th>{% if is_admin() %}<th class="u-align--right">Actions</th>{% endif %}</tr></thead>
+  <tbody>
+  {% for group in groups %}
+    <tr>
+      <td>{% if is_admin() %}<a href="{{ url_for('srv.cluster_group_edit', name=group.name) }}">{{ group.name }}</a>{% else %}{{ group.name }}{% endif %}</td>
+      <td>{{ group.description or '' }}</td>
+      <td>{{ (group.members or [])|sort|join(', ') or '-' }}</td>
+      {% if is_admin() %}
+      <td class="u-align--right">
+        {% if group.name != 'default' %}
+        <form class="inline" method="post" action="{{ url_for('srv.cluster_group_delete', name=group.name) }}" data-confirm="Delete group {{ group.name }}? Its members stay in the cluster.">
+          {{ csrf() }}<button class="p-button--negative is-dense u-no-margin--bottom">Delete</button>
+        </form>
+        {% endif %}
+      </td>
+      {% endif %}
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% if is_admin() %}
+<form class="inline-form" method="post" action="{{ url_for('srv.cluster_group_create') }}">
+  {{ csrf() }}
+  <input type="text" name="name" placeholder="New group, e.g. fast-disks" aria-label="Group name" required>
+  <input type="text" name="description" placeholder="Description" aria-label="Description">
+  <button class="p-button--positive">Create group</button>
+</form>
+{% endif %}
 {% else %}
 {{ empty(server.name ~ " is not part of a cluster.") }}
 {% endif %}

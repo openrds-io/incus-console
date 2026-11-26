@@ -115,3 +115,83 @@ def test_only_console_admins_evacuate(server_app, setup, admin, fake):
         assert refused.status_code == 403
     assert fake.members["node1"]["status"] == "Online"
     assert "Evacuate" in text(admin.get(f"/servers/{setup}/cluster"))
+
+
+def test_member_page_shows_resources_and_instances(browser, sid, fake):
+    fake.add_instance("c1")
+    fake.make_cluster("node1", "node2")
+    page = text(browser.get(f"/servers/{sid}/cluster/members/node1"))
+    assert "2.0 GiB used of 8.0 GiB" in page and "5.0 GiB used of 20.0 GiB" in page
+    assert "0.50, 0.25, 0.10" in page and "3 days, 2 hours" in page
+    assert f"/servers/{sid}/instances/c1" in page
+    assert f"/servers/{sid}/instances/c1" not in text(
+        browser.get(f"/servers/{sid}/cluster/members/node2")
+    )
+    assert browser.get(f"/servers/{sid}/cluster/members/nowhere").status_code == 404
+
+
+def test_edit_a_member(browser, sid, fake):
+    fake.make_cluster("node1", "node2")
+    fake.groups["ssd"] = {"name": "ssd", "description": "", "members": [], "config": {}}
+    url = f"/servers/{sid}/cluster/members/node1/edit"
+    assert "event-hub" in text(browser.get(url))
+    form = {"description": "rack 4", "failure_domain": "rack4", "roles": "event-hub"}
+    assert "at least one group" in text(browser.post(url, form))
+    done = browser.post(url, {**form, "groups": ["default", "ssd"]}, follow_redirects=True)
+    assert "node1 updated." in text(done)
+    member = fake.members["node1"]
+    assert member["description"] == "rack 4" and member["failure_domain"] == "rack4"
+    # The role Incus gave is kept next to the one the admin added.
+    assert member["roles"] == ["database-leader", "event-hub"]
+    assert fake.groups["ssd"]["members"] == ["node1"]
+
+
+def test_groups(browser, sid, fake):
+    fake.make_cluster("node1", "node2")
+    base = f"/servers/{sid}/cluster/groups"
+    assert "Use letters" in text(browser.post(base, {"name": "bad name"}, follow_redirects=True))
+    made = browser.post(base, {"name": "ssd", "description": "Fast disks"}, follow_redirects=True)
+    assert "Group ssd created." in text(made)
+    saved = browser.post(
+        f"{base}/ssd",
+        {"name": "fast", "description": "Fast disks", "members": "node2"},
+        follow_redirects=True,
+    )
+    assert "Group fast updated." in text(saved)
+    assert fake.groups["fast"]["members"] == ["node2"] and "ssd" not in fake.groups
+    assert fake.members["node2"]["groups"] == ["default", "fast"]
+    # Instances can go to "any member of" the group.
+    form = text(browser.get(f"/servers/{sid}/create-instance"))
+    assert 'value="@fast"' in form
+    browser.post(
+        f"/servers/{sid}/create-instance",
+        {"name": "web", "source": "remote", "alias": "debian/13", "target": "@fast"},
+    )
+    assert fake.instances["web"]["location"] == "node2"
+    assert "not a cluster group" in text(
+        browser.post(
+            f"/servers/{sid}/create-instance",
+            {"name": "web2", "source": "remote", "alias": "debian/13", "target": "@nope"},
+        )
+    )
+    # Only empty groups go, and never the default one.
+    assert "Only empty" in text(browser.post(f"{base}/fast/delete", follow_redirects=True))
+    browser.post(f"{base}/fast", {"name": "fast"})
+    assert "Group fast deleted." in text(browser.post(f"{base}/fast/delete", follow_redirects=True))
+    assert "cannot be deleted" in text(
+        browser.post(f"{base}/default/delete", follow_redirects=True)
+    )
+    assert "keeps its name" in text(browser.post(f"{base}/default", {"name": "other"}))
+
+
+def test_only_console_admins_change_members_and_groups(server_app, setup, admin, fake):
+    fake.make_cluster("node1", "node2")
+    pam = login(server_app, "pam")
+    base = f"/servers/{setup}/cluster"
+    assert "node1" in text(pam.get(f"{base}/members/node1"))
+    assert "Create group" not in text(pam.get(base))
+    assert pam.get(f"{base}/members/node1/edit").status_code == 403
+    assert pam.post(f"{base}/groups", {"name": "mine"}).status_code == 403
+    assert pam.get(f"{base}/groups/default").status_code == 403
+    assert pam.post(f"{base}/groups/default/delete").status_code == 403
+    assert "mine" not in fake.groups

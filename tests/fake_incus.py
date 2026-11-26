@@ -105,6 +105,7 @@ class FakeIncus:
         self.no_bucket_drivers: set[str] = set()
         self.pending_ops = False  # True: operations stay Running
         self.members: dict[str, dict] = {}  # cluster members by name; empty: not clustered
+        self.groups: dict[str, dict] = {}  # cluster groups by name
         self.pending_networks: dict[str, set] = {}  # members a network is defined on
         self.targets: list[tuple[str, str, str]] = []  # (method, path, ?target=) of requests
 
@@ -265,6 +266,13 @@ class FakeIncus:
                 "config": {},
                 "groups": ["default"],
             }
+        self.groups["default"] = {
+            "name": "default",
+            "description": "Default cluster group",
+            "members": list(self.members),
+            "config": {},
+            "used_by": [],
+        }
         first = next(iter(self.members))
         for instance in self.instances.values():
             instance.setdefault("location", first)
@@ -273,6 +281,14 @@ class FakeIncus:
         """(member for a new thing, error): the target, or the emptiest online member."""
         if not self.members:
             return None, None
+        if target and target.startswith("@"):
+            group = self.groups.get(target[1:])
+            if group is None:
+                return None, self.error(404, f'Cluster group "{target[1:]}" not found')
+            online = [n for n in group["members"] if self.members[n]["status"] == "Online"]
+            if not online:
+                return None, self.error(400, "No suitable cluster member could be found")
+            return online[0], None
         if target:
             member = self.members.get(target)
             if member is None:
@@ -295,6 +311,85 @@ class FakeIncus:
                 return self.sync(list(self.members.values()))
             case ("GET", ["members", name]) if name in self.members:
                 return self.sync(self.members[name])
+            case ("PUT", ["members", name]) if name in self.members:
+                groups = body.get("groups") or []
+                if not groups or any(x not in self.groups for x in groups):
+                    return self.error(400, "Cluster member must belong to an existing group")
+                for key in ("description", "failure_domain", "roles", "groups", "config"):
+                    if key in body:
+                        self.members[name][key] = body[key]
+                for group_name, group in self.groups.items():
+                    group["members"] = [m for m in group["members"] if m != name]
+                    if group_name in groups:
+                        group["members"].append(name)
+                return self.sync()
+            case ("GET", ["members", name, "state"]) if name in self.members:
+                gib = 1024**3
+                return self.sync(
+                    {
+                        "sysinfo": {
+                            "uptime": 3 * 86400 + 7200,
+                            "load_averages": [0.5, 0.25, 0.1],
+                            "total_ram": 8 * gib,
+                            "free_ram": 6 * gib,
+                            "total_swap": 0,
+                            "free_swap": 0,
+                            "processes": 123,
+                            "logical_cpus": 4,
+                        },
+                        "storage_pools": {
+                            "default": {"space": {"used": 5 * gib, "total": 20 * gib}}
+                        },
+                    }
+                )
+            case ("GET", ["groups"]):
+                return self.sync(list(self.groups.values()))
+            case ("POST", ["groups"]):
+                name = body.get("name", "")
+                if name in self.groups:
+                    return self.error(409, "Cluster group already exists")
+                self.groups[name] = {
+                    "name": name,
+                    "description": body.get("description", ""),
+                    "members": list(body.get("members") or []),
+                    "config": {},
+                    "used_by": [],
+                }
+                return self.sync()
+            case (_, ["groups", name]) if name in self.groups:
+                group = self.groups[name]
+                if method == "GET":
+                    return self.sync(group)
+                if method == "PUT":
+                    members = list(body.get("members") or [])
+                    for member in set(group["members"]) - set(members):
+                        if not any(
+                            member in other["members"]
+                            for other in self.groups.values()
+                            if other is not group
+                        ):
+                            return self.error(
+                                400, f'Member "{member}" must belong to at least one group'
+                            )
+                    group.update(description=body.get("description", ""), members=members)
+                    for member_name, member in self.members.items():
+                        member["groups"] = [
+                            x["name"] for x in self.groups.values() if member_name in x["members"]
+                        ]
+                    return self.sync()
+                if method == "POST":
+                    new_name = body.get("name", "")
+                    if new_name in self.groups:
+                        return self.error(409, "Name already in use")
+                    self.groups[new_name] = {**self.groups.pop(name), "name": new_name}
+                    for member in self.members.values():
+                        member["groups"] = [new_name if x == name else x for x in member["groups"]]
+                    return self.sync()
+                if method == "DELETE":
+                    if group["members"]:
+                        return self.error(400, "Only empty cluster groups can be removed")
+                    del self.groups[name]
+                    return self.sync()
             case ("POST", ["members", name, "state"]) if name in self.members:
                 member = self.members[name]
                 action = body.get("action")

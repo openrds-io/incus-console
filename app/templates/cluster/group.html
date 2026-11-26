@@ -1,0 +1,27 @@
+{% extends "base.html" %}
+{% from "macros.html" import crumbs, csrf %}
+{% block title %}Group {{ group.name }}{% endblock %}
+{% block heading %}{{ crumbs([('Cluster', url_for('srv.cluster')), ('Group ' ~ group.name, None)]) }}{% endblock %}
+{% block content %}
+<form class="narrow-form" method="post">
+  {{ csrf() }}
+  <label for="name">Name</label>
+  <input type="text" id="name" name="name" value="{{ request.form.get('name', group.name) }}" required{% if default %} readonly{% endif %}>
+  <label for="description">Description</label>
+  <input type="text" id="description" name="description" value="{{ group.description or '' }}">
+  <fieldset>
+    <legend>Members</legend>
+    {% for m in members %}
+    <label class="p-checkbox">
+      <input type="checkbox" class="p-checkbox__input" name="members" value="{{ m.server_name }}"{% if m.server_name in (group.members or []) %} checked{% endif %}>
+      <span class="p-checkbox__label">{{ m.server_name }}</span>
+    </label>
+    {% endfor %}
+    <p class="p-form-help-text">A member can be in several groups, and is always in at least one.</p>
+  </fieldset>
+  <div class="form-buttons">
+    <a class="p-button--base" href="{{ url_for('srv.cluster') }}">Cancel</a>
+    <button class="p-button--positive">Save</button>
+  </div>
+</form>
+{% endblock %}

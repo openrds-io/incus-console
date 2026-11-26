@@ -22,7 +22,16 @@ from .config_forms import (
     parse_environment,
     settings_fields,
 )
-from .scoped import DONE, RUNNING, bp, cluster_members, online_members, run, start
+from .scoped import (
+    DONE,
+    RUNNING,
+    bp,
+    cluster_members,
+    online_members,
+    placement_groups,
+    run,
+    start,
+)
 
 ACTIONS = {
     "start": "started",
@@ -42,10 +51,17 @@ def instances():
 
 
 def _placement(form) -> tuple[str | None, str | None]:
-    """(cluster member to create on, problem). No member lets Incus choose."""
+    """(where in the cluster to create it, problem). Nowhere lets Incus choose.
+
+    A member's name, or ``@group`` for any member of a cluster group.
+    """
     target = form.get("target", "").strip()
     if not target:
         return None, None
+    if target.startswith("@"):
+        if target[1:] not in placement_groups():
+            return None, f"{target[1:]} is not a cluster group with a member online."
+        return target, None
     if target not in online_members():
         return None, f"{target} is not a cluster member that is online."
     return target, None
@@ -193,6 +209,7 @@ def instance_create():
         default_alias=config["IMAGE_SUGGESTIONS"][0],
         default_image=image,
         members=online_members(),
+        groups_of_members=placement_groups(),
         form=form,
     )
 

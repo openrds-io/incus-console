@@ -73,15 +73,38 @@ def cluster_members() -> list[dict]:
     return g.cluster_members
 
 
-def _members() -> list[dict]:
+def _as_console(read):
+    """``read(client)`` as the user, or as the console where Incus refuses the user.
+
+    A certificate restricted to projects may not be shown the cluster's members
+    and groups. Their names are no secret to someone placing an instance.
+    """
     try:
-        return g.incus.cluster_members()
+        return read(g.incus)
     except IncusError as error:
         if error.status != 403:
             raise
-    # A certificate restricted to projects may not be shown the members; their
-    # names are no secret to someone placing an instance, so ask as the console.
-    return servers.client_for(g.server, g.project).cluster_members()
+    return read(servers.client_for(g.server, g.project))
+
+
+def _members() -> list[dict]:
+    return _as_console(lambda client: client.cluster_members())
+
+
+def cluster_groups() -> list[dict]:
+    """The cluster's groups of members; [] on a server that stands alone."""
+    if not cluster_members():
+        return []
+    if "cluster_groups" not in g:
+        found = _as_console(lambda client: client.cluster_groups())
+        g.cluster_groups = sorted(found, key=lambda group: group["name"])
+    return g.cluster_groups
+
+
+def placement_groups() -> list[str]:
+    """Names of the groups with a member that can take an instance now."""
+    online = set(online_members())
+    return [x["name"] for x in cluster_groups() if online & set(x.get("members") or [])]
 
 
 def online_members() -> list[str]:

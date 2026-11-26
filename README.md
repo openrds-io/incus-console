@@ -20,7 +20,11 @@ Working today:
   instances); console admins evacuate a member before maintenance and restore
   it afterwards. Instances and volumes show the member they are on; the create
   forms let you choose it (or leave it to Incus); a stopped instance moves to
-  another member; new networks are defined on every member
+  another member; new networks are defined on every member. Each member has
+  a page with its load, memory, storage pool usage and instances, and admins
+  edit its description, failure domain, groups and roles. Cluster groups:
+  create, rename, choose members, delete; an instance can be placed on any
+  member of a group
 - Instances, of either kind: list, start, stop, restart, freeze, delete,
   rename, copy, snapshots (by hand or on a schedule, with expiry), logs
   (console and Incus log files), a settings form for limits and common
@@ -340,10 +344,10 @@ wsgi.py           entry point for gunicorn
 
 ## Roadmap
 
-1. Clusters, next steps: cluster groups (create, assign members, place
-   instances on a group), editing a member's roles and description, member
-   resources, and storage pools created per member. Copying and moving
-   between separately registered servers is out of scope for now
+1. Clusters, next steps: trying all of it against a real cluster
+   (`dev/cluster.sh`), removing a member, member-specific network and storage
+   pool settings, and choosing the member when copying an instance. Copying
+   and moving between separately registered servers is out of scope for now
 2. OCI application containers, next steps: private registries (credentials),
    updating an instance to a newer image (rebuild), and presets for common
    images (ports, volumes)

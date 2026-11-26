@@ -1,0 +1,75 @@
+{% extends "base.html" %}
+{% set live = true %}
+{% from "macros.html" import status, crumbs, csrf, empty %}
+{% block title %}{{ member.server_name }}{% endblock %}
+{% block heading %}{{ crumbs([('Cluster', url_for('srv.cluster')), (member.server_name, None)]) }} <span class="title-status">{{ status(member.status) }}</span>{% endblock %}
+{% block controls %}
+{% if is_admin() %}
+<a class="p-button is-dense u-no-margin--bottom" href="{{ url_for('srv.cluster_member_edit', member=member.server_name) }}">Edit</a>
+{% if member.status == 'Evacuated' %}
+<form class="inline" method="post" action="{{ url_for('srv.cluster_restore', member=member.server_name) }}" data-confirm="Restore {{ member.server_name }}? The instances it had before the evacuation come back and start.">
+  {{ csrf() }}<button class="p-button is-dense u-no-margin--bottom">Restore</button>
+</form>
+{% elif member.status == 'Online' and not alone %}
+<form class="inline-form" method="post" action="{{ url_for('srv.cluster_evacuate', member=member.server_name) }}" data-confirm="Evacuate {{ member.server_name }}? Its instances, in every project, are stopped or moved.">
+  {{ csrf() }}
+  <select name="mode" aria-label="What happens to the instances">
+    {% for value, label in modes.items() %}<option value="{{ value }}">{{ label }}</option>{% endfor %}
+  </select>
+  <button class="p-button--negative is-dense u-no-margin--bottom">Evacuate</button>
+</form>
+{% endif %}
+{% endif %}
+{% endblock %}
+{% block content %}
+<div class="row">
+  <div class="col-3"><h2 class="p-heading--5 section-heading">General</h2></div>
+  <div class="col-9">
+    <table class="facts" aria-label="General">
+      <tbody>
+        <tr><th>Address</th><td><code>{{ (member.url or '')|replace('https://', '') }}</code></td></tr>
+        <tr><th>Description</th><td>{{ member.description or '-' }}</td></tr>
+        <tr><th>Status</th><td>{{ member.status }}{% if member.message %}: {{ member.message }}{% endif %}</td></tr>
+        <tr><th>Roles</th><td>{{ (member.roles or [])|join(', ') or '-' }}</td></tr>
+        <tr><th>Groups</th><td>{{ (member.groups or [])|join(', ') or '-' }}</td></tr>
+        <tr><th>Failure domain</th><td>{{ member.failure_domain or '-' }}</td></tr>
+        <tr><th>Architecture</th><td>{{ member.architecture or '-' }}</td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+<hr class="p-rule">
+<div class="row">
+  <div class="col-3"><h2 class="p-heading--5 section-heading">Resources</h2></div>
+  <div class="col-9">
+    {% if resources %}
+    <table class="facts" aria-label="Resources">
+      <tbody>
+        {% if resources.logical_cpus %}<tr><th>CPUs</th><td>{{ resources.logical_cpus }}</td></tr>{% endif %}
+        {% if resources.load_averages %}<tr><th>Load (1, 5, 15 min)</th><td>{% for load in resources.load_averages %}{{ '%.2f'|format(load) }}{{ ', ' if not loop.last }}{% endfor %}</td></tr>{% endif %}
+        {% if resources.total_ram %}<tr><th>Memory</th><td>{{ (resources.total_ram - (resources.free_ram or 0))|filesize }} used of {{ resources.total_ram|filesize }}</td></tr>{% endif %}
+        {% if resources.total_swap %}<tr><th>Swap</th><td>{{ (resources.total_swap - (resources.free_swap or 0))|filesize }} used of {{ resources.total_swap|filesize }}</td></tr>{% endif %}
+        {% if resources.processes %}<tr><th>Processes</th><td>{{ resources.processes }}</td></tr>{% endif %}
+        {% if resources.uptime %}<tr><th>Up for</th><td>{{ (resources.uptime // 86400) }} days, {{ (resources.uptime % 86400) // 3600 }} hours</td></tr>{% endif %}
+        {% for pool in resources.pools %}
+        <tr><th>Pool {{ pool.name }}</th><td>{% if pool.total %}{{ pool.used|filesize }} used of {{ pool.total|filesize }}{% else %}-{% endif %}</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    {{ empty("The member did not report its resources.") }}
+    {% endif %}
+  </div>
+</div>
+<hr class="p-rule">
+<div class="row">
+  <div class="col-3"><h2 class="p-heading--5 section-heading">Instances</h2></div>
+  <div class="col-9">
+    {% if instances %}
+    <p>{% for name in instances %}<a href="{{ url_for('srv.instance', name=name) }}">{{ name }}</a>{{ ', ' if not loop.last }}{% endfor %}</p>
+    {% else %}
+    {{ empty("No instances of project " ~ project ~ " on this member.") }}
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

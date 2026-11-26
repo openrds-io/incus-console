@@ -372,6 +372,34 @@ class IncusClient:
     def cluster_members(self) -> list:
         return self.get("cluster", "members", recursion=1) or []
 
+    def cluster_member(self, member: str) -> dict:
+        return self.get("cluster", "members", member)
+
+    def update_cluster_member(self, member: str, payload: dict) -> dict:
+        return self.request("PUT", path("cluster", "members", member), body=payload)
+
+    def cluster_member_resources(self, member: str) -> dict:
+        """Load, memory and storage pool usage of one member."""
+        return self.get("cluster", "members", member, "state") or {}
+
+    def cluster_groups(self) -> list:
+        return self.get("cluster", "groups", recursion=1) or []
+
+    def cluster_group(self, name: str) -> dict:
+        return self.get("cluster", "groups", name)
+
+    def create_cluster_group(self, payload: dict) -> dict:
+        return self.request("POST", path("cluster", "groups"), body=payload)
+
+    def update_cluster_group(self, name: str, payload: dict) -> dict:
+        return self.request("PUT", path("cluster", "groups", name), body=payload)
+
+    def rename_cluster_group(self, name: str, new_name: str) -> dict:
+        return self.request("POST", path("cluster", "groups", name), body={"name": new_name})
+
+    def delete_cluster_group(self, name: str) -> dict:
+        return self.request("DELETE", path("cluster", "groups", name))
+
     def cluster_member_state(self, member: str, action: str, mode: str = "") -> dict:
         """Evacuate a member (move or stop its instances) or restore it."""
         body = {"action": action}

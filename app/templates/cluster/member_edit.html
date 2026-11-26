@@ -1,0 +1,37 @@
+{% extends "base.html" %}
+{% from "macros.html" import crumbs, csrf %}
+{% block title %}Edit {{ member.server_name }}{% endblock %}
+{% block heading %}{{ crumbs([('Cluster', url_for('srv.cluster')), (member.server_name, url_for('srv.cluster_member', member=member.server_name)), ('Edit', None)]) }}{% endblock %}
+{% block content %}
+<form class="narrow-form" method="post">
+  {{ csrf() }}
+  <label for="description">Description</label>
+  <input type="text" id="description" name="description" value="{{ member.description or '' }}" autofocus>
+  <label for="failure_domain">Failure domain</label>
+  <input type="text" id="failure_domain" name="failure_domain" value="{{ member.failure_domain or 'default' }}">
+  <p class="p-form-help-text">Members that fail together, such as a rack or a site, share one. Incus spreads the database across failure domains.</p>
+  <fieldset>
+    <legend>Groups</legend>
+    {% for name in groups %}
+    <label class="p-checkbox">
+      <input type="checkbox" class="p-checkbox__input" name="groups" value="{{ name }}"{% if name in (member.groups or []) %} checked{% endif %}>
+      <span class="p-checkbox__label">{{ name }}</span>
+    </label>
+    {% endfor %}
+  </fieldset>
+  <fieldset>
+    <legend>Roles</legend>
+    {% for role, meaning in roles.items() %}
+    <label class="p-checkbox">
+      <input type="checkbox" class="p-checkbox__input" name="roles" value="{{ role }}"{% if role in (member.roles or []) %} checked{% endif %}>
+      <span class="p-checkbox__label">{{ role }} <span class="u-text--muted">({{ meaning }})</span></span>
+    </label>
+    {% endfor %}
+    <p class="p-form-help-text">Incus gives out the database roles itself.</p>
+  </fieldset>
+  <div class="form-buttons">
+    <a class="p-button--base" href="{{ url_for('srv.cluster_member', member=member.server_name) }}">Cancel</a>
+    <button class="p-button--positive">Save</button>
+  </div>
+</form>
+{% endblock %}
