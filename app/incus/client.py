@@ -378,6 +378,10 @@ class IncusClient:
     def update_cluster_member(self, member: str, payload: dict) -> dict:
         return self.request("PUT", path("cluster", "members", member), body=payload)
 
+    def remove_cluster_member(self, member: str) -> dict:
+        """Take a member out of the cluster for good. Incus refuses while it holds instances."""
+        return self.request("DELETE", path("cluster", "members", member))
+
     def cluster_member_resources(self, member: str) -> dict:
         """Load, memory and storage pool usage of one member."""
         return self.get("cluster", "members", member, "state") or {}
@@ -539,14 +543,20 @@ class IncusClient:
         return self.request("POST", path("instances", name), body={"name": new_name})
 
     def copy_instance(
-        self, name: str, new_name: str, *, snapshots: bool = True, start: bool = False
+        self,
+        name: str,
+        new_name: str,
+        *,
+        snapshots: bool = True,
+        start: bool = False,
+        target: str | None = None,
     ) -> dict:
         body = {
             "name": new_name,
             "source": {"type": "copy", "source": name, "instance_only": not snapshots},
             "start": start,
         }
-        return self.request("POST", path("instances"), body=body)
+        return self.request("POST", path("instances"), params=_target(target), body=body)
 
     def instance_log_files(self, name: str) -> list[str]:
         """Names of the instance's log files (lxc.log, lxc.conf, ...)."""

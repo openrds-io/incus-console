@@ -41,6 +41,7 @@ REQUIRED = {
     "srv.cluster_evacuate": "admin",
     "srv.cluster_restore": "admin",
     "srv.cluster_member_edit": "admin",
+    "srv.cluster_member_remove": "admin",
     "srv.cluster_group_create": "admin",
     "srv.cluster_group_edit": "admin",
     "srv.cluster_group_delete": "admin",

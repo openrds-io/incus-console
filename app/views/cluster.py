@@ -86,6 +86,7 @@ def cluster_member(member):
         instances=instances,
         modes=EVACUATE_MODES,
         alone=len(cluster_members()) < 2,
+        console_address=_is_console_address(found),
     )
 
 
@@ -133,6 +134,28 @@ def cluster_restore(member):
     _member(member)
     run(lambda: g.incus.cluster_member_state(member, "restore"), f"{member} restored.")
     return redirect(url_for("srv.cluster"))
+
+
+def _is_console_address(member: dict) -> bool:
+    """Is this the member the console itself connects to?"""
+    return g.server["kind"] == "https" and (member.get("url") or "").rstrip("/") == g.server[
+        "address"
+    ].rstrip("/")
+
+
+@bp.post("/cluster/members/<member>/remove")
+def cluster_member_remove(member):
+    found = _member(member)
+    if _is_console_address(found):
+        flash(
+            f"The console reaches the cluster through {member}. Register another member's "
+            "address under Servers first.",
+            "error",
+        )
+        return redirect(url_for("srv.cluster_member", member=member))
+    if run(lambda: g.incus.remove_cluster_member(member), f"{member} removed from the cluster."):
+        return redirect(url_for("srv.cluster"))
+    return redirect(url_for("srv.cluster_member", member=member))
 
 
 # -- groups -----------------------------------------------------------------

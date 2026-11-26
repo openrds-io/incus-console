@@ -1,5 +1,6 @@
 {% extends "base.html" %}
 {% from "macros.html" import crumbs, csrf %}
+{% from "instances/_placement.html" import placement with context %}
 {% block title %}Copy {{ instance.name }}{% endblock %}
 {% block heading %}{{ crumbs([('Instances', url_for('srv.instances')), (instance.name, url_for('srv.instance', name=instance.name)), ('Copy', None)]) }}{% endblock %}
 {% block content %}
@@ -17,6 +18,7 @@
     <input type="checkbox" class="p-checkbox__input" name="start" value="1"{% if form.get('start') %} checked{% endif %}>
     <span class="p-checkbox__label">Start the copy</span>
   </label>
+  {{ placement(members, groups_of_members, form) }}
   <div class="form-buttons">
     <a class="p-button--base" href="{{ url_for('srv.instance', name=instance.name) }}">Cancel</a>
     <button class="p-button--positive">Copy</button>

@@ -19,6 +19,11 @@
   <button class="p-button--negative is-dense u-no-margin--bottom">Evacuate</button>
 </form>
 {% endif %}
+{% if not alone and not console_address %}
+<form class="inline" method="post" action="{{ url_for('srv.cluster_member_remove', member=member.server_name) }}" data-confirm="Remove {{ member.server_name }} from the cluster? This cannot be undone: Incus on that machine has to be reinstalled before it can be used again.">
+  {{ csrf() }}<button class="p-button--negative is-dense u-no-margin--bottom">Remove</button>
+</form>
+{% endif %}
 {% endif %}
 {% endblock %}
 {% block content %}

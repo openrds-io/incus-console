@@ -195,3 +195,33 @@ def test_only_console_admins_change_members_and_groups(server_app, setup, admin,
     assert pam.get(f"{base}/groups/default").status_code == 403
     assert pam.post(f"{base}/groups/default/delete").status_code == 403
     assert "mine" not in fake.groups
+
+
+def test_copy_to_a_chosen_member(browser, sid, fake):
+    fake.add_instance("c1", status="Stopped")
+    fake.make_cluster("node1", "node2")
+    url = f"/servers/{sid}/instances/c1/copy"
+    assert 'value="node2"' in text(browser.get(url))
+    browser.post(url, {"new_name": "c2", "target": "node2"})
+    assert fake.instances["c2"]["location"] == "node2"
+    assert "not a cluster member" in text(browser.post(url, {"new_name": "c3", "target": "x"}))
+    assert "c3" not in fake.instances
+
+
+def test_remove_a_member(browser, sid, fake):
+    fake.add_instance("c1")
+    fake.make_cluster("node1", "node2", "node3")
+    base = f"/servers/{sid}/cluster/members"
+    assert ">Remove<" in text(browser.get(f"{base}/node3"))
+    kept = browser.post(f"{base}/node1/remove", follow_redirects=True)
+    assert "still has instances" in text(kept) and "node1" in fake.members
+    gone = browser.post(f"{base}/node3/remove", follow_redirects=True)
+    assert "node3 removed from the cluster." in text(gone)
+    assert "node3" not in fake.members and fake.groups["default"]["members"] == ["node1", "node2"]
+
+
+def test_only_console_admins_remove_members(server_app, setup, fake):
+    fake.make_cluster("node1", "node2")
+    pam = login(server_app, "pam")
+    assert pam.post(f"/servers/{setup}/cluster/members/node2/remove").status_code == 403
+    assert "node2" in fake.members

@@ -311,6 +311,13 @@ class FakeIncus:
                 return self.sync(list(self.members.values()))
             case ("GET", ["members", name]) if name in self.members:
                 return self.sync(self.members[name])
+            case ("DELETE", ["members", name]) if name in self.members:
+                if any(i.get("location") == name for i in self.instances.values()):
+                    return self.error(400, "Cluster member still has instances")
+                del self.members[name]
+                for group in self.groups.values():
+                    group["members"] = [m for m in group["members"] if m != name]
+                return self.sync()
             case ("PUT", ["members", name]) if name in self.members:
                 groups = body.get("groups") or []
                 if not groups or any(x not in self.groups for x in groups):

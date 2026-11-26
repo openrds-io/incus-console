@@ -391,8 +391,11 @@ def instance_copy(name):
     if request.method == "POST":
         form = request.form
         new_name = form.get("new_name", "").strip()
+        target, misplaced = _placement(form)
         if not NAME.fullmatch(new_name):
             flash(NAME_RULE, "error")
+        elif misplaced:
+            flash(misplaced, "error")
         else:
             outcome = start(
                 lambda: g.incus.copy_instance(
@@ -400,6 +403,7 @@ def instance_copy(name):
                     new_name,
                     snapshots=bool(form.get("snapshots")),
                     start=bool(form.get("start")),
+                    target=target,
                 ),
                 f"{name} copied to {new_name}.",
             )
@@ -407,7 +411,13 @@ def instance_copy(name):
                 return redirect(url_for("srv.instance", name=new_name))
             if outcome == RUNNING:
                 return redirect(url_for("srv.operations"))
-    return render_template("instances/copy.html", instance=instance, form=request.form)
+    return render_template(
+        "instances/copy.html",
+        instance=instance,
+        members=online_members(),
+        groups_of_members=placement_groups(),
+        form=request.form,
+    )
 
 
 # -- logs -----------------------------------------------------------------
