@@ -99,6 +99,19 @@ def test_upload(browser, sid, fake, web):
     assert "cannot be empty" in text(refused)
 
 
+def test_upload_over_the_limit_is_refused_cleanly(server_app, setup, admin, fake):
+    """An upload over MAX_CONTENT_LENGTH gets a 413, not a server error from the
+    audit log (server mode) trying to read the refused form afterwards."""
+    server_app.config["MAX_CONTENT_LENGTH"] = 1000
+    response = admin.post(
+        f"/servers/{setup}/instances/web-1/files/upload?path=/root",
+        {"files": [(io.BytesIO(b"x" * 5000), "big.bin")]},
+        content_type="multipart/form-data",
+    )
+    assert response.status_code == 413
+    assert "/root/big.bin" not in fake.filesystem("web-1")
+
+
 def test_upload_needs_csrf(app, sid, web):
     response = app.test_client().post(
         f"/servers/{sid}/instances/web-1/files/upload?path=/root",

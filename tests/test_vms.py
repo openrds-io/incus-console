@@ -1,6 +1,7 @@
 """Virtual machines: create, settings and the text console."""
 
 import threading
+import time
 
 import pytest
 
@@ -173,3 +174,50 @@ def test_console_replays_earlier_output():
         browser = Browser()
         terminal._replay(Client(quiet), browser, "vm1")
         assert browser.sent == []
+
+
+def test_quiet_channels_stay_open(app, sid, fake, monkeypatch):
+    """A console may carry nothing for a long time: the Incus side must not time out
+    like an API call."""
+    pytest.importorskip("simple_websocket")
+    websocket = pytest.importorskip("websocket")
+    import json
+
+    app.config["INCUS_TIMEOUT"] = 1
+    fake.add_instance("vm1", kind="virtual-machine")
+    server = _serve(app)
+    base = f"ws://127.0.0.1:{server.server_port}/servers/{sid}/instances/vm1"
+    try:
+        console = websocket.create_connection(f"{base}/console/ws", timeout=5)
+        console.recv()  # what the console printed before
+        time.sleep(1.5)
+        console.send(json.dumps({"t": "i", "d": "hello"}))
+        assert console.recv() == b"hello"
+        console.close()
+    finally:
+        server.shutdown()
+
+
+def test_the_console_opened_last_takes_the_session_over(app, sid, fake):
+    """Incus allows one console session per instance: a tab left open must not lock
+    the console."""
+    pytest.importorskip("simple_websocket")
+    websocket = pytest.importorskip("websocket")
+    import json
+
+    fake.add_instance("vm1", kind="virtual-machine")
+    server = _serve(app)
+    url = f"ws://127.0.0.1:{server.server_port}/servers/{sid}/instances/vm1/console/ws"
+    try:
+        first = websocket.create_connection(url, timeout=5)
+        first.recv()
+        second = websocket.create_connection(url, timeout=5)
+        assert second.recv().startswith(b"Debian")  # not "already connected"
+        second.send(json.dumps({"t": "i", "d": "x"}))
+        assert second.recv() == b"x"
+        old, new = fake.sessions.values()
+        assert not old["active"] and new["active"] and new["request"]["force"] is True
+        second.close()
+        first.close()
+    finally:
+        server.shutdown()

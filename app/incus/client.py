@@ -531,12 +531,15 @@ class IncusClient:
             raise IncusError(500, "Incus did not offer a terminal session.")
         return {"id": op["id"], "data": fds["0"], "control": fds["control"]}
 
-    def console_interactive(self, name: str, cols: int = 80, rows: int = 24):
+    def console_interactive(self, name: str, cols: int = 80, rows: int = 24, force: bool = False):
         """Attach to an instance's text console.
 
+        Incus allows one console session per instance; ``force`` takes it over.
         Returns ``{"id": ..., "data": ..., "control": ...}`` like exec_interactive.
         """
         body = {"type": "console", "width": cols, "height": rows}
+        if force:
+            body["force"] = True
         response = self.request("POST", path("instances", name, "console"), body=body)
         op = response.get("metadata") or {}
         fds = (op.get("metadata") or {}).get("fds") or {}

@@ -21,7 +21,7 @@
       <tbody>
         <tr><th>Pool</th><td>{{ pool }}</td></tr>
         <tr><th>Size</th><td>{{ (volume.config or {}).get('size', "The pool's default") }}</td></tr>
-        <tr><th>Content</th><td>{{ 'Block device' if volume.content_type == 'block' else 'Filesystem' }}</td></tr>
+        <tr><th>Content</th><td>{{ {'block': 'Block device', 'iso': 'ISO image (attaches to VMs as a disc)'}.get(volume.content_type, 'Filesystem') }}</td></tr>
         <tr><th>Description</th><td>{{ volume.description or '-' }}</td></tr>
         <tr><th>Created</th><td>{{ volume.created_at|when }}</td></tr>
       </tbody>
@@ -60,7 +60,7 @@
       <select name="instance" aria-label="Instance">
         {% for name in instances %}<option value="{{ name }}">{{ name }}</option>{% endfor %}
       </select>
-      {% if volume.content_type != 'block' %}
+      {% if volume.content_type not in ('block', 'iso') %}
       <input type="text" name="path" placeholder="Mount at, e.g. /data" aria-label="Mount path" required>
       {% endif %}
       <input type="text" name="device" placeholder="Device name: {{ volume.name }}" aria-label="Device name">
