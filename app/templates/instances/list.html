@@ -2,7 +2,7 @@
 {% set live = true %}
 {% from "instances/_actions.html" import actions %}
 {% from "macros.html" import status, empty %}
-{% block title %}Instances{% endblock %}
+{% block title %}{{ 'Cluster instances' if cluster_members else 'Instances' }}{% endblock %}
 {% block controls %}{% if allowed('srv.instance_create') %}<a class="p-button--positive u-no-margin--bottom" href="{{ url_for('srv.instance_create') }}">Create instance</a>{% endif %}{% endblock %}
 {% block content %}
 {% if instances %}

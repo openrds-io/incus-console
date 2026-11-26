@@ -43,7 +43,6 @@ def cluster():
         members=members,
         groups=cluster_groups(),
         counts=_counts() if members else {},
-        modes=EVACUATE_MODES,
     )
 
 
@@ -126,14 +125,14 @@ def cluster_evacuate(member):
             lambda: g.incus.cluster_member_state(member, "evacuate", mode),
             f"{member} evacuated.",
         )
-    return redirect(url_for("srv.cluster"))
+    return redirect(url_for("srv.cluster_member", member=member))
 
 
 @bp.post("/cluster/members/<member>/restore")
 def cluster_restore(member):
     _member(member)
     run(lambda: g.incus.cluster_member_state(member, "restore"), f"{member} restored.")
-    return redirect(url_for("srv.cluster"))
+    return redirect(url_for("srv.cluster_member", member=member))
 
 
 def _is_console_address(member: dict) -> bool:

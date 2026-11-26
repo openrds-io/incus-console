@@ -17,8 +17,8 @@ Working today:
 - Servers: register a local socket, or a remote server with a trust token
 - Clusters: register any one member and the console works with the whole
   cluster. A Cluster page lists the members (address, roles, groups, status,
-  instances); console admins evacuate a member before maintenance and restore
-  it afterwards. Instances and volumes show the member they are on; the create
+  instances); on a member's own page, console admins evacuate it before
+  maintenance and restore it afterwards. Instances and volumes show the member they are on; the create
   forms let you choose it (or leave it to Incus); a stopped instance moves to
   another member; new networks are defined on every member. Each member has
   a page with its load, memory, storage pool usage and instances, and admins

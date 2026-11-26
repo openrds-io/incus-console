@@ -29,6 +29,9 @@ INCUS_TIMEOUT = 30
 # Seconds a page waits for an Incus operation before handing off to Operations.
 ACTION_WAIT = 30
 
+# Memory fields: a whole number up to this, typed without a unit, means GiB.
+MEMORY_GIB_UP_TO = 512
+
 DEFAULT_IMAGE_SERVER = "https://images.linuxcontainers.org"
 
 # Offer the default image server's catalog on the create form. The console

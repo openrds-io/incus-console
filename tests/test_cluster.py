@@ -74,7 +74,7 @@ def test_evacuate_and_restore(browser, sid, fake):
     # An evacuated member is not offered for new instances.
     assert 'value="node1"' not in text(browser.get(f"/servers/{sid}/create-instance"))
     back = browser.post(f"{base}/node1/restore", follow_redirects=True)
-    assert "node1 restored." in text(back)
+    assert "node1 restored." in text(back) and ">Evacuate<" in text(back)
     assert fake.instances["c1"]["location"] == "node1"
     assert fake.members["node1"]["status"] == "Online"
     assert browser.post(f"{base}/nowhere/evacuate").status_code == 404
@@ -109,12 +109,15 @@ def test_only_console_admins_evacuate(server_app, setup, admin, fake):
     fake.make_cluster("node1", "node2")
     for username in ("vic", "otto", "pam"):
         user = login(server_app, username)
-        page = text(user.get(f"/servers/{setup}/cluster"))
-        assert "node2" in page and "Evacuate" not in page and "Restore" not in page
+        assert "node2" in text(user.get(f"/servers/{setup}/cluster"))
+        page = text(user.get(f"/servers/{setup}/cluster/members/node1"))
+        assert "node1" in page and "Evacuate" not in page and "Restore" not in page
         refused = user.post(f"/servers/{setup}/cluster/members/node1/evacuate", {"mode": ""})
         assert refused.status_code == 403
     assert fake.members["node1"]["status"] == "Online"
-    assert "Evacuate" in text(admin.get(f"/servers/{setup}/cluster"))
+    assert "Evacuate" in text(admin.get(f"/servers/{setup}/cluster/members/node1"))
+    # The members table itself stays free of buttons.
+    assert ">Evacuate<" not in text(admin.get(f"/servers/{setup}/cluster"))
 
 
 def test_member_page_shows_resources_and_instances(browser, sid, fake):
@@ -202,8 +205,14 @@ def test_copy_to_a_chosen_member(browser, sid, fake):
     fake.make_cluster("node1", "node2")
     url = f"/servers/{sid}/instances/c1/copy"
     assert 'value="node2"' in text(browser.get(url))
+    fake.instances["c1"]["config"]["limits.memory"] = "2GiB"
     browser.post(url, {"new_name": "c2", "target": "node2"})
-    assert fake.instances["c2"]["location"] == "node2"
+    copy = fake.instances["c2"]
+    assert copy["location"] == "node2"
+    # Incus does not fill in a copy on another member; the console sends it all.
+    assert copy["config"]["limits.memory"] == "2GiB" and copy["profiles"] == ["default"]
+    assert copy["config"]["image.description"] == "Debian 13"
+    assert not any(key.startswith("volatile.") for key in copy["config"])
     assert "not a cluster member" in text(browser.post(url, {"new_name": "c3", "target": "x"}))
     assert "c3" not in fake.instances
 

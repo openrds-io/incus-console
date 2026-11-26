@@ -6,7 +6,7 @@
 {% if members %}
 <p class="u-text--muted">{{ members|length }} member{{ '' if members|length == 1 else 's' }}. They share projects, profiles, images and networks; each instance runs on one of them.</p>
 <table aria-label="Cluster members">
-  <thead><tr><th>Name</th><th>Address</th><th>Roles</th><th>Groups</th><th>Architecture</th><th>Failure domain</th><th>Instances</th><th>Status</th>{% if is_admin() %}<th class="u-align--right">Actions</th>{% endif %}</tr></thead>
+  <thead><tr><th>Name</th><th>Address</th><th>Roles</th><th>Groups</th><th>Architecture</th><th>Failure domain</th><th>Instances</th><th>Status</th></tr></thead>
   <tbody>
   {% for m in members %}
     <tr>
@@ -18,28 +18,11 @@
       <td>{{ m.failure_domain or '-' }}</td>
       <td>{{ counts.get(m.server_name, 0) }}</td>
       <td>{{ status(m.status) }}{% if m.message and m.status != 'Online' %}<br><span class="p-text--small u-text--muted">{{ m.message }}</span>{% endif %}</td>
-      {% if is_admin() %}
-      <td class="u-align--right">
-        {% if m.status == 'Evacuated' %}
-        <form class="inline" method="post" action="{{ url_for('srv.cluster_restore', member=m.server_name) }}" data-confirm="Restore {{ m.server_name }}? The instances it had before the evacuation come back and start.">
-          {{ csrf() }}<button class="p-button is-dense u-no-margin--bottom">Restore</button>
-        </form>
-        {% elif m.status == 'Online' and members|length > 1 %}
-        <form class="inline-form" method="post" action="{{ url_for('srv.cluster_evacuate', member=m.server_name) }}" data-confirm="Evacuate {{ m.server_name }}? Its instances, in every project, are stopped or moved.">
-          {{ csrf() }}
-          <select name="mode" aria-label="What happens to the instances">
-            {% for value, label in modes.items() %}<option value="{{ value }}">{{ label }}</option>{% endfor %}
-          </select>
-          <button class="p-button--negative is-dense u-no-margin--bottom">Evacuate</button>
-        </form>
-        {% endif %}
-      </td>
-      {% endif %}
     </tr>
   {% endfor %}
   </tbody>
 </table>
-<p class="p-text--small u-text--muted">The instance counts are for project {{ project }}.{% if is_admin() %} Evacuate a member before maintenance on it: its instances are moved to other members or stopped. Restore brings them back.{% endif %}</p>
+<p class="p-text--small u-text--muted">The instance counts are for project {{ project }}.{% if is_admin() %} To take a member out of service for maintenance, open it and evacuate it.{% endif %}</p>
 
 <h2 class="p-heading--4">Groups</h2>
 <p class="u-text--muted">A group names a set of members, such as those with fast disks. An instance can be placed on "any member of" a group.</p>

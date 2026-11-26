@@ -108,3 +108,36 @@ def test_add_and_remove_device(browser, sid, fake):
         f"/servers/{sid}/instances/web-1/devices/root/delete", follow_redirects=True
     )
     assert "comes from a profile" in text(profile)
+
+
+def test_a_plain_number_for_memory_means_gib(browser, sid, fake):
+    from app.views.config_forms import memory_size
+
+    with browser.client.application.app_context():
+        for typed, sent in (
+            ("2", "2GiB"),
+            (" 16 ", "16GiB"),
+            ("512", "512GiB"),
+            ("513", "513"),  # bytes, as Incus reads it
+            ("2147483648", "2147483648"),
+            ("1.5", "1.5"),
+            ("512MiB", "512MiB"),
+            ("50%", "50%"),
+            ("0", "0"),
+            ("", ""),
+        ):
+            assert memory_size(typed) == sent
+    browser.post(
+        f"/servers/{sid}/create-instance",
+        {"name": "small", "source": "remote", "alias": "debian/13", "memory": "1"},
+    )
+    assert fake.created[-1]["config"]["limits.memory"] == "1GiB"
+    assert 'data-gib="512"' in browser.get(f"/servers/{sid}/create-instance").get_data(as_text=True)
+    # The settings forms of instances and profiles follow the same rule.
+    fake.add_instance("web-1", status="Stopped")
+    url = f"/servers/{sid}/instances/web-1/settings"
+    assert 'data-gib="512"' in browser.get(url).get_data(as_text=True)
+    browser.post(url, {"cfg:limits.memory": "4"})
+    assert fake.instances["web-1"]["config"]["limits.memory"] == "4GiB"
+    browser.post(f"/servers/{sid}/profiles/big/settings", {"cfg:limits.memory": "8"})
+    assert fake.profiles["big"]["config"]["limits.memory"] == "8GiB"

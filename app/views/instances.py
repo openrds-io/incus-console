@@ -18,6 +18,7 @@ from .config_forms import (
     dump_yaml,
     environment_text,
     load_yaml,
+    memory_size,
     new_device,
     parse_environment,
     settings_fields,
@@ -84,6 +85,8 @@ def _catalog() -> tuple[list, str | None]:
 
 
 KINDS = ("container", "oci")
+
+
 OCI_IMAGE = re.compile(r"[a-z0-9][a-z0-9._/-]*(:[A-Za-z0-9._-]+)?(@sha256:[a-f0-9]{64})?")
 
 
@@ -131,7 +134,7 @@ def instance_create():
         problem = None
         settings = {
             "limits.cpu": form.get("cpu", "").strip(),
-            "limits.memory": form.get("memory", "").strip(),
+            "limits.memory": memory_size(form.get("memory", "")),
         }
         if kind == "oci":
             if not oci_ok:
@@ -399,7 +402,7 @@ def instance_copy(name):
         else:
             outcome = start(
                 lambda: g.incus.copy_instance(
-                    name,
+                    instance,
                     new_name,
                     snapshots=bool(form.get("snapshots")),
                     start=bool(form.get("start")),

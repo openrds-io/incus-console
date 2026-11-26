@@ -544,16 +544,38 @@ class IncusClient:
 
     def copy_instance(
         self,
-        name: str,
+        source: dict,
         new_name: str,
         *,
         snapshots: bool = True,
         start: bool = False,
         target: str | None = None,
     ) -> dict:
+        """Copy an instance (``source`` is what ``instance()`` returned).
+
+        The copy's configuration is sent along, as ``incus copy`` does. Left out,
+        Incus fills it in from the source only when the copy stays on the same
+        cluster member; on another one (``target``) it would come up bare.
+        """
+        config = {
+            key: value
+            for key, value in (source.get("config") or {}).items()
+            # A new instance gets its own addresses and ids, but is still of that image.
+            if not key.startswith("volatile.") or key == "volatile.base_image"
+        }
         body = {
             "name": new_name,
-            "source": {"type": "copy", "source": name, "instance_only": not snapshots},
+            "architecture": source.get("architecture") or "",
+            "config": config,
+            "devices": source.get("devices") or {},
+            "profiles": source.get("profiles") or [],
+            "description": source.get("description") or "",
+            "ephemeral": bool(source.get("ephemeral")),
+            "source": {
+                "type": "copy",
+                "source": source["name"],
+                "instance_only": not snapshots,
+            },
             "start": start,
         }
         return self.request("POST", path("instances"), params=_target(target), body=body)

@@ -695,7 +695,16 @@ class FakeIncus:
                     original = self.instances.get(source.get("source"))
                     if original is None:
                         return self.error(404, "Source instance not found")
+                    if target and not body.get("architecture"):
+                        # Seen on Incus 6.x: a copy to another member is not filled in.
+                        return self.error(400, "Architecture isn't supported: ")
                     copied = json.loads(json.dumps(original))
+                    if target and target != original.get("location"):
+                        # ... nor is anything else: only what the request carries.
+                        for key in ("config", "devices", "profiles", "description"):
+                            copied[key] = json.loads(
+                                json.dumps(body.get(key) or type(copied[key])())
+                            )
                     copied["name"] = name
                     copied["status"] = "Running" if body.get("start") else "Stopped"
                     if source.get("instance_only"):

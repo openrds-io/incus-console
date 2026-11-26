@@ -122,8 +122,9 @@
     <legend>Limits</legend>
     <div class="row">
       <div class="col-4"><label for="cpu">CPUs</label><input type="text" id="cpu" name="cpu" value="{{ form.get('cpu', '') }}" placeholder="No limit"></div>
-      <div class="col-4"><label for="memory">Memory</label><input type="text" id="memory" name="memory" value="{{ form.get('memory', '') }}" placeholder="No limit, e.g. 2GiB"></div>
+      <div class="col-4"><label for="memory">Memory</label><input type="text" id="memory" name="memory" value="{{ form.get('memory', '') }}" placeholder="No limit, e.g. 2GiB" data-gib="{{ config.MEMORY_GIB_UP_TO }}"></div>
     </div>
+    <p class="p-form-help-text">A plain number for memory, up to {{ config.MEMORY_GIB_UP_TO }}, means GiB: 2 becomes 2GiB. Other units work too, such as 512MiB.</p>
   </fieldset>
 
   <fieldset>
