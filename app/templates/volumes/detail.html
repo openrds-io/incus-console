@@ -20,6 +20,7 @@
     <table class="facts" aria-label="General">
       <tbody>
         <tr><th>Pool</th><td>{{ pool }}</td></tr>
+        {% if cluster_members %}<tr><th>Cluster member</th><td>{{ volume.location if volume.location and volume.location != 'none' else 'All (shared pool)' }}</td></tr>{% endif %}
         <tr><th>Size</th><td>{{ (volume.config or {}).get('size', "The pool's default") }}</td></tr>
         <tr><th>Content</th><td>{{ {'block': 'Block device', 'iso': 'ISO image'}.get(volume.content_type, 'Filesystem') }}</td></tr>
         <tr><th>Description</th><td>{{ volume.description or '-' }}</td></tr>

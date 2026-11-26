@@ -9,7 +9,7 @@ from flask import flash, g, redirect, render_template, request, url_for
 from ..incus import IncusError
 from .config_forms import check_expiry, check_schedule
 from .networks import used_by
-from .scoped import bp, run
+from .scoped import bp, online_members, run
 
 NAME = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.-]{0,62}")
 NAME_RULE = "Use letters, digits, dashes, dots and underscores (at most 63)."
@@ -72,6 +72,9 @@ def volume_create():
             if not NAME.fullmatch(name):
                 raise IncusError(400, NAME_RULE)
             size = _size(form)
+            target = form.get("target", "").strip() or None
+            if target and target not in online_members():
+                raise IncusError(400, f"{target} is not a cluster member that is online.")
         except IncusError as error:
             flash(error.message, "error")
         else:
@@ -81,11 +84,15 @@ def volume_create():
                 "content_type": "filesystem",
                 "config": {"size": size} if size else {},
             }
-            if run(lambda: g.incus.create_volume(pool, payload), f"Volume {name} created."):
+            if run(
+                lambda: g.incus.create_volume(pool, payload, target=target),
+                f"Volume {name} created.",
+            ):
                 return redirect(url_for("srv.volume", pool=pool, name=name))
     return render_template(
         "volumes/new.html",
         pools=pools,
+        members=online_members(),
         form=form,
         chosen_pool=form.get("pool") or request.args.get("pool", ""),
     )

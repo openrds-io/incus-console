@@ -57,6 +57,38 @@ def _authorize() -> None:
         abort(403)
 
 
+def cluster_members() -> list[dict]:
+    """The members of the cluster this server belongs to; [] when it stands alone."""
+    if "cluster_members" in g:
+        return g.cluster_members
+    g.cluster_members = []
+    if g.get("incus_failed"):
+        return g.cluster_members
+    try:
+        environment = g.incus.server_info().get("environment") or {}
+        if environment.get("server_clustered"):
+            g.cluster_members = sorted(_members(), key=lambda m: m["server_name"])
+    except IncusError:
+        pass
+    return g.cluster_members
+
+
+def _members() -> list[dict]:
+    try:
+        return g.incus.cluster_members()
+    except IncusError as error:
+        if error.status != 403:
+            raise
+    # A certificate restricted to projects may not be shown the members; their
+    # names are no secret to someone placing an instance, so ask as the console.
+    return servers.client_for(g.server, g.project).cluster_members()
+
+
+def online_members() -> list[str]:
+    """Names of the members that can take an instance or a volume now."""
+    return [m["server_name"] for m in cluster_members() if m.get("status") == "Online"]
+
+
 @bp.context_processor
 def _server_context():
     if "incus" not in g:
@@ -68,7 +100,12 @@ def _server_context():
         except IncusError:
             pass
     projects = access.visible_projects(g.sid, projects) or [g.project]
-    return {"server": g.server, "project": g.project, "projects": projects}
+    return {
+        "server": g.server,
+        "project": g.project,
+        "projects": projects,
+        "cluster_members": cluster_members(),
+    }
 
 
 DONE, RUNNING = "done", "running"

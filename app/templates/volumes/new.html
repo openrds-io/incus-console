@@ -16,6 +16,16 @@
   </div>
   <label for="size">Size</label><input type="text" id="size" name="size" value="{{ form.get('size', '') }}" placeholder="e.g. 10GiB">
   <p class="p-form-help-text">Leave the size empty for the pool's default.</p>
+  {% if cluster_members %}
+  <label for="target">Cluster member</label>
+  <select id="target" name="target">
+    <option value="">The member that answers</option>
+    {% for member in members %}
+    <option value="{{ member }}"{% if form.get('target') == member %} selected{% endif %}>{{ member }}</option>
+    {% endfor %}
+  </select>
+  <p class="p-form-help-text">On a pool that keeps its data on each member (dir, zfs, btrfs, lvm), the volume lives on one member and only instances there can use it. Shared pools such as Ceph ignore this: leave it as it is.</p>
+  {% endif %}
   <label for="description">Description</label>
   <input type="text" id="description" name="description" value="{{ form.get('description', '') }}">
   <div class="form-buttons">

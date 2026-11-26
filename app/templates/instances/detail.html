@@ -13,6 +13,7 @@
 <a class="p-button is-dense u-no-margin--bottom" href="{{ url_for('srv.instance_logs', name=instance.name) }}">Logs</a>
 {% if allowed('srv.instance_copy') %}<a class="p-button is-dense u-no-margin--bottom" href="{{ url_for('srv.instance_copy', name=instance.name) }}">Copy</a>{% endif %}
 {% if allowed('srv.instance_publish') %}<a class="p-button is-dense u-no-margin--bottom" href="{{ url_for('srv.instance_publish', name=instance.name) }}">Publish</a>{% endif %}
+{% if cluster_members and allowed('srv.instance_move') %}<a class="p-button is-dense u-no-margin--bottom" href="{{ url_for('srv.instance_move', name=instance.name) }}">Move</a>{% endif %}
 {% if allowed('srv.instance_rename') %}<a class="p-button is-dense u-no-margin--bottom" href="{{ url_for('srv.instance_rename', name=instance.name) }}">Rename</a>{% endif %}
 {% if allowed('srv.instance_delete') %}
 <form class="inline" method="post" action="{{ url_for('srv.instance_delete', name=instance.name) }}" data-confirm="Delete {{ instance.name }} and its snapshots? This cannot be undone.">
@@ -29,6 +30,7 @@
     <table class="facts" aria-label="General">
       <tbody>
         <tr><th>Type</th><td>{{ kind_labels[instance|instance_kind] }}</td></tr>
+        {% if cluster_members %}<tr><th>Cluster member</th><td>{{ instance.location or '-' }}</td></tr>{% endif %}
         <tr><th>Description</th><td>{{ instance.description or '-' }}</td></tr>
         <tr><th>Image</th><td>{{ (instance.config or {}).get('image.description', '-') }}</td></tr>
         <tr><th>Architecture</th><td>{{ instance.architecture or '-' }}</td></tr>

@@ -134,6 +134,16 @@
       <option value="{{ pool }}"{% if form.get('pool') == pool %} selected{% endif %}>{{ pool }}</option>
       {% endfor %}
     </select>
+    {% if cluster_members %}
+    <label for="target">Cluster member</label>
+    <select id="target" name="target">
+      <option value="">Let Incus choose</option>
+      {% for member in members %}
+      <option value="{{ member }}"{% if form.get('target') == member %} selected{% endif %}>{{ member }}</option>
+      {% endfor %}
+    </select>
+    <p class="p-form-help-text">Which member of the cluster runs it. Only members that are online are listed.</p>
+    {% endif %}
     {% if kind != 'oci' %}
     <label for="user_data">Cloud-init user data</label>
     <textarea class="code-editor" id="user_data" name="user_data" rows="6" spellcheck="false" placeholder="#cloud-config&#10;packages:&#10;  - nginx">{{ form.get('user_data', '') }}</textarea>

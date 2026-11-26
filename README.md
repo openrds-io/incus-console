@@ -15,6 +15,12 @@ object storage), networks, profiles, images, projects, and users with roles.
 Working today:
 
 - Servers: register a local socket, or a remote server with a trust token
+- Clusters: register any one member and the console works with the whole
+  cluster. A Cluster page lists the members (address, roles, groups, status,
+  instances); console admins evacuate a member before maintenance and restore
+  it afterwards. Instances and volumes show the member they are on; the create
+  forms let you choose it (or leave it to Incus); a stopped instance moves to
+  another member; new networks are defined on every member
 - Instances, of either kind: list, start, stop, restart, freeze, delete,
   rename, copy, snapshots (by hand or on a schedule, with expiry), logs
   (console and Incus log files), a settings form for limits and common
@@ -81,6 +87,28 @@ No Incus at hand? Run the in-memory fake and add its socket path as a local serv
 ```bash
 python -m tests.fake_incus /tmp/fake-incus.sock
 ```
+
+Add `--cluster` and the fake is a three-member cluster.
+
+### A real cluster on a Mac
+
+`dev/cluster.sh` builds a small Incus cluster out of [Lima](https://lima-vm.io)
+virtual machines (`brew install lima`; Colima already brought it along). Each
+member runs Debian 13 with Incus from the Zabbly repository, on Lima's vzNAT
+network, where the Mac and the members all reach each other.
+
+```bash
+dev/cluster.sh up 3      # create incus1..incus3 and form the cluster
+dev/cluster.sh token     # a trust token: paste it under Servers > Remote, with a trust token
+dev/cluster.sh status
+dev/cluster.sh stop      # "up" starts them again; "delete" removes them
+```
+
+Each member takes 2 CPUs, 2 GiB of memory and up to 20 GiB of disk; see the
+top of the script for the settings. The pool is a plain directory on each
+member and `incusbr0` is a separate bridge per member, so containers on
+different members do not see each other: enough for the console's pages, not
+a model for production.
 
 Run the checks with `ruff check .` and `pytest`.
 
@@ -300,19 +328,22 @@ app/
   terminal.py     browser terminal relay (simple-websocket)
   desktop.py      the server the desktop app starts
   incus/client.py Incus REST client (standard library, plus websocket-client)
-  views/          pages: servers, instances, storage, operations
+  views/          pages: servers, cluster, instances, storage, operations
   templates/      Jinja templates
   static/         CSS and a few lines of JavaScript
 tests/
   fake_incus.py   in-memory Incus API used by the tests and for demos
+dev/cluster.sh    a small Incus cluster in Lima virtual machines, for development
 desktop/          Electron app (main.js) and its build scripts
 wsgi.py           entry point for gunicorn
 ```
 
 ## Roadmap
 
-1. Multiple servers: Incus clusters (members, placement, moving instances,
-   evacuate and restore), then copying and moving between registered servers
+1. Clusters, next steps: cluster groups (create, assign members, place
+   instances on a group), editing a member's roles and description, member
+   resources, and storage pools created per member. Copying and moving
+   between separately registered servers is out of scope for now
 2. OCI application containers, next steps: private registries (credentials),
    updating an instance to a newer image (rebuild), and presets for common
    images (ports, volumes)

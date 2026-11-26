@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+{% from "macros.html" import crumbs, csrf %}
+{% block title %}Move {{ instance.name }}{% endblock %}
+{% block heading %}{{ crumbs([('Instances', url_for('srv.instances')), (instance.name, url_for('srv.instance', name=instance.name)), ('Move', None)]) }}{% endblock %}
+{% block content %}
+{% if instance.status != 'Stopped' %}
+<div class="p-notification--caution">
+  <div class="p-notification__content"><p class="p-notification__message">Containers move between cluster members only while stopped. Stop {{ instance.name }} first.</p></div>
+</div>
+{% elif not members %}
+<div class="p-notification--caution">
+  <div class="p-notification__content"><p class="p-notification__message">No other cluster member is online.</p></div>
+</div>
+{% endif %}
+<form class="narrow-form" method="post">
+  {{ csrf() }}
+  <p>{{ instance.name }} is on <strong>{{ instance.location or '-' }}</strong>.</p>
+  <label for="target">Move to</label>
+  <select id="target" name="target" required>
+    {% for member in members %}<option value="{{ member }}">{{ member }}</option>{% endfor %}
+  </select>
+  <p class="p-form-help-text">Its root disk and snapshots are copied to the other member, which takes a while for a large instance. Volumes on a pool that keeps its data on each member do not move with it.</p>
+  <div class="form-buttons">
+    <a class="p-button--base" href="{{ url_for('srv.instance', name=instance.name) }}">Cancel</a>
+    <button class="p-button--positive" data-busy="Moving…"{% if instance.status != 'Stopped' or not members %} disabled{% endif %}>Move</button>
+  </div>
+</form>
+{% endblock %}

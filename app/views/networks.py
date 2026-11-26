@@ -10,7 +10,7 @@ from flask import flash, g, redirect, render_template, request, url_for
 
 from ..incus import IncusError
 from .config_forms import apply_settings, dump_yaml, load_yaml, settings_fields
-from .scoped import bp, run
+from .scoped import bp, cluster_members, run
 
 EDITABLE = ("config", "description")
 NAME = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.-]{0,14}")
@@ -63,6 +63,19 @@ def networks():
     return render_template("networks/list.html", networks=rows)
 
 
+def _create(payload: dict) -> dict:
+    """Create a bridge; in a cluster, define it on every member first."""
+    for member in cluster_members():
+        pending = {"name": payload["name"], "type": payload["type"]}
+        try:
+            g.incus.create_network(pending, target=member["server_name"])
+        except IncusError as error:
+            # Left over from an earlier attempt that did not get to the last step.
+            if "already" not in error.message.lower():
+                raise
+    return g.incus.create_network(payload)
+
+
 @bp.route("/networks/new", methods=["GET", "POST"])
 def network_create():
     form = request.form
@@ -77,7 +90,7 @@ def network_create():
         }
         if not NAME.fullmatch(name):
             flash(NAME_RULE, "error")
-        elif run(lambda: g.incus.create_network(payload), f"Network {name} created."):
+        elif run(lambda: _create(payload), f"Network {name} created."):
             return redirect(url_for("srv.network", name=name))
         defaults = payload["config"]
     return render_template(

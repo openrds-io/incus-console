@@ -104,6 +104,9 @@ class FakeIncus:
         self.puts: list[dict] = []  # bodies of instance, bucket and key PUTs
         self.no_bucket_drivers: set[str] = set()
         self.pending_ops = False  # True: operations stay Running
+        self.members: dict[str, dict] = {}  # cluster members by name; empty: not clustered
+        self.pending_networks: dict[str, set] = {}  # members a network is defined on
+        self.targets: list[tuple[str, str, str]] = []  # (method, path, ?target=) of requests
 
     # -- helpers -----------------------------------------------------------
 
@@ -154,7 +157,7 @@ class FakeIncus:
         ]
         return {**self.volumes[pool][volume], "used_by": used_by}
 
-    def _volumes(self, method, pool, rest, body):
+    def _volumes(self, method, pool, rest, body, target=None):
         volumes = self.volumes.setdefault(pool, {})
         match (method, rest):
             case ("GET", []):
@@ -168,7 +171,11 @@ class FakeIncus:
                 name = body.get("name", "")
                 if name in volumes:
                     return self.error(409, "Volume by that name already exists")
+                location, refused = self._place(target or next(iter(self.members), None))
+                if refused:
+                    return refused
                 volumes[name] = {
+                    "location": location or "none",
                     "name": name,
                     "type": "custom",
                     "description": body.get("description", ""),
@@ -241,6 +248,85 @@ class FakeIncus:
             "description": "",
             "used_by": [],
         }
+
+    def make_cluster(self, *names):
+        """Turn the fake into a cluster with these members; instances go to the first."""
+        for index, name in enumerate(names or ("node1", "node2", "node3")):
+            self.members[name] = {
+                "server_name": name,
+                "url": f"https://10.0.0.{index + 1}:8443",
+                "database": True,
+                "status": "Online",
+                "message": "Fully operational",
+                "architecture": "aarch64",
+                "roles": ["database-leader" if index == 0 else "database"],
+                "failure_domain": "default",
+                "description": "",
+                "config": {},
+                "groups": ["default"],
+            }
+        first = next(iter(self.members))
+        for instance in self.instances.values():
+            instance.setdefault("location", first)
+
+    def _place(self, target):
+        """(member for a new thing, error): the target, or the emptiest online member."""
+        if not self.members:
+            return None, None
+        if target:
+            member = self.members.get(target)
+            if member is None:
+                return None, self.error(404, f'Cluster member "{target}" not found')
+            if member["status"] != "Online":
+                return None, self.error(400, f'Cluster member "{target}" is not online')
+            return target, None
+        online = [n for n, m in self.members.items() if m["status"] == "Online"]
+        load = {n: 0 for n in online}
+        for instance in self.instances.values():
+            if instance.get("location") in load:
+                load[instance["location"]] += 1
+        return min(online, key=lambda n: load[n]), None
+
+    def _cluster(self, method, rest, body):
+        if not self.members:
+            return self.error(400, "This server is not clustered")
+        match (method, rest):
+            case ("GET", ["members"]):
+                return self.sync(list(self.members.values()))
+            case ("GET", ["members", name]) if name in self.members:
+                return self.sync(self.members[name])
+            case ("POST", ["members", name, "state"]) if name in self.members:
+                member = self.members[name]
+                action = body.get("action")
+                if action == "evacuate":
+                    if member["status"] != "Online":
+                        return self.error(400, "Cluster member is already evacuated")
+                    member.update(status="Evacuated", message="Unavailable due to maintenance")
+                    for instance in self.instances.values():
+                        if instance.get("location") != name:
+                            continue
+                        instance["evacuated_from"] = name
+                        instance["was"] = instance["status"]
+                        if body.get("mode") == "stop":
+                            instance.update(status="Stopped", status_code=102)
+                        else:
+                            instance["location"], _ = self._place(None)
+                    return self.start_op(f"Evacuating cluster member {name}")
+                if action == "restore":
+                    if member["status"] != "Evacuated":
+                        return self.error(400, "Cluster member is not evacuated")
+                    member.update(status="Online", message="Fully operational")
+                    for instance in self.instances.values():
+                        if instance.pop("evacuated_from", None) == name:
+                            instance["location"] = name
+                            running = instance.pop("was", "Stopped") == "Running"
+                            instance.update(
+                                status="Running" if running else "Stopped",
+                                status_code=103 if running else 102,
+                            )
+                    return self.start_op(f"Restoring cluster member {name}")
+                return self.error(400, "Unknown action")
+        return self.error(404, "Cluster member not found")
 
     def add_bucket(self, pool, name, **body):
         return self._buckets("POST", pool, [], {"name": name, **body})
@@ -323,7 +409,7 @@ class FakeIncus:
         """What Incus refuses a restricted certificate (TLS authorization)."""
         allowed = caller["projects"]
         denied = self.error(403, "Certificate is restricted")
-        if seg[:1] == ["certificates"]:
+        if seg[:1] in (["certificates"], ["cluster"]):
             return denied
         if seg[:1] == ["projects"]:
             if method != "GET" or (len(seg) > 1 and seg[1] not in allowed):
@@ -372,6 +458,9 @@ class FakeIncus:
         return self.error(405, "not allowed")
 
     def _route(self, method, seg, query, body, peer_cert):
+        target = query.get("target")
+        if target:
+            self.targets.append((method, "/".join(seg), target))
         match (method, seg):
             case ("GET", []):
                 return self.sync(
@@ -381,12 +470,15 @@ class FakeIncus:
                         "auth": "trusted",
                         "config": {"core.storage_buckets_address": ":8555"},
                         "environment": {
-                            "server_name": "fake",
+                            "server_name": next(iter(self.members), "fake"),
+                            "server_clustered": bool(self.members),
                             "server_version": "6.0",
                             "architectures": ["aarch64"],
                         },
                     }
                 )
+            case (_, ["cluster", *rest]):
+                return self._cluster(method, rest, body)
             case (_, ["certificates", *rest]) if "trust_token" not in body:
                 return self._certificate_op(method, rest, body, peer_cert)
             case ("POST", ["certificates"]):
@@ -493,6 +585,9 @@ class FakeIncus:
                     return self.error(400, f'Invalid instance name "{name}"')
                 if name in self.instances:
                     return self.error(409, f'Instance "{name}" already exists')
+                location, refused = self._place(target)
+                if refused:
+                    return refused
                 source = body.get("source") or {}
                 if source.get("type") == "copy":
                     original = self.instances.get(source.get("source"))
@@ -504,6 +599,8 @@ class FakeIncus:
                     if source.get("instance_only"):
                         copied["snapshots"] = []
                     self.instances[name] = copied
+                    if location:
+                        copied["location"] = location
                     return self.start_op(f"Creating instance {name}")
                 if source.get("protocol") == "oci" and "instance_oci" not in self.extensions:
                     return self.error(400, "Unsupported protocol: oci")
@@ -520,6 +617,8 @@ class FakeIncus:
                     image=alias,
                 )
                 created = self.instances[name]
+                if location:
+                    created["location"] = location
                 created["profiles"] = body.get("profiles") or ["default"]
                 if oci:
                     # What Incus records from the image's own config.
@@ -540,6 +639,14 @@ class FakeIncus:
                 instance = self.instances.get(name)
                 if instance is None:
                     return self.error(404, f'Instance "{name}" not found')
+                if method == "POST" and not rest and body.get("migration"):
+                    if instance["status"] != "Stopped":
+                        return self.error(400, "Instance must be stopped to be moved statelessly")
+                    location, refused = self._place(target)
+                    if refused or not target:
+                        return refused or self.error(400, "No target cluster member")
+                    instance["location"] = location
+                    return self.start_op(f"Migrating instance {name}")
                 return self._instance(method, instance, rest, body)
             case ("GET", ["networks"]):
                 return self.sync([self._network(n) for n in self.networks])
@@ -549,6 +656,22 @@ class FakeIncus:
                     return self.error(409, "Network already exists")
                 if len(name) > 15:
                     return self.error(400, "Network name too long")
+                if self.members:
+                    defined = self.pending_networks.setdefault(name, set())
+                    if target:
+                        if target not in self.members:
+                            return self.error(404, f'Cluster member "{target}" not found')
+                        if target in defined:
+                            return self.error(400, "The network is already defined on member")
+                        if body.get("config"):
+                            return self.error(400, "Config key may not be used as member-specific")
+                        defined.add(target)
+                        return self.sync()
+                    if defined != set(self.members):
+                        return self.error(
+                            400, "Network not pending on any node (use --target <node> first)"
+                        )
+                    del self.pending_networks[name]
                 config = dict(body.get("config") or {})
                 for key in ("ipv4.address", "ipv6.address"):
                     if config.get(key) == "auto":
@@ -572,7 +695,7 @@ class FakeIncus:
             case (_, ["storage-pools", pool, "volumes", *rest]):
                 if pool not in self.pools:
                     return self.error(404, "Storage pool not found")
-                return self._volumes(method, pool, rest, body)
+                return self._volumes(method, pool, rest, body, target)
             case (_, ["storage-pools", pool, "buckets", *rest]):
                 if pool not in self.pools:
                     return self.error(404, "Storage pool not found")
@@ -1347,8 +1470,14 @@ def demo() -> FakeIncus:
 
 
 if __name__ == "__main__":
-    path = sys.argv[1] if len(sys.argv) > 1 else "/tmp/fake-incus.sock"  # noqa: S108
-    serve_unix(demo(), path)
+    # python -m tests.fake_incus [socket] [--cluster]: a three-member cluster.
+    args = [a for a in sys.argv[1:] if a != "--cluster"]
+    path = args[0] if args else "/tmp/fake-incus.sock"  # noqa: S108
+    world = demo()
+    if "--cluster" in sys.argv:
+        world.make_cluster()
+        world.instances["db-1"]["location"] = "node2"
+    serve_unix(world, path)
     print(f"Fake Incus listening on {path}. Ctrl-C to stop.")
     try:
         threading.Event().wait()

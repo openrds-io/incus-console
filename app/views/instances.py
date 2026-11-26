@@ -3,7 +3,7 @@ from __future__ import annotations
 import re
 from urllib.parse import urlsplit
 
-from flask import current_app, flash, g, redirect, render_template, request, url_for
+from flask import abort, current_app, flash, g, redirect, render_template, request, url_for
 
 from .. import catalog, terminal
 from ..filters import instance_kind
@@ -22,7 +22,7 @@ from .config_forms import (
     parse_environment,
     settings_fields,
 )
-from .scoped import DONE, RUNNING, bp, run, start
+from .scoped import DONE, RUNNING, bp, cluster_members, online_members, run, start
 
 ACTIONS = {
     "start": "started",
@@ -39,6 +39,16 @@ EDITABLE = ("architecture", "config", "devices", "ephemeral", "profiles", "state
 def instances():
     rows = sorted(g.incus.instances(), key=lambda i: i["name"])
     return render_template("instances/list.html", instances=rows)
+
+
+def _placement(form) -> tuple[str | None, str | None]:
+    """(cluster member to create on, problem). No member lets Incus choose."""
+    target = form.get("target", "").strip()
+    if not target:
+        return None, None
+    if target not in online_members():
+        return None, f"{target} is not a cluster member that is online."
+    return target, None
 
 
 def _catalog() -> tuple[list, str | None]:
@@ -144,6 +154,8 @@ def instance_create():
             "source": source,
             "start": bool(form.get("start")),
         }
+        target, misplaced = _placement(form)
+        problem = problem or misplaced
         pool = form.get("pool", "").strip()
         if pool:
             payload["devices"] = {"root": {"type": "disk", "path": "/", "pool": pool}}
@@ -155,7 +167,9 @@ def instance_create():
             # Incus makes the instance only after fetching the image, so while that
             # is still running there is no instance page to show yet.
             what = "Application container" if kind == "oci" else "Container"
-            outcome = start(lambda: g.incus.create_instance(payload), f"{what} {name} created.")
+            outcome = start(
+                lambda: g.incus.create_instance(payload, target=target), f"{what} {name} created."
+            )
             if outcome == DONE:
                 return redirect(url_for("srv.instance", name=name))
             if outcome == RUNNING:
@@ -178,6 +192,7 @@ def instance_create():
         default_source=default_source,
         default_alias=config["IMAGE_SUGGESTIONS"][0],
         default_image=image,
+        members=online_members(),
         form=form,
     )
 
@@ -328,6 +343,29 @@ def instance_rename(name):
         elif run(lambda: g.incus.rename_instance(name, new_name), f"{name} renamed to {new_name}."):
             return redirect(url_for("srv.instance", name=new_name))
     return render_template("instances/rename.html", instance=instance, form=request.form)
+
+
+@bp.route("/instances/<name>/move", methods=["GET", "POST"])
+def instance_move(name):
+    """Move a stopped instance to another member of the cluster."""
+    if not cluster_members():
+        abort(404)
+    instance = g.incus.instance(name)
+    here = instance.get("location") or ""
+    members = [m for m in online_members() if m != here]
+    if request.method == "POST":
+        target = request.form.get("target", "")
+        if target not in members:
+            flash("Choose a cluster member that is online.", "error")
+        else:
+            outcome = start(
+                lambda: g.incus.move_instance(name, target), f"{name} moved to {target}."
+            )
+            if outcome == DONE:
+                return redirect(url_for("srv.instance", name=name))
+            if outcome == RUNNING:
+                return redirect(url_for("srv.operations"))
+    return render_template("instances/move.html", instance=instance, members=members)
 
 
 @bp.route("/instances/<name>/copy", methods=["GET", "POST"])
