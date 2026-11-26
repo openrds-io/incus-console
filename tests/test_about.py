@@ -37,6 +37,7 @@ def test_desktop_about(browser, sid):
     assert "6.0" in page  # the fake server's Incus version
     assert "Database" in page  # the single desktop user sees installation details
     assert "Apache License 2.0" in page
+    assert "Reached through member" not in page
     assert f"Version {build()['label']}" in text(browser.get("/servers"))
 
 
@@ -56,3 +57,8 @@ def test_server_mode_hides_installation_details_from_users(server_app, setup):
 
 def test_about_needs_login_in_server_mode(server_app):
     assert Browser(server_app).get("/about").status_code == 302
+
+
+def test_about_names_the_cluster_member(browser, sid, fake):
+    fake.make_cluster("node1", "node2")
+    assert "Reached through member node1" in text(browser.get(f"/about?sid={sid}"))

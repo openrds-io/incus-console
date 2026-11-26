@@ -1,4 +1,4 @@
-"""Incus Console: a lean web and desktop console for Incus.
+"""Incus Console: a web and desktop console for Incus.
 
 Flask, server-rendered Jinja2, pytest.
 `flask run` finds this package by its name.
