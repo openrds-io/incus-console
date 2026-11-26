@@ -462,3 +462,16 @@ table.credentials code {
   padding-top: 0.3rem;
   padding-bottom: 0.3rem;
 }
+
+/* Code chips in table cells (device settings, config keys): boxes of their own, so
+   a cell that wraps moves whole chips to the next line instead of drawing their
+   padding over the line above. A long value wraps inside its chip. */
+td code {
+  display: inline-block;
+  margin: 0.125rem 0.25rem 0.125rem 0;
+  padding: 0.125rem 0.375rem;
+  /* Vanilla breaks code between any two letters; break only what cannot fit. */
+  word-break: normal;
+  overflow-wrap: break-word;
+  vertical-align: middle;
+}

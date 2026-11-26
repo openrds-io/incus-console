@@ -989,6 +989,18 @@ class FakeIncus:
             case ("POST", ["console"]):
                 if instance["status"] != "Running":
                     return self.error(400, "Instance is not running")
+                # Like Incus: one console session per instance, unless forced.
+                running = [
+                    s
+                    for s in self.sessions.values()
+                    if s.get("instance") == name and s.get("active")
+                ]
+                if running and not body.get("force"):
+                    return self.error(
+                        400, "This console is already connected. Force is required to take it over."
+                    )
+                for session in running:
+                    session["active"] = False
                 status, response = self.start_op(f"Showing console of {name}")
                 op = response["metadata"]
                 op.update(status="Running", status_code=103)
@@ -1000,6 +1012,8 @@ class FakeIncus:
                     "control": fds["control"],
                     "stdin": b"",
                     "control_messages": [],
+                    "instance": name,
+                    "active": True,  # until its control websocket closes
                 }
                 return status, response
             case ("GET", ["snapshots"]):
@@ -1137,6 +1151,8 @@ class FakeIncus:
         while True:
             frame = ws.recv()
             if frame is None:
+                if secret == session["control"] and "active" in session:
+                    session["active"] = False  # the session ends with its control socket
                 return
             opcode, payload = frame
             if secret == session["control"]:

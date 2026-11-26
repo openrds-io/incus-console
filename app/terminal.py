@@ -128,7 +128,13 @@ def relay(client, name: str, command: list[str] | None = None):
     rows = _size(request.args.get("rows"), 24)
     browser = Server.accept(request.environ)
     if command is None:
-        opened = _open(client, browser, lambda: client.console_interactive(name, cols, rows))
+        # Incus allows one console session per instance: the page opened last takes it
+        # over, rather than being refused because of a tab left open.
+        opened = _open(
+            client,
+            browser,
+            lambda: client.console_interactive(name, cols, rows, force=True),
+        )
         if opened:
             _replay(client, browser, name)
     else:

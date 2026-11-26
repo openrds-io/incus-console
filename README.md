@@ -319,8 +319,11 @@ wsgi.py           entry point for gunicorn
 
 ## Roadmap
 
-1. Virtual machines, next steps: ISO installs (upload an ISO as a volume, boot
-   an empty VM from it), and live migration settings
+1. Virtual machines, next steps: live migration settings. Installing from ISO
+   images was tried and set aside for now: most installers' boot menus need
+   the VM's screen and a keyboard the firmware understands (a graphical
+   console), which was not worth its complexity. Perhaps test again on an
+   amd64 Incus server
 2. OCI application containers, next steps: private registries (credentials),
    updating an instance to a newer image (rebuild), and presets for common
    images (ports, volumes)

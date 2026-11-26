@@ -1,4 +1,4 @@
-"""Custom storage volumes: create, attach to containers, snapshot, resize."""
+"""Custom storage volumes: create, attach to instances, snapshot, resize."""
 
 from __future__ import annotations
 
@@ -100,7 +100,13 @@ def volume_create():
 def volume(pool, name):
     found = g.incus.volume(pool, name)
     attached = used_by(found.get("used_by"))["instances"]
-    instances = sorted(i["name"] for i in g.incus.instances() if i["name"] not in attached)
+    # Block and ISO volumes attach to virtual machines only.
+    vms_only = found.get("content_type") in ("block", "iso")
+    instances = sorted(
+        i["name"]
+        for i in g.incus.instances()
+        if i["name"] not in attached and (i.get("type") == "virtual-machine" or not vms_only)
+    )
     return render_template(
         "volumes/detail.html",
         pool=pool,
@@ -194,7 +200,7 @@ def volume_attach(pool, name):
     device = form.get("device", "").strip() or name
     back = redirect(url_for("srv.volume", pool=pool, name=name))
     found = g.incus.volume(pool, name)
-    is_block = found.get("content_type") == "block"
+    is_block = found.get("content_type") in ("block", "iso")
     if not target:
         flash("Choose an instance.", "error")
         return back

@@ -95,6 +95,18 @@ def test_block_volume_needs_no_path(browser, sid, fake):
     }
 
 
+def test_block_volumes_are_offered_to_vms_only(browser, sid, fake):
+    """Incus attaches block (and ISO) volumes to virtual machines only."""
+    fake.add_instance("c1")
+    fake.add_instance("vm1", kind="virtual-machine")
+    fake.add_volume("default", "raw", content_type="block")
+    fake.add_volume("default", "data")
+    block = text(browser.get(f"/servers/{sid}/storage/default/volumes/raw"))
+    assert 'value="vm1"' in block and 'value="c1"' not in block
+    filesystem = text(browser.get(f"/servers/{sid}/storage/default/volumes/data"))
+    assert 'value="vm1"' in filesystem and 'value="c1"' in filesystem
+
+
 def test_snapshots(browser, sid, fake):
     fake.add_volume("default", "data")
     base = f"/servers/{sid}/storage/default/volumes/data/snapshots"

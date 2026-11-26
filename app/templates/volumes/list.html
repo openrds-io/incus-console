@@ -16,7 +16,7 @@
       <td><a href="{{ url_for('srv.volume', pool=v.pool, name=v.name) }}">{{ v.name }}</a></td>
       <td>{{ v.pool }}</td>
       <td>{{ (v.config or {}).get('size', 'No limit') }}</td>
-      <td>{{ 'Block' if v.content_type == 'block' else 'Filesystem' }}</td>
+      <td>{{ {'block': 'Block', 'iso': 'ISO image'}.get(v.content_type, 'Filesystem') }}</td>
       <td>{% for name in v.instances %}<a href="{{ url_for('srv.instance', name=name) }}">{{ name }}</a>{% if not loop.last %}, {% endif %}{% else %}-{% endfor %}</td>
       <td>{{ v.description or '' }}</td>
     </tr>
