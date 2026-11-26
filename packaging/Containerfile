@@ -1,0 +1,24 @@
+# Incus Console as a container image: gunicorn on port 5002, data in /data.
+# Build with packaging/build.sh image. Put a proxy that serves HTTPS in front
+# of it (see README, "Behind nginx").
+FROM python:3.13-slim
+
+ARG COMMIT_STAMP=unknown
+
+RUN useradd --system --home-dir /data --create-home --shell /usr/sbin/nologin incus-console
+WORKDIR /opt/incus-console
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt gunicorn
+COPY app ./app
+COPY wsgi.py .
+RUN echo "$COMMIT_STAMP" > app/COMMIT
+
+# BEHIND_PROXY: the proxy's X-Forwarded-* headers are trusted and the session
+# cookie is sent over HTTPS only. For a quick try without a proxy, run with
+# -e INCUS_CONSOLE_BEHIND_PROXY=false and open http://localhost:5002.
+ENV INCUS_CONSOLE_DATA_DIR=/data \
+    INCUS_CONSOLE_BEHIND_PROXY=true
+VOLUME /data
+EXPOSE 5002
+USER incus-console
+CMD ["gunicorn", "--workers", "2", "--threads", "50", "--bind", "0.0.0.0:5002", "--access-logfile", "-", "wsgi:app"]

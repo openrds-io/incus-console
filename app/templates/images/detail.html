@@ -25,7 +25,7 @@
         <tr><th>Uploaded</th><td>{{ image.uploaded_at|when }}</td></tr>
         <tr><th>Last used</th><td>{{ image.last_used_at|when }}</td></tr>
         <tr><th>Cached</th><td>{{ 'Yes, removed when unused' if image.cached else 'No' }}</td></tr>
-        <tr><th>Source</th><td>{% if image.update_source %}{{ image.update_source.alias }} from {{ image.update_source.server }}{% else %}-{% endif %}</td></tr>
+        <tr><th>Source</th><td>{% if image.update_source %}{{ image.update_source.alias }} from {{ image.update_source.server|no_credentials }}{% else %}-{% endif %}</td></tr>
       </tbody>
     </table>
   </div>

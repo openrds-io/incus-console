@@ -64,6 +64,7 @@ def create_app(test_config: dict | None = None) -> Flask:
         images,
         instances,
         networks,
+        oci,
         operations,
         profiles,
         projects,

@@ -599,6 +599,11 @@ class IncusClient:
     def delete_snapshot(self, name: str, snapshot: str) -> dict:
         return self.request("DELETE", path("instances", name, "snapshots", snapshot))
 
+    def rebuild_instance(self, name: str, source: dict) -> dict:
+        """Replace a stopped instance's root disk with a fresh one from an image.
+        Its configuration, devices and volumes stay."""
+        return self.request("POST", path("instances", name, "rebuild"), body={"source": source})
+
     def restore_snapshot(self, name: str, snapshot: str) -> dict:
         return self.request("PUT", path("instances", name), body={"restore": snapshot})
 

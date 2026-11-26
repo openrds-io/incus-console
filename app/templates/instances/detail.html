@@ -12,6 +12,7 @@
 {% endif %}
 <a class="p-button is-dense u-no-margin--bottom" href="{{ url_for('srv.instance_logs', name=instance.name) }}">Logs</a>
 {% if allowed('srv.instance_copy') %}<a class="p-button is-dense u-no-margin--bottom" href="{{ url_for('srv.instance_copy', name=instance.name) }}">Copy</a>{% endif %}
+{% if instance|instance_kind == 'oci' and allowed('srv.instance_update_image') %}<a class="p-button is-dense u-no-margin--bottom" href="{{ url_for('srv.instance_update_image', name=instance.name) }}">Update image</a>{% endif %}
 {% if allowed('srv.instance_publish') %}<a class="p-button is-dense u-no-margin--bottom" href="{{ url_for('srv.instance_publish', name=instance.name) }}">Publish</a>{% endif %}
 {% if cluster_members and allowed('srv.instance_move') %}<a class="p-button is-dense u-no-margin--bottom" href="{{ url_for('srv.instance_move', name=instance.name) }}">Move</a>{% endif %}
 {% if allowed('srv.instance_rename') %}<a class="p-button is-dense u-no-margin--bottom" href="{{ url_for('srv.instance_rename', name=instance.name) }}">Rename</a>{% endif %}

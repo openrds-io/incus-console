@@ -6,7 +6,7 @@ import threading
 
 import pytest
 
-from app.views.instances import oci_source
+from app.views.oci import oci_source
 
 from .test_app import text
 
@@ -185,3 +185,134 @@ def test_environment_values_are_hidden_from_viewers_and_operators(server_app, se
         assert "only project admins see them" in page
     assert "s3cret-value" in text(login(server_app, "pam").get(url))
     assert "s3cret-value" in text(admin.get(url))
+
+
+def test_private_registry_login_goes_into_the_server_address(browser, sid, fake):
+    create(
+        browser,
+        sid,
+        name="app",
+        oci_image="ghcr.io/acme/app:1",
+        registry_user="bot",
+        registry_password="p@ss/w:rd",
+    )
+    sent = fake.created[-1]["source"]
+    assert sent["server"] == "https://bot:p%40ss%2Fw%3Ard@ghcr.io" and sent["alias"] == "acme/app:1"
+    # Half a login is a mistake, and the password is never sent back to the page.
+    page = text(
+        create(browser, sid, name="app2", oci_image="ghcr.io/acme/app:1", registry_user="bot")
+    )
+    assert "needs both a username and a password" in page
+    refused = text(
+        create(
+            browser,
+            sid,
+            name="bad name",
+            oci_image="nginx",
+            registry_user="bot",
+            registry_password="s3cret-token",
+        )
+    )
+    assert "s3cret-token" not in refused and 'value="bot"' in refused
+
+
+def test_a_login_in_an_image_source_is_not_shown(browser, sid, fake):
+    fingerprint = fake.add_image("Private app")
+    fake.images[fingerprint]["update_source"] = {
+        "server": "https://bot:s3cret-token@ghcr.io",
+        "alias": "acme/app:1",
+        "protocol": "oci",
+    }
+    page = text(browser.get(f"/servers/{sid}/images/{fingerprint}"))
+    assert "https://ghcr.io" in page and "s3cret-token" not in page and "bot:" not in page
+
+
+def test_ports_and_volumes_become_devices(browser, sid, fake):
+    fake.add_volume("default", "pgdata")
+    create(
+        browser,
+        sid,
+        name="db",
+        oci_image="postgres:18-alpine",
+        ports="5432:5432\n8080:80/udp\n9000",
+        volumes="pgdata:/var/lib/postgresql\nlogs:/var/log/app",
+    )
+    devices = fake.created[-1]["devices"]
+    assert devices["port-5432"] == {
+        "type": "proxy",
+        "listen": "tcp:0.0.0.0:5432",
+        "connect": "tcp:127.0.0.1:5432",
+    }
+    assert devices["port-8080-udp"]["connect"] == "udp:127.0.0.1:80"
+    assert devices["port-9000"]["listen"] == "tcp:0.0.0.0:9000"
+    assert devices["pgdata"] == {
+        "type": "disk",
+        "pool": "default",
+        "source": "pgdata",
+        "path": "/var/lib/postgresql",
+    }
+    # The volume that did not exist was made; the one that did was left alone.
+    assert set(fake.volumes["default"]) == {"pgdata", "logs"}
+
+
+@pytest.mark.parametrize(
+    ("field", "value", "message"),
+    [
+        ("ports", "eighty", "is not a port"),
+        ("ports", "70000:80", "ports go from 1 to 65535"),
+        ("ports", "80\n80", "listed twice"),
+        ("volumes", "data", "is not a volume"),
+        ("volumes", "data:relative", "is not a volume"),
+        ("volumes", "a:/x\na:/y", "listed twice"),
+    ],
+)
+def test_bad_ports_and_volumes_are_refused(browser, sid, fake, field, value, message):
+    page = text(create(browser, sid, name="app", oci_image="nginx", **{field: value}))
+    assert message in page and not fake.created and not fake.volumes.get("default")
+
+
+def test_new_volumes_on_a_cluster_need_a_member(browser, sid, fake):
+    fake.make_cluster("node1", "node2")
+    page = text(create(browser, sid, name="db", oci_image="redis", volumes="data:/data"))
+    assert "Choose the cluster member" in page and not fake.created
+    create(browser, sid, name="db", oci_image="redis", volumes="data:/data", target="node2")
+    assert fake.volumes["default"]["data"]["location"] == "node2"
+    assert fake.instances["db"]["location"] == "node2"
+
+
+def test_presets_are_offered_to_the_form(browser, sid, fake):
+    form = text(browser.get(f"/servers/{sid}/create-instance?type=oci"))
+    assert "data-oci-preset" in form and "pgdata:/var/lib/postgresql" in form
+    assert "POSTGRES_PASSWORD=change-me" in form and 'name="ports"' in form
+
+
+def test_update_image_rebuilds_a_stopped_application_container(browser, sid, fake):
+    create(browser, sid, name="web", oci_image="nginx:alpine", start="")
+    image = fake.add_image("nginx")
+    fake.images[image]["update_source"] = {
+        "server": "https://docker.io",
+        "alias": "nginx:alpine",
+        "protocol": "oci",
+    }
+    fake.instances["web"]["config"]["volatile.base_image"] = image
+    assert "Update image" in text(browser.get(f"/servers/{sid}/instances/web"))
+    url = f"/servers/{sid}/instances/web/update-image"
+    assert 'value="nginx:alpine"' in text(browser.get(url))
+    done = browser.post(url, {"oci_image": "nginx:1.29"}, follow_redirects=True)
+    assert "web rebuilt on nginx:1.29." in text(done)
+    name, body = fake.rebuilt[-1]
+    assert name == "web" and body["source"] == {
+        "type": "image",
+        "mode": "pull",
+        "protocol": "oci",
+        "server": "https://docker.io",
+        "alias": "nginx:1.29",
+    }
+    assert "is not an image name" in text(browser.post(url, {"oci_image": "Not An Image"}))
+    # Running ones are told to stop first; system containers have no such page.
+    fake.instances["web"].update(status="Running", status_code=103)
+    assert "Stop web first" in text(browser.get(url))
+    fake.add_instance("sys")
+    assert "Update image" not in text(browser.get(f"/servers/{sid}/instances/sys"))
+    refused = browser.post(f"/servers/{sid}/instances/sys/update-image", follow_redirects=True)
+    assert "Only application containers" in text(refused) and len(fake.rebuilt) == 1

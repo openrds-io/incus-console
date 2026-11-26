@@ -1,0 +1,20 @@
+#!/bin/sh
+set -e
+if [ "$1" = configure ]; then
+  if ! getent passwd incus-console >/dev/null; then
+    adduser --system --group --home /var/lib/incus-console --no-create-home \
+      --comment "Incus Console" incus-console >/dev/null
+  fi
+  install -d -m 0700 -o incus-console -g incus-console /var/lib/incus-console
+  chown root:incus-console /etc/incus-console /etc/incus-console/config.py
+  chmod 0750 /etc/incus-console
+  chmod 0640 /etc/incus-console/config.py
+  systemctl daemon-reload >/dev/null 2>&1 || true
+  if [ -z "$2" ]; then
+    systemctl enable incus-console.service >/dev/null 2>&1 || true
+    echo "Incus Console is installed. Run: sudo incus-console-setup"
+  else
+    # An upgrade: carry on with the new code.
+    systemctl try-restart incus-console.service >/dev/null 2>&1 || true
+  fi
+fi

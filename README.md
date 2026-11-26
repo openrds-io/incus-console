@@ -39,9 +39,14 @@ Working today:
   nesting, privileged mode and process limits
 - Application containers (OCI): create from Docker Hub, ghcr.io, quay.io or
   another registry (the Incus server pulls the image), with environment
-  variables; the command, working directory, user and environment are
-  editable in Settings, and the terminal runs `sh`. Environment values are
-  hidden from Viewers and Operators, since they often hold passwords. Needs
+  variables, published ports (`8080:80`) and volumes (`data:/var/lib/app`,
+  created when new); a login for private registries; "Use the usual
+  settings" fills these in for well-known images (`OCI_PRESETS`); and
+  **Update image** rebuilds a stopped container on a newer image, keeping
+  its settings and volumes. The command, working directory, user and
+  environment are editable in Settings, and the terminal runs `sh`.
+  Environment values are hidden from Viewers and Operators, since they often
+  hold passwords. Needs
   Incus 6.3 or later with `skopeo` and `umoci` on the Incus server; the console
   offers it only where the server supports it
 - Consoles: a text console for every running instance (boot messages, then
@@ -80,7 +85,8 @@ Working today:
   something changes on the server (Incus's event stream, relayed as
   server-sent events), but never while you are typing in a form
 
-Not built yet: the deb, rpm and container packages. See [Roadmap](#roadmap).
+Server installs come as deb and rpm packages and a container image: see
+[Packages](#packages-server-mode).
 
 ## Quick start (development)
 
@@ -266,6 +272,52 @@ npm run dist           # downloads a standalone Python 3.13, then builds into di
 platform on that platform. The builds are not code-signed: macOS asks you to
 right-click and Open the first time, and Windows SmartScreen warns.
 
+## Packages (server mode)
+
+`packaging/build.sh` builds the server packages, each inside a container of
+the distribution it is for (docker or podman needed; on a Mac, Colima):
+
+```bash
+packaging/build.sh debian13     # dist/incus-console_<version>_<arch>~debian13.deb
+packaging/build.sh ubuntu2604   # dist/incus-console_<version>_<arch>~ubuntu2604.deb
+packaging/build.sh el10         # dist/incus-console-<version>-1.el10.<arch>.rpm
+packaging/build.sh image        # container image incus-console:<version>
+```
+
+A package is for the architecture it was built on; set
+`PLATFORM=linux/amd64` to build for another. Like pgAdmin's, it carries its
+own Python environment (`/opt/incus-console/venv`), so it depends only on the
+distribution's `python3`, `nginx` and `openssl`.
+
+On the server:
+
+```bash
+sudo apt install ./incus-console_*.deb     # or: sudo dnf install ./incus-console-*.rpm
+sudo incus-console-setup
+```
+
+`incus-console-setup` makes a self-signed certificate, installs the nginx site
+(ports 80 and 443), gives the console access to an Incus on the same machine
+(the `incus-admin` group), starts the services and offers to create the first
+console admin. It can be run again; it keeps what is there.
+
+| | |
+|---|---|
+| Settings | `/etc/incus-console/config.py` (kept on upgrade), then `systemctl restart incus-console` |
+| Data | `/var/lib/incus-console`: database, secret key, client certificate |
+| Service | `incus-console.service`: gunicorn on 127.0.0.1:5002, as the `incus-console` user |
+| nginx | `/etc/nginx/conf.d/incus-console.conf`; certificate in `/etc/incus-console/tls` |
+| Users | `sudo incus-console create-user NAME [--admin]` |
+| Logs | `journalctl -u incus-console` |
+
+The container image runs gunicorn alone on port 5002 with its data in `/data`;
+put a proxy that serves HTTPS in front of it, as below:
+
+```bash
+docker run -d --name incus-console -p 127.0.0.1:5002:5002 -v incus-console:/data incus-console:<version>
+docker exec -it incus-console flask --app wsgi create-user NAME --admin
+```
+
 ## Behind nginx (server mode)
 
 Run the app under gunicorn and let nginx serve HTTPS in front of it. Set
@@ -363,6 +415,7 @@ app/
 tests/
   fake_incus.py   in-memory Incus API used by the tests and for demos
 dev/cluster.sh    a small Incus cluster in Lima virtual machines, for development
+packaging/        deb, rpm and container image: build.sh, and the files they install
 desktop/          Electron app (main.js) and its build scripts
 wsgi.py           entry point for gunicorn
 ```
@@ -373,13 +426,12 @@ wsgi.py           entry point for gunicorn
    bridge's external interfaces), shared storage drivers (Ceph), and OVN
    networks. Copying and moving between separately registered servers is out
    of scope for now
-2. OCI application containers, next steps: private registries (credentials),
-   updating an instance to a newer image (rebuild), and presets for common
-   images (ports, volumes)
+2. Packages, next steps: installing each one on a fresh Debian 13, Ubuntu
+   26.04 and EL10 machine as part of a release; a package repository; signing
 3. Test the desktop installers (`npm run dist`); code signing and a build
    workflow for all three platforms
-4. deb (Debian 13, Ubuntu 26.04) and rpm (EL10) packages with nginx and systemd
-   units; container image
+4. OCI application containers, next steps: checking for a newer image without
+   rebuilding; health and restart policy
 5. More permissions work: see [Permissions: still to do](#permissions-still-to-do)
 
 ## License

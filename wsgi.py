@@ -1,4 +1,4 @@
-"""WSGI entry point for mod_wsgi (deb and rpm installs) and gunicorn (container)."""
+"""WSGI entry point for gunicorn (deb and rpm installs, and the container image)."""
 
 from app import create_app
 

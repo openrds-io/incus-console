@@ -8,6 +8,7 @@ from flask import abort, current_app, flash, g, redirect, render_template, reque
 from .. import catalog, terminal
 from ..filters import instance_kind
 from ..incus import IncusError
+from . import oci
 from .config_forms import (
     DEVICE_TYPES,
     GROUPS,
@@ -87,20 +88,8 @@ def _catalog() -> tuple[list, str | None]:
 KINDS = ("container", "oci")
 
 
-OCI_IMAGE = re.compile(r"[a-z0-9][a-z0-9._/-]*(:[A-Za-z0-9._-]+)?(@sha256:[a-f0-9]{64})?")
-
-
 def supports_oci() -> bool:
     return "instance_oci" in (g.incus.server_info().get("api_extensions") or [])
-
-
-def oci_source(reference: str, default_registry: str) -> tuple[str, str]:
-    """(registry URL, image) from ``nginx:alpine`` or ``ghcr.io/owner/app:tag``."""
-    reference = reference.strip().removeprefix("docker://").removeprefix("https://")
-    first, slash, rest = reference.partition("/")
-    if slash and ("." in first or ":" in first or first == "localhost"):
-        return f"https://{first}", rest
-    return default_registry.rstrip("/"), reference
 
 
 def _is_oci_image(image: dict) -> bool:
@@ -132,6 +121,7 @@ def instance_create():
         chosen = form.get("source", "catalog" if kind == "container" else "remote")
         source = {"type": "image"}
         problem = None
+        extra_devices, mounts = {}, {}
         settings = {
             "limits.cpu": form.get("cpu", "").strip(),
             "limits.memory": memory_size(form.get("memory", "")),
@@ -141,15 +131,16 @@ def instance_create():
                 problem = "This server cannot run application containers (Incus 6.3 or later)."
             elif chosen == "local":
                 source["fingerprint"] = form.get("fingerprint", "")
-            else:
-                server, alias = oci_source(form.get("oci_image", ""), config["OCI_REGISTRY"])
-                if not alias:
-                    problem = "Choose an image."
-                elif not OCI_IMAGE.fullmatch(alias):
-                    problem = f"{alias!r} is not an image name, such as nginx:alpine."
-                source.update(mode="pull", protocol="oci", server=server, alias=alias)
             try:
+                if oci_ok and chosen != "local":
+                    source = oci.source(
+                        form.get("oci_image", ""),
+                        form.get("registry_user", ""),
+                        form.get("registry_password", ""),
+                    )
                 settings.update(parse_environment(form.get("environment", "")))
+                extra_devices = oci.port_devices(form.get("ports", ""))
+                mounts = oci.volume_mounts(form.get("volumes", ""))
             except IncusError as error:
                 problem = problem or error.message
         else:  # a system container, from a system image
@@ -179,8 +170,22 @@ def instance_create():
         if pool:
             payload["devices"] = {"root": {"type": "disk", "path": "/", "pool": pool}}
         if not NAME.fullmatch(name):
-            flash(NAME_RULE, "error")
-        elif problem:
+            problem = NAME_RULE
+        if not problem and mounts:
+            try:
+                extra_devices.update(
+                    oci.volume_devices(
+                        mounts,
+                        pool or oci.root_pool(payload["profiles"]),
+                        target,
+                        bool(cluster_members()),
+                    )
+                )
+            except IncusError as error:
+                problem = error.message
+        if extra_devices:
+            payload["devices"] = {**payload.get("devices", {}), **extra_devices}
+        if problem:
             flash(problem, "error")
         else:
             # Incus makes the instance only after fetching the image, so while that
@@ -208,6 +213,7 @@ def instance_create():
         suggestions=config["IMAGE_SUGGESTIONS"],
         oci_registry=config["OCI_REGISTRY"],
         oci_suggestions=config["OCI_SUGGESTIONS"],
+        oci_presets=oci.presets(),
         default_source=default_source,
         default_alias=config["IMAGE_SUGGESTIONS"][0],
         default_image=image,

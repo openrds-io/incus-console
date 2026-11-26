@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from urllib.parse import urlsplit, urlunsplit
+
 
 def filesize(value) -> str:
     try:
@@ -57,10 +59,20 @@ def environment_names(config: dict) -> list[str]:
     return sorted(key[len(prefix) :] for key in (config or {}) if key.startswith(prefix))
 
 
+def no_credentials(server) -> str:
+    """A registry or image server URL without the login Incus keeps in it."""
+    if not server or "@" not in str(server):
+        return server or ""
+    parts = urlsplit(str(server))
+    host = (parts.hostname or "") + (f":{parts.port}" if parts.port else "")
+    return urlunsplit(parts._replace(netloc=host))
+
+
 def init_app(app) -> None:
     app.add_template_filter(filesize)
     app.add_template_filter(when)
     app.add_template_filter(addresses)
     app.add_template_filter(instance_kind)
     app.add_template_filter(environment_names)
+    app.add_template_filter(no_credentials)
     app.jinja_env.globals["kind_labels"] = KIND_LABELS

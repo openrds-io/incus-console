@@ -1,0 +1,64 @@
+#!/bin/sh
+# First-time setup of an installed Incus Console:
+#   1. a self-signed certificate (replace it with a real one when you have it)
+#   2. the nginx site, on ports 80 and 443
+#   3. access to the Incus on this machine, if there is one
+#   4. the first console admin
+# Safe to run again: it keeps what is already there.
+set -eu
+
+[ "$(id -u)" = 0 ] || { echo "incus-console-setup: run this as root (sudo)" >&2; exit 1; }
+
+TLS=/etc/incus-console/tls
+SITE=/etc/nginx/conf.d/incus-console.conf
+
+if [ ! -f "$TLS/server.crt" ]; then
+  echo "==> Creating a self-signed certificate in $TLS"
+  install -d -m 0750 "$TLS"
+  name="$(hostname -f 2>/dev/null || hostname)"
+  openssl req -x509 -newkey rsa:2048 -nodes -days 825 \
+    -keyout "$TLS/server.key" -out "$TLS/server.crt" \
+    -subj "/CN=$name" -addext "subjectAltName=DNS:$name,DNS:localhost" 2>/dev/null
+  chmod 0600 "$TLS/server.key"
+fi
+
+if [ ! -f "$SITE" ]; then
+  echo "==> Installing the nginx site: $SITE"
+  install -m 0644 /usr/share/incus-console/nginx-site.conf "$SITE"
+  # Debian's default site also answers on port 80; ours redirects to HTTPS instead.
+  rm -f /etc/nginx/sites-enabled/default
+fi
+
+# Enterprise Linux: let nginx talk to the console on 127.0.0.1:5002.
+if command -v getenforce >/dev/null && [ "$(getenforce)" != Disabled ]; then
+  setsebool -P httpd_can_network_connect 1 || true
+fi
+if command -v firewall-cmd >/dev/null && firewall-cmd --state >/dev/null 2>&1; then
+  firewall-cmd --quiet --permanent --add-service=http --add-service=https || true
+  firewall-cmd --quiet --reload || true
+fi
+
+# A local Incus: the console reaches it over its socket, which members of
+# incus-admin may use. That is full control of Incus, as a console needs.
+if getent group incus-admin >/dev/null; then
+  if ! id -nG incus-console | tr ' ' '\n' | grep -qx incus-admin; then
+    echo "==> Adding the incus-console user to the incus-admin group"
+    usermod -a -G incus-admin incus-console
+  fi
+fi
+
+nginx -t
+systemctl enable --now nginx incus-console
+systemctl restart incus-console
+systemctl reload nginx
+
+if [ -t 0 ]; then
+  printf "Create a console admin now? Username (empty to skip): "
+  read -r username
+  [ -z "$username" ] || incus-console create-user "$username" --admin
+fi
+
+echo
+echo "Incus Console is at https://$(hostname -f 2>/dev/null || hostname)/"
+echo "Its certificate is self-signed: your browser will ask before going on."
+echo "More users: incus-console create-user NAME    Settings: /etc/incus-console/config.py"
