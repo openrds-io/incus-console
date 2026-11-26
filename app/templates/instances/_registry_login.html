@@ -1,0 +1,5 @@
+<div class="row">
+  <div class="col-4"><label for="registry_user">Username</label><input type="text" id="registry_user" name="registry_user" value="{{ form.get('registry_user', '') }}" autocomplete="off"></div>
+  <div class="col-4"><label for="registry_password">Password or token</label><input type="password" id="registry_password" name="registry_password" autocomplete="new-password"></div>
+</div>
+<p class="p-form-help-text">Only for images that need a login. Incus keeps the login with the image it downloads, where console admins and anyone using the <code>incus</code> command on the server can read it: use a token that can only read this registry.</p>

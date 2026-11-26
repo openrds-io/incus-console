@@ -38,6 +38,11 @@
     <input type="text" id="oci_image" name="oci_image" list="oci-images" value="{{ form.get('oci_image', '') }}" placeholder="nginx:alpine" autocomplete="off">
     <datalist id="oci-images">{% for ref in oci_suggestions %}<option value="{{ ref }}">{% endfor %}</datalist>
     <p class="p-form-help-text">A name from {{ oci_registry|replace('https://', '') }}, such as <code>nginx:alpine</code>, or a full reference with the registry, such as <code>ghcr.io/owner/app:tag</code>. The Incus server pulls it.</p>
+    <button type="button" class="p-button is-dense" data-oci-preset='{{ oci_presets|tojson|forceescape }}' hidden>Use the usual settings</button>
+    <details class="registry-login">
+      <summary>Private registry</summary>
+      {% include "instances/_registry_login.html" %}
+    </details>
     {% if images %}
     <label class="p-radio">
       <input type="radio" class="p-radio__input" name="source" value="local"{% if source == 'local' %} checked{% endif %}>
@@ -57,6 +62,16 @@
     <label for="environment">Variables</label>
     <textarea class="code-editor" id="environment" name="environment" rows="4" spellcheck="false" placeholder="POSTGRES_PASSWORD=change-me&#10;TZ=America/New_York">{{ form.get('environment', '') }}</textarea>
     <p class="p-form-help-text">One <code>NAME=value</code> per line, as the image's documentation describes. Change them later under Settings.</p>
+  </fieldset>
+
+  <fieldset>
+    <legend>Ports and volumes</legend>
+    <label for="ports">Published ports</label>
+    <textarea class="code-editor" id="ports" name="ports" rows="2" spellcheck="false" placeholder="8080:80">{{ form.get('ports', '') }}</textarea>
+    <p class="p-form-help-text">One per line: the port on the Incus host, then the container's, such as <code>8080:80</code>. Add <code>/udp</code> for UDP. Each becomes a proxy device.</p>
+    <label for="volumes">Volumes</label>
+    <textarea class="code-editor" id="volumes" name="volumes" rows="2" spellcheck="false" placeholder="data:/var/lib/app">{{ form.get('volumes', '') }}</textarea>
+    <p class="p-form-help-text">One per line: a volume's name, then where the container sees it, such as <code>data:/var/lib/app</code>. A volume that does not exist yet is created in the container's storage pool. What is written there outlives the container and an image update.</p>
   </fieldset>
 
   {% else %}

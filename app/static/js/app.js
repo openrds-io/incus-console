@@ -228,3 +228,32 @@ if (window.matchMedia("(max-width: 619px)").matches) {
     dialog.querySelector("[data-dialog-close]")?.focus({ preventScroll: true });
   });
 })();
+
+// Application containers: offer the usual environment, ports and volumes for
+// well-known images, filling only the boxes that are still empty.
+(() => {
+  const button = document.querySelector("[data-oci-preset]");
+  const image = document.getElementById("oci_image");
+  if (!button || !image) return;
+  const presets = JSON.parse(button.dataset.ociPreset);
+  const preset = () => {
+    // "ghcr.io/owner/app:tag" -> "app"
+    const name = image.value.trim().split("@")[0].split("/").pop().split(":")[0];
+    return name ? { name, ...presets[name] } : null;
+  };
+  const offer = () => {
+    const found = preset();
+    const known = Boolean(found && presets[found.name]);
+    button.hidden = !known;
+    if (known) button.textContent = "Use the usual settings for " + found.name;
+  };
+  image.addEventListener("input", offer);
+  offer();
+  button.addEventListener("click", () => {
+    const found = preset();
+    for (const key of ["environment", "ports", "volumes"]) {
+      const box = document.getElementById(key);
+      if (box && !box.value.trim() && found[key]) box.value = found[key];
+    }
+  });
+})();

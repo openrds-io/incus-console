@@ -84,6 +84,7 @@ class FakeIncus:
         }
         self.created: list[dict] = []  # bodies of instance creations from images
         self.published: list[dict] = []
+        self.rebuilt: list[tuple[str, dict]] = []  # (instance, body) of rebuilds
         self.profiles = {
             "default": {
                 "name": "default",
@@ -750,6 +751,7 @@ class FakeIncus:
                     )
                 created["config"].update(body.get("config") or {})
                 created["description"] = body.get("description", "")
+                created["devices"] = body.get("devices") or {}
                 return self.start_op(f"Creating instance {name}")
             case (_, ["instances", name, *rest]):
                 instance = self.instances.get(name)
@@ -1257,6 +1259,13 @@ class FakeIncus:
                     return self.error(400, "Instance is running")
                 del self.instances[name]
                 return self.start_op(f"Deleting instance {name}")
+            case ("POST", ["rebuild"]):
+                if instance["status"] != "Stopped":
+                    return self.error(400, "Instance must be stopped to be rebuilt")
+                self.rebuilt.append((name, json.loads(json.dumps(body))))
+                alias = (body.get("source") or {}).get("alias", "")
+                instance["config"]["image.description"] = f"{alias} (OCI)"
+                return self.start_op(f"Rebuilding instance {name}")
             case ("PUT", ["state"]):
                 action = body.get("action")
                 current = instance["status"]

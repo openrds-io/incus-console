@@ -1,0 +1,6 @@
+# Keep the image's build context to what packaging/Containerfile copies.
+*
+!app
+!wsgi.py
+!requirements.txt
+app/**/__pycache__

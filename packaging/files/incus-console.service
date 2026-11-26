@@ -1,0 +1,26 @@
+[Unit]
+Description=Incus Console
+Documentation=https://github.com/openrds-io/incus-console
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=incus-console
+Group=incus-console
+WorkingDirectory=/opt/incus-console
+Environment=INCUS_CONSOLE_CONFIG=/etc/incus-console/config.py
+# Threads, not processes, carry the load: every open terminal and every page
+# that updates itself holds one for as long as it is open.
+ExecStart=/opt/incus-console/venv/bin/gunicorn --workers 2 --threads 50 \
+    --bind 127.0.0.1:5002 --access-logfile - wsgi:app
+Restart=on-failure
+RestartSec=2
+StateDirectory=incus-console
+StateDirectoryMode=0700
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ProtectHome=true
+
+[Install]
+WantedBy=multi-user.target

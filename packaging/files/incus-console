@@ -1,0 +1,10 @@
+#!/bin/sh
+# Admin commands for an installed Incus Console, such as:
+#   incus-console create-user NAME [--admin]
+# Runs as the incus-console user, so files it makes belong to the service.
+set -eu
+[ "$(id -u)" = 0 ] || { echo "incus-console: run this as root (sudo)" >&2; exit 1; }
+cd /opt/incus-console
+exec runuser -u incus-console -- env \
+  INCUS_CONSOLE_CONFIG=/etc/incus-console/config.py \
+  /opt/incus-console/venv/bin/flask --app wsgi "$@"

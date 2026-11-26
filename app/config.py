@@ -51,6 +51,25 @@ OCI_SUGGESTIONS = [
     "ghcr.io/home-assistant/home-assistant:stable",
 ]
 
+# What "Use the usual settings" fills in on the create form, by image name
+# (the last part of the reference, without the tag): environment variables,
+# published ports (host:container) and volumes (name:/path in the container).
+OCI_PRESETS = {
+    "nginx": {"ports": ["8080:80"]},
+    "caddy": {"ports": ["8080:80", "8443:443"], "volumes": ["caddy-data:/data"]},
+    "postgres": {
+        "environment": ["POSTGRES_PASSWORD=change-me"],
+        "ports": ["5432:5432"],
+        "volumes": ["pgdata:/var/lib/postgresql"],
+    },
+    "redis": {"ports": ["6379:6379"], "volumes": ["redis-data:/data"]},
+    "home-assistant": {
+        "environment": ["TZ=America/New_York"],
+        "ports": ["8123:8123"],
+        "volumes": ["ha-config:/config"],
+    },
+}
+
 # What the browser terminal runs in a container: a login shell as root.
 TERMINAL_COMMAND = ["su", "-l"]
 # Application containers rarely have su or a login setup; most have sh.

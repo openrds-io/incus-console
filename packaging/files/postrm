@@ -1,0 +1,8 @@
+#!/bin/sh
+set -e
+systemctl daemon-reload >/dev/null 2>&1 || true
+if [ "$1" = purge ]; then
+  # The database, secret key and certificates; the user stays, as Debian advises.
+  rm -rf /var/lib/incus-console /etc/incus-console
+  rm -f /etc/nginx/conf.d/incus-console.conf
+fi

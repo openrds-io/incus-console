@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+{% from "macros.html" import crumbs, csrf %}
+{% block title %}Update image - {{ instance.name }}{% endblock %}
+{% block heading %}{{ crumbs([('Instances', url_for('srv.instances')), (instance.name, url_for('srv.instance', name=instance.name)), ('Update image', None)]) }}{% endblock %}
+{% block content %}
+{% if instance.status != 'Stopped' %}
+<div class="p-notification--caution">
+  <div class="p-notification__content"><p class="p-notification__message">Incus rebuilds only stopped instances. Stop {{ instance.name }} first.</p></div>
+</div>
+{% endif %}
+<form class="narrow-form" method="post">
+  {{ csrf() }}
+  <label for="oci_image">Image</label>
+  <input type="text" id="oci_image" name="oci_image" value="{{ image }}" placeholder="nginx:alpine" required autocomplete="off">
+  <p class="p-form-help-text">The same reference fetches the image again, so a tag such as <code>stable</code> brings its newest build. Or name another tag or image.</p>
+  <details class="registry-login">
+    <summary>Private registry</summary>
+    {% include "instances/_registry_login.html" %}
+  </details>
+  <div class="p-notification--information">
+    <div class="p-notification__content"><p class="p-notification__message">{{ instance.name }} gets a fresh root disk from the image: files written inside the container are lost. Its settings, environment, ports and volumes stay, and so does what is on the volumes. Take a snapshot first if in doubt.</p></div>
+  </div>
+  <div class="form-buttons">
+    <a class="p-button--base" href="{{ url_for('srv.instance', name=instance.name) }}">Cancel</a>
+    <button class="p-button--positive" data-busy="Updating…"{% if instance.status != 'Stopped' %} disabled{% endif %}>Update</button>
+  </div>
+</form>
+{% endblock %}

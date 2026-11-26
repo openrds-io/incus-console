@@ -501,3 +501,12 @@ td code {
   margin: 0;
   white-space: nowrap;
 }
+
+/* The private-registry login, folded away under the image field. */
+.registry-login {
+  margin-bottom: 1rem;
+}
+.registry-login summary {
+  cursor: pointer;
+  margin-bottom: 0.5rem;
+}
