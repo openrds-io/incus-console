@@ -57,5 +57,6 @@ stage() {
   install -m 0755 "$files/incus-console" "$STAGE/usr/bin/incus-console"
   install -m 0755 "$files/incus-console-setup" "$STAGE/usr/sbin/incus-console-setup"
   install -m 0644 "$files/nginx-site.conf" "$STAGE/usr/share/incus-console/nginx-site.conf"
-  install -m 0644 "$src/README.md" "$src/LICENSE" "$src/NOTICE.md" "$STAGE/usr/share/doc/incus-console/"
+  install -m 0644 "$src/README.md" "$src/docs/manual.md" "$src/LICENSE" "$src/NOTICE.md" \
+    "$STAGE/usr/share/doc/incus-console/"
 }
