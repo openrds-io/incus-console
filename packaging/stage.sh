@@ -23,13 +23,17 @@ make_venv() {
 
 # Load the staged application the way the service will: as a user who owns
 # none of it. Catches a missing dependency or unreadable files at build time.
+# Python gives up root itself; not every build image has setpriv or runuser.
 smoke() {
   local data
   data="$(mktemp -d)"
   chmod 0777 "$data"
   ( cd "$STAGE$PREFIX" && INCUS_CONSOLE_DATA_DIR="$data" \
-      setpriv --reuid=65534 --regid=65534 --clear-groups \
-      "$STAGE$PREFIX/venv/bin/python" -c 'import gunicorn, wsgi; print("the staged app loads:", wsgi.app.name)' )
+      "$STAGE$PREFIX/venv/bin/python" -c '
+import os
+os.setgroups([]); os.setgid(65534); os.setuid(65534)
+import gunicorn, wsgi
+print("the staged app loads:", wsgi.app.name, "as uid", os.getuid())' )
   rm -rf "$data"
 }
 
