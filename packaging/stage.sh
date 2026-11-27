@@ -29,6 +29,10 @@ stage() {
     "$STAGE/usr/share/doc/incus-console"
   cp -a "$src/app" "$STAGE$PREFIX/app"
   find "$STAGE$PREFIX/app" -name __pycache__ -prune -exec rm -rf {} +
+  # The checkout's own permissions do not belong in a package: a folder only
+  # its owner may enter there would hide the code from the service's user.
+  find "$STAGE$PREFIX/app" -type d -exec chmod 0755 {} +
+  find "$STAGE$PREFIX/app" -type f -exec chmod 0644 {} +
   install -m 0644 "$src/wsgi.py" "$STAGE$PREFIX/wsgi.py"
   echo "$COMMIT_STAMP" > "$STAGE$PREFIX/app/COMMIT"
   [ ! -d "$PREFIX/venv" ] || cp -a "$PREFIX/venv" "$STAGE$PREFIX/venv"
