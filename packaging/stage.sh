@@ -21,6 +21,18 @@ make_venv() {
   find "$PREFIX/venv" -name __pycache__ -prune -exec rm -rf {} +
 }
 
+# Load the staged application the way the service will: as a user who owns
+# none of it. Catches a missing dependency or unreadable files at build time.
+smoke() {
+  local data
+  data="$(mktemp -d)"
+  chmod 0777 "$data"
+  ( cd "$STAGE$PREFIX" && INCUS_CONSOLE_DATA_DIR="$data" \
+      setpriv --reuid=65534 --regid=65534 --clear-groups \
+      "$STAGE$PREFIX/venv/bin/python" -c 'import gunicorn, wsgi; print("the staged app loads:", wsgi.app.name)' )
+  rm -rf "$data"
+}
+
 stage() {
   local src="$1" files="$1/packaging/files"
   rm -rf "$STAGE"

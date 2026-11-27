@@ -20,7 +20,7 @@ Depends: python3 (>= $python), python3 (<< $next), nginx, openssl, adduser, syst
 Section: admin
 Priority: optional
 Homepage: https://github.com/openrds-io/incus-console
-Description: Web console for Incus
+Description: A desktop and web console for Incus by your friends at OpenRDS
  Incus Console manages Incus containers, storage, networks, projects and
  clusters from a browser, with users, roles and an audit log.
  .
@@ -43,6 +43,7 @@ main() {
   next="$(python3 -c 'import sys; print(f"{sys.version_info[0]}.{sys.version_info[1] + 1}")')"
   make_venv
   stage /src
+  smoke
   control "$arch" "$python" "$next"
   dpkg-deb --root-owner-group --build "$STAGE" "/out/incus-console_${VERSION}_${arch}~${LABEL}.deb"
 }

@@ -12,6 +12,7 @@ main() {
   python="$(python3 -c 'import sys; print(f"{sys.version_info[0]}.{sys.version_info[1]}")')"
   make_venv
   stage /src
+  smoke
   rpmbuild -bb /src/packaging/incus-console.spec \
     --define "_topdir /tmp/rpmbuild" --define "_rpmdir /out" \
     --define "version $VERSION" --define "stage $STAGE" --define "python_minor $python" \

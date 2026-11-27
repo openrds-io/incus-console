@@ -2,7 +2,7 @@
 Name:           incus-console
 Version:        %{version}
 Release:        1%{?dist}
-Summary:        Web console for Incus
+Summary:        A desktop and web console for Incus by your friends at OpenRDS
 License:        Apache-2.0
 URL:            https://github.com/openrds-io/incus-console
 

@@ -83,6 +83,18 @@ with urllib.request.urlopen("https://127.0.0.1/login", context=context, timeout=
 print("https://127.0.0.1/login answered", page.status)
 ' 2>/dev/null
 }
+# Plain HTTP must send the browser on to HTTPS, not show nginx's own page.
+redirects() {
+  inside /opt/incus-console/venv/bin/python -c '
+import http.client
+conn = http.client.HTTPConnection("127.0.0.1", 80, timeout=10)
+conn.request("GET", "/", headers={"Host": "console.example"})
+answer = conn.getresponse()
+where = answer.getheader("Location", "")
+assert answer.status == 301 and where.startswith("https://console.example"), (answer.status, where)
+print("http://127.0.0.1/ redirects to", where)
+'
+}
 ok=""
 for _ in $(seq 1 10); do
   if answers; then ok=yes; break; fi
@@ -95,6 +107,7 @@ if [ -z "$ok" ]; then
   inside journalctl --no-pager -n 10 -u nginx || true
   die "$NAME is left running for a look: limactl shell --workdir / $VM sudo incus exec $NAME -- bash"
 fi
+redirects || die "port 80 does not redirect to HTTPS (see above). $NAME is left running for a look."
 
 say "Publishing it on port $PORT of $VM"
 root incus config device add "$NAME" web proxy "listen=tcp:0.0.0.0:$PORT" connect=tcp:127.0.0.1:443

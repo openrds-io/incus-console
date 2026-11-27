@@ -1,6 +1,7 @@
 # Incus Console
 
-A web and desktop console for [Incus](https://linuxcontainers.org/incus/).
+A desktop and web console for [Incus](https://linuxcontainers.org/incus/) by your friends at
+[OpenRDS](https://github.com/openrds-io).
 It is a front end to the Incus REST API: a small Python 3.13 / Flask app that
 renders pages on the server and talks to Incus over a local unix socket or HTTPS.
 
@@ -285,7 +286,9 @@ packaging/build.sh image        # container image incus-console:<version>
 ```
 
 A package is for the architecture it was built on; set
-`PLATFORM=linux/amd64` to build for another. Like pgAdmin's, it carries its
+`PLATFORM=linux/amd64` to build for another (under emulation: slower). Each
+build ends by loading the packaged app as an unprivileged user, so a package
+that could not start is not written. Like pgAdmin's, it carries its
 own Python environment (`/opt/incus-console/venv`), so it depends only on the
 distribution's `python3`, `nginx` and `openssl`.
 
@@ -433,8 +436,8 @@ wsgi.py           entry point for gunicorn
    bridge's external interfaces), shared storage drivers (Ceph), and OVN
    networks. Copying and moving between separately registered servers is out
    of scope for now
-2. Packages, next steps: a package repository and signing; amd64 builds as
-   part of a release
+2. Packages, next steps: a package repository and signing; Linux packages of
+   the desktop app (`incus-console-desktop`)
 3. Test the desktop installers (`npm run dist`); code signing and a build
    workflow for all three platforms
 4. OCI application containers, next steps: checking for a newer image without
