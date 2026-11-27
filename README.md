@@ -310,6 +310,12 @@ console admin. It can be run again; it keeps what is there.
 | Users | `sudo incus-console create-user NAME [--admin]` |
 | Logs | `journalctl -u incus-console` |
 
+`dev/package-test.sh debian13` (or `ubuntu2604`, `el10`) tries a built package
+for real: it installs it in a fresh container on the development cluster
+(`dev/cluster.sh`), runs `incus-console-setup`, checks that the login page
+answers through nginx, and publishes the console on a port of the first
+member for a look in the browser.
+
 The container image runs gunicorn alone on port 5002 with its data in `/data`;
 put a proxy that serves HTTPS in front of it, as below:
 
@@ -415,6 +421,7 @@ app/
 tests/
   fake_incus.py   in-memory Incus API used by the tests and for demos
 dev/cluster.sh    a small Incus cluster in Lima virtual machines, for development
+dev/package-test.sh  installs a built package in a fresh container on that cluster
 packaging/        deb, rpm and container image: build.sh, and the files they install
 desktop/          Electron app (main.js) and its build scripts
 wsgi.py           entry point for gunicorn
@@ -426,8 +433,8 @@ wsgi.py           entry point for gunicorn
    bridge's external interfaces), shared storage drivers (Ceph), and OVN
    networks. Copying and moving between separately registered servers is out
    of scope for now
-2. Packages, next steps: installing each one on a fresh Debian 13, Ubuntu
-   26.04 and EL10 machine as part of a release; a package repository; signing
+2. Packages, next steps: a package repository and signing; amd64 builds as
+   part of a release
 3. Test the desktop installers (`npm run dist`); code signing and a build
    workflow for all three platforms
 4. OCI application containers, next steps: checking for a newer image without
