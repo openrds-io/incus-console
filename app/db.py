@@ -120,7 +120,9 @@ CREATE TABLE IF NOT EXISTS audit (
     action TEXT NOT NULL,
     path TEXT NOT NULL,
     status INTEGER NOT NULL,
-    outcome TEXT
+    outcome TEXT,
+    -- Where the request came from; failed sign-ins are counted per address too.
+    address TEXT
 );
 CREATE INDEX IF NOT EXISTS audit_at ON audit (at);
 """
@@ -165,6 +167,10 @@ def _migrate(db: sqlite3.Connection) -> None:
     if "totp_secret" not in columns:
         db.execute("ALTER TABLE users ADD COLUMN totp_secret TEXT")
         db.execute("ALTER TABLE users ADD COLUMN totp_step INTEGER NOT NULL DEFAULT 0")
+        db.commit()
+    audit = {row["name"] for row in db.execute("PRAGMA table_info(audit)")}
+    if audit and "address" not in audit:
+        db.execute("ALTER TABLE audit ADD COLUMN address TEXT")
         db.commit()
     servers = {row["name"] for row in db.execute("PRAGMA table_info(servers)")}
     if servers and "enforce_roles" not in servers:

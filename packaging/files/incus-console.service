@@ -1,5 +1,5 @@
 [Unit]
-Description=Incus Console
+Description=IncusConsole - OpenRDS
 Documentation=https://github.com/openrds-io/incus-console
 After=network-online.target
 Wants=network-online.target

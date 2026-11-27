@@ -12,7 +12,7 @@ if [ "$1" = configure ]; then
   systemctl daemon-reload >/dev/null 2>&1 || true
   if [ -z "$2" ]; then
     systemctl enable incus-console.service >/dev/null 2>&1 || true
-    echo "Incus Console is installed. Run: sudo incus-console-setup"
+    echo "IncusConsole - OpenRDS is installed. Run: sudo incus-console-setup"
   else
     # An upgrade: carry on with the new code.
     systemctl try-restart incus-console.service >/dev/null 2>&1 || true

@@ -1,12 +1,12 @@
 {% extends "_partial.html" if partial else "base.html" %}
 {% block title %}About{% endblock %}
-{% block heading %}About Incus Console{% endblock %}
+{% block heading %}About IncusConsole - OpenRDS{% endblock %}
 {% block content %}
 <div class="about" data-about>
   <div class="about__brand">
     <img src="{{ url_for('static', filename='img/logo.svg') }}" alt="" width="52" height="48">
     <div>
-      <h2 class="p-heading--3 u-no-margin--bottom" id="about-title">Incus Console</h2>
+      <h2 class="p-heading--3 u-no-margin--bottom" id="about-title">IncusConsole - OpenRDS <img class="about__drum" src="{{ url_for('static', filename='img/openrds.svg') }}" alt=""></h2>
       <p class="u-text--muted u-no-margin--bottom">A desktop and web console for Incus by your friends at OpenRDS</p>
     </div>
   </div>

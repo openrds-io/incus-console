@@ -530,3 +530,9 @@ td code {
   max-width: 16rem;
   user-select: all;
 }
+
+.about__drum {
+  height: 1.5rem;
+  width: auto;
+  vertical-align: -0.2rem;
+}

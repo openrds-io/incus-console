@@ -84,10 +84,16 @@ def _fresh_codes(user_id: int) -> list[str]:
 
 
 def enable(user_id: int, secret: str, step: int) -> list[str]:
-    """Turn two-step sign-in on; returns the recovery codes, to show this once."""
+    """Turn two-step sign-in on; returns the recovery codes, to show this once.
+
+    `step` is the time step of the code that confirmed the set-up. That code is
+    left usable for one sign-in: people try signing in straight away, with the
+    digits still on their screen, and refusing those would only lock them out.
+    """
     db = get_db()
     db.execute(
-        "UPDATE users SET totp_secret = ?, totp_step = ? WHERE id = ?", (secret, step, user_id)
+        "UPDATE users SET totp_secret = ?, totp_step = ? WHERE id = ?",
+        (secret, step - 1, user_id),
     )
     codes = _fresh_codes(user_id)
     db.commit()

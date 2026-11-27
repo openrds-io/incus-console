@@ -119,6 +119,7 @@ PENDING_SECONDS = 5 * 60
 
 FAILED = "Failed log in"
 LOCKED = "Too many failed attempts. Try again later, or ask a console admin to unlock the account."
+ADDRESS_LOCKED = "Too many failed attempts from your network address. Try again later."
 
 
 def is_locked(username: str) -> bool:
@@ -141,6 +142,28 @@ def is_locked(username: str) -> bool:
         "AND at >= datetime('now', ?) AND at > ?",
         (FAILED, username, window, since),
     ).fetchone()[0]
+    return failures >= most
+
+
+def address_is_locked() -> bool:
+    """Have too many sign-ins failed lately from where this request comes from?
+
+    A successful sign-in does not reset this: one good password among the
+    guesses should not buy an attacker another round.
+    """
+    most = int(current_app.config["LOGIN_MAX_FAILURES_PER_ADDRESS"] or 0)
+    if most <= 0 or not request.remote_addr:
+        return False
+    window = f"-{int(current_app.config['LOGIN_LOCKOUT_SECONDS'])} seconds"
+    failures = (
+        get_db()
+        .execute(
+            "SELECT COUNT(*) FROM audit WHERE action = ? AND address = ? "
+            "AND at >= datetime('now', ?)",
+            (FAILED, request.remote_addr, window),
+        )
+        .fetchone()[0]
+    )
     return failures >= most
 
 
@@ -172,7 +195,10 @@ def login():
         password = request.form.get("password", "")
         user = get_db().execute("SELECT * FROM users WHERE username = ?", (username,)).fetchone()
         valid = check_password_hash(user["password_hash"] if user else DUMMY_HASH, password)
-        if is_locked(username):
+        if address_is_locked():
+            audit.record(username or "-", "Refused log in (address locked)", status=429)
+            flash(ADDRESS_LOCKED, "error")
+        elif is_locked(username):
             # Not counted as another failure, or the lock would never run out.
             audit.record(username, "Refused log in (locked)", status=429)
             flash(LOCKED, "error")
@@ -223,7 +249,7 @@ def login_code():
             flash("That took too long. Log in again.", "error")
         return redirect(url_for("auth.login"))
     if request.method == "POST":
-        if is_locked(user["username"]):
+        if address_is_locked() or is_locked(user["username"]):
             session.pop("pending", None)
             audit.record(user["username"], "Refused log in (locked)", status=429)
             flash(LOCKED, "error")
