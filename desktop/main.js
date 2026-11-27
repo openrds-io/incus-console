@@ -113,7 +113,7 @@ function createWindow() {
     height: 860,
     minWidth: 720,
     minHeight: 480,
-    title: "Incus Console",
+    title: "IncusConsole - OpenRDS",
     backgroundColor: "#262626",
     webPreferences: {
       contextIsolation: true,
@@ -144,7 +144,7 @@ function showAbout() {
 }
 
 function buildMenu() {
-  const about = { label: "About Incus Console", click: showAbout };
+  const about = { label: "About IncusConsole - OpenRDS", click: showAbout };
   const template = [
     ...(process.platform === "darwin"
       ? [

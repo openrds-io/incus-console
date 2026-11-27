@@ -1,4 +1,4 @@
-# Incus Console
+# IncusConsole - OpenRDS
 
 A desktop and web console for [Incus](https://linuxcontainers.org/incus/) by your friends at
 [OpenRDS](https://github.com/openrds-io).
@@ -228,8 +228,9 @@ Pending work, roughly in the order planned:
 - [x] **Two-step sign-in:** a code from an authenticator app (TOTP) after the
   password, set up by each user under **Account**, with one-time recovery
   codes; `REQUIRE_TWO_FACTOR = True` makes it compulsory
-- [ ] **Sign-in hardening:** limiting attempts per address (today: per
-  username, see below); passkeys
+- [x] **Attempts per address:** failed sign-ins are limited per network
+  address as well as per username
+- [ ] **Sign-in hardening:** passkeys
 - [ ] **Per-user certificates:** rotate them before they expire (today they
   last 10 years); a "re-sync" button per user and per server; tidy up trust
   entries left behind when a server was unreachable
@@ -250,14 +251,21 @@ After `LOGIN_MAX_FAILURES` failed sign-ins (default 5) for one username within
 username are refused until the oldest of them is that old, or an admin clicks
 **Unlock** on the user's page (or, for the last admin, `flask --app wsgi unlock
 USERNAME`). Names that are not users are treated the same,
-so the answer does not reveal which usernames exist. The count is per
-username; limit requests per address at nginx (`limit_req`) as well.
+so the answer does not reveal which usernames exist.
+
+Failures are counted per network address as well, whatever usernames were
+tried: after `LOGIN_MAX_FAILURES_PER_ADDRESS` (default 20) within the same
+window, sign-ins from that address are refused until the oldest is that old.
+A successful sign-in does not reset this count and there is no unlock for it;
+it runs out on its own. The address is the one nginx passes on, so
+`BEHIND_PROXY` must be right. `limit_req` at nginx remains a good first line.
 
 **Two-step sign-in.** Under **Account > Two-step sign-in** a user scans a QR
 code with an authenticator app (any that does time-based codes: Aegis, Google
 or Microsoft Authenticator, 1Password, Bitwarden) and confirms with a code and
 their password. From then on signing in takes the password and then the app's
-six digits. Ten recovery codes are shown once at set-up; each signs in once
+six digits (the code that confirmed set-up works for one sign-in too). Ten
+recovery codes are shown once at set-up; each signs in once
 when the phone is out of reach, and new ones can be made at any time. A code
 is taken once, wrong codes count towards the lockout above, and turning it on
 ends the user's other sessions. Someone with neither phone nor recovery codes

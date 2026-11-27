@@ -32,7 +32,7 @@ def test_build_label(monkeypatch, tmp_path):
 
 def test_desktop_about(browser, sid):
     page = text(browser.get(f"/about?sid={sid}"))
-    assert "<html" in page and "About Incus Console" in page
+    assert "<html" in page and "About IncusConsole - OpenRDS" in page
     assert "Desktop" in page and "Signed in as" not in page
     assert "6.0" in page  # the fake server's Incus version
     assert "Database" in page  # the single desktop user sees installation details

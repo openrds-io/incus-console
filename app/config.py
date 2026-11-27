@@ -104,6 +104,12 @@ AUDIT_FORWARD = ""
 # requests per address at nginx as well; the console counts per username only.
 LOGIN_MAX_FAILURES = 5
 LOGIN_LOCKOUT_SECONDS = 15 * 60
+# The same, counted per address the attempts come from, whatever usernames they
+# try: guessing one password against many names is stopped too. Higher than
+# the per-username number, because an office can share one address. 0 turns
+# this off. Behind a proxy this needs BEHIND_PROXY, or every attempt appears
+# to come from the proxy.
+LOGIN_MAX_FAILURES_PER_ADDRESS = 20
 
 # Server mode: two-step sign-in. Anyone can turn it on for their own account
 # (Account > Two-step sign-in): after the password, the console asks for the

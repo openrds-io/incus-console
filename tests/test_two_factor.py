@@ -111,8 +111,8 @@ def test_sign_in_asks_for_the_code(server_app):
     assert "Enter your code" in browser.get("/login/code").get_data(as_text=True)
     wrong = browser.post("/login/code", {"code": "000000"})
     assert "not right" in wrong.get_data(as_text=True)
-    # The code that set it up was used; the next step's works, and only once.
-    code = current_code(server_app, "vic", shift=1)
+    # The digits that confirmed the set-up are still on their screen: they work, once.
+    code = current_code(server_app, "vic")
     assert browser.post("/login/code", {"code": code}).status_code == 302
     assert browser.get("/account").status_code == 200
     again = second_step(server_app, "vic")
@@ -244,3 +244,46 @@ def test_command_line_unlock(server_app):
     assert runner.invoke(args=["unlock", "nobody"]).exit_code != 0
     time.sleep(2.1)  # failures up to a second after the unlock are forgotten with it
     login(server_app, "root")
+
+
+def test_failures_are_counted_per_address(server_app):
+    server_app.config["LOGIN_MAX_FAILURES_PER_ADDRESS"] = 6
+    browser = Browser(server_app)
+    # Different names each time, so no single username is locked.
+    for number in range(6):
+        browser.post("/login", {"username": f"guess{number}", "password": "not it"})
+    refused = browser.post("/login", {"username": "root", "password": PASSWORD})
+    assert refused.status_code == 200 and "network address" in refused.get_data(as_text=True)
+    elsewhere = Browser(server_app)
+    token = elsewhere.token()
+    fine = elsewhere.client.post(
+        "/login",
+        data={"csrf_token": token, "username": "root", "password": PASSWORD},
+        environ_base={"REMOTE_ADDR": "203.0.113.9"},
+    )
+    assert fine.status_code == 302
+    with server_app.app_context():
+        seen = get_db().execute("SELECT DISTINCT address FROM audit ORDER BY address").fetchall()
+        assert [row[0] for row in seen] == ["127.0.0.1", "203.0.113.9"]
+    server_app.config["LOGIN_MAX_FAILURES_PER_ADDRESS"] = 0
+    assert browser.post("/login", {"username": "root", "password": PASSWORD}).status_code == 302
+
+
+def test_older_audit_logs_gain_the_address(tmp_path):
+    import sqlite3
+
+    from app import create_app
+    from app.db import SCHEMA, path_for
+
+    data = tmp_path / "data"
+    data.mkdir()
+    old = sqlite3.connect(path_for(str(data)))
+    before = re.sub(
+        r",\n    -- Where the request came from.*?address TEXT\n", "\n", SCHEMA, flags=re.S
+    )
+    assert "Where the request came from" not in before
+    old.executescript(before)
+    old.close()
+    app = create_app({"TESTING": True, "SERVER_MODE": True, "DATA_DIR": str(data)})
+    with app.app_context():
+        assert "address" in {row["name"] for row in get_db().execute("PRAGMA table_info(audit)")}

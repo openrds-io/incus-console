@@ -132,7 +132,7 @@
         </div>
       </div>
     </div>
-    {% if not bare %}<footer class="status-bar"><a class="status-bar__version" href="{{ url_for('about.about', sid=g.sid) if server else url_for('about.about') }}" data-dialog title="About Incus Console">Version {{ build.label }}</a>{% if server_mode and g.user %}<span class="status-bar__user">{{ g.user.username }}{% if is_admin() %} (console admin){% endif %}</span>{% endif %}</footer>{% endif %}
+    {% if not bare %}<footer class="status-bar"><a class="status-bar__version" href="{{ url_for('about.about', sid=g.sid) if server else url_for('about.about') }}" data-dialog title="About IncusConsole - OpenRDS">Version {{ build.label }}</a>{% if server_mode and g.user %}<span class="status-bar__user">{{ g.user.username }}{% if is_admin() %} (console admin){% endif %}</span>{% endif %}</footer>{% endif %}
   </main>
 </div>
 <dialog class="about-dialog" aria-labelledby="about-title"></dialog>

@@ -67,6 +67,6 @@ if [ -t 0 ]; then
 fi
 
 echo
-echo "Incus Console is at https://$(hostname -f 2>/dev/null || hostname)/"
+echo "IncusConsole - OpenRDS is at https://$(hostname -f 2>/dev/null || hostname)/"
 echo "Its certificate is self-signed: your browser will ask before going on."
 echo "More users: incus-console create-user NAME    Settings: /etc/incus-console/config.py"

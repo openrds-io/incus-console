@@ -89,9 +89,10 @@ def record(
         return
     db = get_db()
     db.execute(
-        "INSERT INTO audit (username, server_id, project, action, path, status, outcome) "
-        "VALUES (?, ?, ?, ?, ?, ?, ?)",
-        (username, server_id, project, action, request.path, status, outcome),
+        "INSERT INTO audit "
+        "(username, server_id, project, action, path, status, outcome, address) "
+        "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+        (username, server_id, project, action, request.path, status, outcome, request.remote_addr),
     )
     db.commit()
     if _destination is not None:
