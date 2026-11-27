@@ -3,16 +3,17 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>{% block title %}{% endblock %} | Incus Console</title>
+  <title>OpenRDS - Incus | {% block title %}{% endblock %}</title>
   <link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='img/logo.svg') }}">
   <link rel="stylesheet" href="{{ url_for('static', filename='vendor/vanilla-framework-4.61.0.min.css') }}">
   <link rel="stylesheet" href="{{ url_for('static', filename='css/app.css') }}">
 </head>
 <body>
 {% macro logo() %}
-<a class="brand" href="{{ url_for('servers.home') }}" aria-label="Incus Console home">
-  <img class="brand__mark" src="{{ url_for('static', filename='img/logo.svg') }}" alt="" height="32">
-  <span class="brand__name">Incus Console</span>
+<a class="brand" href="{{ url_for('servers.home') }}" aria-label="IncusConsole - OpenRDS home">
+  <img class="brand__mark" src="{{ url_for('static', filename='img/logo.svg') }}" alt="">
+  <span class="brand__name">IncusConsole - OpenRDS</span>
+  <img class="brand__mark" src="{{ url_for('static', filename='img/openrds.svg') }}" alt="">
 </a>
 {% endmacro %}
 {% set here = request.endpoint or '' %}

@@ -23,6 +23,19 @@
 </div>
 <hr class="p-rule">
 <div class="row">
+  <div class="col-3"><h2 class="p-heading--5 section-heading">Two-step sign-in</h2></div>
+  <div class="col-9">
+    {% if user.totp_secret %}
+    <p>On: after your password, the console asks for the code from your authenticator app. {{ codes_left }} recovery code{{ '' if codes_left == 1 else 's' }} left.</p>
+    <a class="p-button" href="{{ url_for('account.two_factor') }}">Manage</a>
+    {% else %}
+    <p>Off. Turn it on and signing in also takes a code from an authenticator app on your phone, so a stolen password is not enough.</p>
+    <a class="p-button" href="{{ url_for('account.two_factor') }}">Set up</a>
+    {% endif %}
+  </div>
+</div>
+<hr class="p-rule">
+<div class="row">
   <div class="col-3"><h2 class="p-heading--5 section-heading">Change password</h2></div>
   <div class="col-9">
     <form method="post" class="narrow-form">

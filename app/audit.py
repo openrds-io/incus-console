@@ -113,7 +113,7 @@ def _action() -> str:
 
 def _after(response):
     endpoint = request.endpoint or ""
-    if endpoint in ("auth.login", "static") or not endpoint:
+    if endpoint in ("auth.login", "auth.login_code", "static") or not endpoint:
         return response
     if request.method in ("GET", "HEAD", "OPTIONS") and endpoint not in RECORDED_GETS:
         return response

@@ -84,6 +84,7 @@ Working today:
   and can also go to the journal or syslog (`AUDIT_FORWARD`). An **Access**
   page for each project and instance lists who can reach it: console users
   with their role and where it comes from, and what Incus itself trusts.
+  Two-step sign-in with an authenticator app, optional or compulsory.
   Repeated failed sign-ins lock a username for a while; a password change
   ends the user's other sessions, and admins can sign a user out everywhere
 - Live updates: lists, detail pages and Operations refresh themselves when
@@ -224,8 +225,11 @@ Pending work, roughly in the order planned:
   The console enforces it everywhere; Incus too where Roles enforced by
   Incus is on for the server. Groups can be given single instances as well,
   and the menu shows such a user only what they can open
-- [ ] **Sign-in hardening:** optional TOTP second factor for local accounts;
-  limiting attempts per address (today: per username, see below)
+- [x] **Two-step sign-in:** a code from an authenticator app (TOTP) after the
+  password, set up by each user under **Account**, with one-time recovery
+  codes; `REQUIRE_TWO_FACTOR = True` makes it compulsory
+- [ ] **Sign-in hardening:** limiting attempts per address (today: per
+  username, see below); passkeys
 - [ ] **Per-user certificates:** rotate them before they expire (today they
   last 10 years); a "re-sync" button per user and per server; tidy up trust
   entries left behind when a server was unreachable
@@ -244,9 +248,32 @@ page, and a password change or reset ends every other session of that user.
 After `LOGIN_MAX_FAILURES` failed sign-ins (default 5) for one username within
 `LOGIN_LOCKOUT_SECONDS` (default 15 minutes), further attempts for that
 username are refused until the oldest of them is that old, or an admin clicks
-**Unlock** on the user's page. Names that are not users are treated the same,
+**Unlock** on the user's page (or, for the last admin, `flask --app wsgi unlock
+USERNAME`). Names that are not users are treated the same,
 so the answer does not reveal which usernames exist. The count is per
 username; limit requests per address at nginx (`limit_req`) as well.
+
+**Two-step sign-in.** Under **Account > Two-step sign-in** a user scans a QR
+code with an authenticator app (any that does time-based codes: Aegis, Google
+or Microsoft Authenticator, 1Password, Bitwarden) and confirms with a code and
+their password. From then on signing in takes the password and then the app's
+six digits. Ten recovery codes are shown once at set-up; each signs in once
+when the phone is out of reach, and new ones can be made at any time. A code
+is taken once, wrong codes count towards the lockout above, and turning it on
+ends the user's other sessions. Someone with neither phone nor recovery codes
+asks an admin (**Turn off two-step sign-in** on their user page) or, for the
+last admin, the command line:
+
+```sh
+flask --app wsgi two-factor-off USERNAME      # packages: incus-console two-factor-off USERNAME
+```
+
+`REQUIRE_TWO_FACTOR = True` in the configuration makes it compulsory: a user
+without it lands on the set-up page after signing in and can open nothing
+else. `TWO_FACTOR_ISSUER` is the name the app shows beside the code. The
+shared secret is stored in the console's database like the password hashes;
+recovery codes are stored hashed. Keep the server's clock right (the codes
+depend on it; half a minute either way is tolerated).
 
 ## Desktop app
 

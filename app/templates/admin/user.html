@@ -209,6 +209,15 @@
       {{ csrf() }}<button class="p-button">Sign out everywhere</button>
     </form>
     <p class="p-form-help-text">Ends every session of this user; they can sign in again with their password.</p>
+    {% if user.totp_secret %}
+    <p>Two-step sign-in is on.</p>
+    <form class="inline" method="post" action="{{ url_for('admin.user_two_factor_off', user_id=user.id) }}" data-confirm="Turn two-step sign-in off for {{ user.username }}? Their password alone will sign them in.">
+      {{ csrf() }}<button class="p-button">Turn off two-step sign-in</button>
+    </form>
+    <p class="p-form-help-text">For someone who lost their phone and their recovery codes. It also signs them out everywhere; they can set it up again under Account.</p>
+    {% else %}
+    <p class="u-text--muted">Two-step sign-in is off{% if config.REQUIRE_TWO_FACTOR %}; they must set it up when they next sign in{% endif %}.</p>
+    {% endif %}
   </div>
 </div>
 <hr class="p-rule">

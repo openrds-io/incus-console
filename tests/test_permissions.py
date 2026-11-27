@@ -1,5 +1,7 @@
 """Server mode: users, roles per server and project, admin pages, the audit log."""
 
+import re
+
 from app import create_app
 from app.db import get_db
 
@@ -276,16 +278,9 @@ def test_older_databases_gain_the_session_columns(tmp_path):
     data = tmp_path / "data"
     data.mkdir()
     old = sqlite3.connect(path_for(str(data)))
-    old.executescript(
-        SCHEMA.replace("    session_epoch INTEGER NOT NULL DEFAULT 0,\n", "")
-        .replace(
-            ",\n    -- Sessions carry this number; raising it signs the user out everywhere.", ""
-        )
-        .replace(
-            "    -- Failed sign-ins before this moment no longer count towards a lockout.\n", ""
-        )
-        .replace("    failures_reset_at TEXT\n", "")
-    )
+    before = re.sub(r",\n    -- Sessions carry.*?\n\);", "\n);", SCHEMA, count=1, flags=re.S)
+    assert "session_epoch" not in before
+    old.executescript(before)
     old.execute("INSERT INTO users (username, password_hash, is_admin) VALUES ('root', 'x', 1)")
     old.commit()
     old.close()
