@@ -1,0 +1,17 @@
+{% extends "base.html" %}
+{% set bare = true %}
+{% block title %}Log in{% endblock %}
+{% block heading %}<span class="login-brand"><img src="{{ url_for('static', filename='img/logo.svg') }}" alt="" width="26" height="24"> IncusConsole - OpenRDS <img src="{{ url_for('static', filename='img/openrds.svg') }}" alt="" width="21" height="24"></span>{% endblock %}
+{% block content %}
+<div class="p-card login-card">
+  <h2 class="p-heading--4">Enter your code</h2>
+  <form method="post">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <label for="code">Code from your authenticator app</label>
+    <input type="text" id="code" name="code" inputmode="numeric" autocomplete="one-time-code" autocapitalize="off" spellcheck="false" required autofocus>
+    <p class="p-form-help-text">Six digits. No phone to hand? Enter one of your recovery codes instead.</p>
+    <button class="p-button--positive u-no-margin--bottom">Log in</button>
+    <a class="p-button--base u-no-margin--bottom" href="{{ url_for('auth.login') }}">Start again</a>
+  </form>
+</div>
+{% endblock %}

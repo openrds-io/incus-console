@@ -1,0 +1,12 @@
+<!--
+  The OpenRDS drum: PostgreSQL blue on top, Oracle red in the middle, and the
+  yellow of the old Windows flag at the bottom, each muted a little.
+-->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 36">
+  <g stroke="#f2efe9" stroke-width="1" stroke-linejoin="round">
+    <path fill="#d6a94a" d="M2,8v20c0,3.300 6.300,6 14,6s14,-2.700 14,-6V8z"/>
+    <path fill="#b25a4e" d="M2,8v13.400c0,3.300 6.300,6 14,6s14,-2.700 14,-6V8z"/>
+    <path fill="#4d6f8c" d="M2,8v6.700c0,3.300 6.300,6 14,6s14,-2.700 14,-6V8z"/>
+    <ellipse fill="#7d9ab3" cx="16" cy="8" rx="14" ry="6"/>
+  </g>
+</svg>

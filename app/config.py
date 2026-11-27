@@ -105,6 +105,14 @@ AUDIT_FORWARD = ""
 LOGIN_MAX_FAILURES = 5
 LOGIN_LOCKOUT_SECONDS = 15 * 60
 
+# Server mode: two-step sign-in. Anyone can turn it on for their own account
+# (Account > Two-step sign-in): after the password, the console asks for the
+# code from an authenticator app. True here makes it compulsory: a user without
+# it can do nothing but set it up.
+REQUIRE_TWO_FACTOR = False
+# The name authenticator apps show beside the code.
+TWO_FACTOR_ISSUER = "Incus Console"
+
 # Server mode: sign people out after this many seconds.
 PERMANENT_SESSION_LIFETIME = 12 * 60 * 60
 

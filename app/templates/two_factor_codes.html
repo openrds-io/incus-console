@@ -1,0 +1,16 @@
+{% extends "base.html" %}
+{% from "macros.html" import crumbs %}
+{% block title %}Recovery codes{% endblock %}
+{% block heading %}{{ crumbs([('Account', url_for('account.account')), ('Two-step sign-in', url_for('account.two_factor')), ('Recovery codes', None)]) }}{% endblock %}
+{% block content %}
+<div class="row">
+  <div class="col-3"><h2 class="p-heading--5 section-heading">Recovery codes</h2></div>
+  <div class="col-9">
+    <div class="p-notification--caution"><div class="p-notification__content"><p class="p-notification__message">Keep these somewhere safe, away from your phone. They are shown this once.</p></div></div>
+    <p>Each one signs you in once, in place of the code from your app{% if not fresh %}; your earlier recovery codes no longer work{% endif %}.</p>
+    <pre class="recovery-codes">{% for code in codes %}{{ code }}
+{% endfor %}</pre>
+    <a class="p-button--positive" href="{{ url_for('account.account') }}">I have saved them</a>
+  </div>
+</div>
+{% endblock %}

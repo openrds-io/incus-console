@@ -18,8 +18,19 @@ CREATE TABLE IF NOT EXISTS users (
     -- Sessions carry this number; raising it signs the user out everywhere.
     session_epoch INTEGER NOT NULL DEFAULT 0,
     -- Failed sign-ins before this moment no longer count towards a lockout.
-    failures_reset_at TEXT
+    failures_reset_at TEXT,
+    -- Two-step sign-in is on when there is a secret; totp_step is the time step of
+    -- the last code taken, so a code cannot be used twice.
+    totp_secret TEXT,
+    totp_step INTEGER NOT NULL DEFAULT 0
 );
+CREATE TABLE IF NOT EXISTS recovery_codes (
+    -- One-time codes for signing in without the authenticator app; kept hashed.
+    id INTEGER PRIMARY KEY,
+    user_id INTEGER NOT NULL REFERENCES users (id) ON DELETE CASCADE,
+    code_hash TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS recovery_codes_user ON recovery_codes (user_id);
 CREATE TABLE IF NOT EXISTS tracked_operations (
     id INTEGER PRIMARY KEY,
     server_id INTEGER NOT NULL,
@@ -150,6 +161,10 @@ def _migrate(db: sqlite3.Connection) -> None:
     if "session_epoch" not in columns:
         db.execute("ALTER TABLE users ADD COLUMN session_epoch INTEGER NOT NULL DEFAULT 0")
         db.execute("ALTER TABLE users ADD COLUMN failures_reset_at TEXT")
+        db.commit()
+    if "totp_secret" not in columns:
+        db.execute("ALTER TABLE users ADD COLUMN totp_secret TEXT")
+        db.execute("ALTER TABLE users ADD COLUMN totp_step INTEGER NOT NULL DEFAULT 0")
         db.commit()
     servers = {row["name"] for row in db.execute("PRAGMA table_info(servers)")}
     if servers and "enforce_roles" not in servers:

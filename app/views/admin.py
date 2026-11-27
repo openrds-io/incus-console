@@ -21,7 +21,7 @@ from flask import (
 )
 from werkzeug.security import check_password_hash, generate_password_hash
 
-from .. import access, audit, servers, user_certs
+from .. import access, audit, qr, servers, totp, user_certs
 from ..auth import check_password, end_sessions, forget_failures, is_locked
 from ..db import get_db
 from ..incus import IncusError
@@ -260,6 +260,20 @@ def user_unlock(user_id):
     target = _user(user_id)
     forget_failures(user_id)
     flash(f"{target['username']} can sign in again.", "success")
+    return redirect(url_for("admin.user", user_id=user_id))
+
+
+@bp.post("/users/<int:user_id>/two-factor-off")
+def user_two_factor_off(user_id):
+    target = _user(user_id)
+    totp.disable(user_id)
+    epoch = end_sessions(user_id)
+    if user_id == g.user["id"]:
+        session["epoch"] = epoch
+    flash(
+        f"Two-step sign-in is off for {target['username']}. Their password alone signs them in.",
+        "success",
+    )
     return redirect(url_for("admin.user", user_id=user_id))
 
 
@@ -725,4 +739,52 @@ def account():
         user=user,
         grants=access.effective_grants(user["id"]),
         roles=access.ROLE_LABELS,
+        codes_left=totp.recovery_codes_left(user["id"]),
+    )
+
+
+@account_bp.route("/account/two-factor", methods=["GET", "POST"])
+def two_factor():
+    """Turn two-step sign-in on or off for yourself, or make new recovery codes."""
+    user = _user(g.user["id"])
+    action = request.form.get("action", "")
+    if request.method == "POST":
+        try:
+            if not check_password_hash(user["password_hash"], request.form.get("current", "")):
+                raise ValueError("Your password is not right.")
+            if action == "enable" and not user["totp_secret"]:
+                secret = session.get("totp_setup") or ""
+                step = totp.matching_step(secret, request.form.get("code", "")) if secret else None
+                if step is None:
+                    raise ValueError(
+                        "That code is not right. Enter the six digits the app shows now."
+                    )
+                codes = totp.enable(user["id"], secret, step)
+                session.pop("totp_setup", None)
+                # Sessions opened with the password alone end; this one carries on.
+                session["epoch"] = end_sessions(user["id"])
+                flash("Two-step sign-in is on.", "success")
+                return render_template("two_factor_codes.html", codes=codes, fresh=True)
+            if action == "codes" and user["totp_secret"]:
+                codes = totp.new_recovery_codes(user["id"])
+                flash("New recovery codes made; the old ones no longer work.", "success")
+                return render_template("two_factor_codes.html", codes=codes, fresh=False)
+            if action == "disable" and user["totp_secret"]:
+                totp.disable(user["id"])
+                flash("Two-step sign-in is off.", "success")
+                return redirect(url_for("account.account"))
+        except ValueError as error:
+            flash(str(error), "error")
+        return redirect(url_for("account.two_factor"))
+    if user["totp_secret"]:
+        return render_template(
+            "two_factor.html", user=user, codes_left=totp.recovery_codes_left(user["id"])
+        )
+    # The secret waits in the session until a code proves the app has it.
+    secret = session.setdefault("totp_setup", totp.new_secret())
+    return render_template(
+        "two_factor.html",
+        user=user,
+        secret=totp.spaced(secret),
+        qr=qr.svg(totp.uri(secret, user["username"])),
     )

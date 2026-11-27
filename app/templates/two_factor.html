@@ -1,0 +1,69 @@
+{% extends "base.html" %}
+{% from "macros.html" import csrf, crumbs %}
+{% block title %}Two-step sign-in{% endblock %}
+{% block heading %}{{ crumbs([('Account', url_for('account.account')), ('Two-step sign-in', None)]) }}{% endblock %}
+{% block content %}
+{% if user.totp_secret %}
+<div class="row">
+  <div class="col-3"><h2 class="p-heading--5 section-heading">Two-step sign-in is on</h2></div>
+  <div class="col-9">
+    <p>After your password, the console asks for the code from your authenticator app.
+    You have {{ codes_left }} recovery code{{ '' if codes_left == 1 else 's' }} left for when the app is out of reach.</p>
+  </div>
+</div>
+<hr class="p-rule">
+<div class="row">
+  <div class="col-3"><h2 class="p-heading--5 section-heading">New recovery codes</h2></div>
+  <div class="col-9">
+    <form method="post" class="narrow-form">
+      {{ csrf() }}<input type="hidden" name="action" value="codes">
+      <input type="text" name="username" value="{{ user.username }}" autocomplete="username" hidden>
+      <label for="codes-current">Your password</label>
+      <input type="password" id="codes-current" name="current" autocomplete="current-password" required>
+      <p class="p-form-help-text">Makes ten new codes and cancels the ones you have.</p>
+      <button class="p-button">Make new codes</button>
+    </form>
+  </div>
+</div>
+<hr class="p-rule">
+<div class="row">
+  <div class="col-3"><h2 class="p-heading--5 section-heading">Turn off</h2></div>
+  <div class="col-9">
+    <form method="post" class="narrow-form">
+      {{ csrf() }}<input type="hidden" name="action" value="disable">
+      <input type="text" name="username" value="{{ user.username }}" autocomplete="username" hidden>
+      <label for="off-current">Your password</label>
+      <input type="password" id="off-current" name="current" autocomplete="current-password" required>
+      <p class="p-form-help-text">Your password alone will sign you in again. To move to a new phone, turn this off and set it up afresh.{% if config.REQUIRE_TWO_FACTOR %} This console requires two-step sign-in, so you will be asked to set it up again straight away.{% endif %}</p>
+      <button class="p-button--negative">Turn off two-step sign-in</button>
+    </form>
+  </div>
+</div>
+{% else %}
+<div class="row">
+  <div class="col-3"><h2 class="p-heading--5 section-heading">1. Scan</h2></div>
+  <div class="col-9">
+    <p>Scan this with an authenticator app (Aegis, Google Authenticator, Microsoft Authenticator, 1Password, Bitwarden and the like).</p>
+    <div class="qr-code">{{ qr }}</div>
+    <p>Or type this key into the app, as a time-based code: <code class="totp-key">{{ secret }}</code></p>
+  </div>
+</div>
+<hr class="p-rule">
+<div class="row">
+  <div class="col-3"><h2 class="p-heading--5 section-heading">2. Confirm</h2></div>
+  <div class="col-9">
+    <form method="post" class="narrow-form">
+      {{ csrf() }}<input type="hidden" name="action" value="enable">
+      <input type="text" name="username" value="{{ user.username }}" autocomplete="username" hidden>
+      <label for="code">The six digits the app shows</label>
+      <input type="text" id="code" name="code" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9 ]*" required autofocus>
+      <label for="current">Your password</label>
+      <input type="password" id="current" name="current" autocomplete="current-password" required>
+      <p class="p-form-help-text">Turning this on signs you out of your other browsers.</p>
+      <button class="p-button--positive">Turn on two-step sign-in</button>
+      <a class="p-button--base" href="{{ url_for('account.account') }}">Cancel</a>
+    </form>
+  </div>
+</div>
+{% endif %}
+{% endblock %}
