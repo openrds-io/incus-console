@@ -43,6 +43,7 @@ main() {
   next="$(python3 -c 'import sys; print(f"{sys.version_info[0]}.{sys.version_info[1] + 1}")')"
   make_venv
   stage /src
+  smoke
   control "$arch" "$python" "$next"
   dpkg-deb --root-owner-group --build "$STAGE" "/out/incus-console_${VERSION}_${arch}~${LABEL}.deb"
 }

@@ -1,7 +1,7 @@
 {
   "name": "incus-console-desktop",
   "productName": "Incus Console",
-  "version": "26.11.6",
+  "version": "26.11.7",
   "description": "A desktop and web console for Incus by your friends at OpenRDS",
   "license": "Apache-2.0",
   "author": "OpenRDS",
@@ -26,6 +26,7 @@
     "appId": "io.openrds.incus-console",
     "productName": "Incus Console",
     "artifactName": "incus-console-${version}-${os}-${arch}.${ext}",
+    "afterPack": "scripts/after-pack.js",
     "directories": {
       "output": "dist",
       "buildResources": "build"

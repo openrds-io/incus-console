@@ -24,9 +24,17 @@ fi
 
 if [ ! -f "$SITE" ]; then
   echo "==> Installing the nginx site: $SITE"
-  install -m 0644 /usr/share/incus-console/nginx-site.conf "$SITE"
   # Debian's default site also answers on port 80; ours redirects to HTTPS instead.
   rm -f /etc/nginx/sites-enabled/default
+  install -m 0644 /usr/share/incus-console/nginx-site.conf "$SITE"
+  # Enterprise Linux keeps a "welcome" server for port 80 inside nginx.conf
+  # itself. Ours takes the requests that name no particular site, unless
+  # another site here has already claimed that for itself.
+  for port in 80 443; do
+    if ! nginx -T 2>/dev/null | grep -Eq "^[[:space:]]*listen[[:space:]]+([^;]*:)?$port([[:space:]][^;]*)?[[:space:]]default_server"; then
+      sed -i -E "s/^([[:space:]]*listen[[:space:]]+(\\[::\\]:)?$port)([[:space:]]+ssl)?;/\\1\\3 default_server;/" "$SITE"
+    fi
+  done
 fi
 
 # Enterprise Linux: let nginx talk to the console on 127.0.0.1:5002.

@@ -13,6 +13,8 @@
 #
 # Settings (environment): CONTAINER_TOOL=docker|podman  PLATFORM=linux/amd64
 # (default: this machine's own architecture; packages are per architecture).
+# Building for the other architecture runs under emulation: it works, slowly.
+#   PLATFORM=linux/amd64 packaging/build.sh all
 
 set -euo pipefail
 
@@ -58,10 +60,16 @@ package() {
 }
 
 image() {
-  echo "==> container image incus-console:$VERSION"
+  # An image for another architecture gets that in its tag, and is not "latest".
+  local tag="incus-console:$VERSION" latest=(-t incus-console:latest)
+  if [ -n "${PLATFORM:-}" ]; then
+    tag="$tag-${PLATFORM#linux/}"
+    latest=()
+  fi
+  echo "==> container image $tag"
   "$TOOL" build ${PLATFORM_ARGS[@]+"${PLATFORM_ARGS[@]}"} -f "$HERE/Containerfile" \
     --build-arg COMMIT_STAMP="$(stamp)" \
-    -t "incus-console:$VERSION" -t incus-console:latest "$ROOT"
+    -t "$tag" ${latest[@]+"${latest[@]}"} "$ROOT"
 }
 
 case "${1:-}" in
