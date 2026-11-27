@@ -1,3 +1,9 @@
+<img width="65" height="65" alt="Screenshot 2026-11-27 at 12 50 12 AM" src="https://github.com/user-attachments/assets/82bb13a2-ca5b-4337-b730-aa0d3c7146cf" />
+&nbsp;&nbsp; and &nbsp;&nbsp; 
+<img width="65" height="65" alt="Screenshot 2026-11-27 at 12 48 32 AM" src="https://github.com/user-attachments/assets/42531824-9bb0-4d8e-b5e1-a5d276ce5d3a" />
+= :-)
+
+
 # IncusConsole - OpenRDS
 
 A console
