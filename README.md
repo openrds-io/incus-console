@@ -222,7 +222,8 @@ Pending work, roughly in the order planned:
 - [x] **Per-instance access:** on a user's page, Viewer or Operator of a
   single instance, for someone who should not see the rest of its project.
   The console enforces it everywhere; Incus too where Roles enforced by
-  Incus is on for the server. Not yet for groups
+  Incus is on for the server. Groups can be given single instances as well,
+  and the menu shows such a user only what they can open
 - [ ] **Sign-in hardening:** optional TOTP second factor for local accounts;
   limiting attempts per address (today: per username, see below)
 - [ ] **Per-user certificates:** rotate them before they expire (today they

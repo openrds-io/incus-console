@@ -82,9 +82,14 @@ def _username(details):
 
 
 def _first(thing, names, default):
+    # Incus hands some things over as records and some as dictionaries.
+    if thing == None:
+        return default
     for name in names:
         if hasattr(thing, name):
             return getattr(thing, name)
+        if hasattr(thing, "get") and thing.get(name) != None:
+            return thing.get(name)
     return default
 
 
@@ -125,6 +130,10 @@ def _as_listed(details, kind, path, entitlement):
     certificate = _first(details, ["Certificate", "certificate"], None)
     projects = _first(certificate, ["Projects", "projects"], None)
     if projects == None:
+        if LOG:
+            inside = dir(certificate) if certificate != None else "nothing"
+            log_info("incus-console authz: no project list; details has ", dir(details))
+            log_info("incus-console authz: no project list; certificate has ", inside)
         return False
     if kind not in SCOPED:
         return entitlement in VIEW
@@ -165,6 +174,23 @@ def _decide(details, object, entitlement):
     return _inside(kind, entitlement)
 
 
+def _reaches(grants, project, instance):
+    if grants.get("*") != None or grants.get(project) != None:
+        return True
+    if instance == None:
+        return _has_instance_in(grants, project)
+    return grants.get(project + "/" + instance) != None
+
+
+# For Incus's own "who has access" lists: the console's users, by certificate.
+def get_project_access(project_name):
+    return [user for user in ROLES if _reaches(ROLES[user], project_name, None)]
+
+
+def get_instance_access(project_name, instance_name):
+    return [user for user in ROLES if _reaches(ROLES[user], project_name, instance_name)]
+
+
 def authorize(details, object, entitlement):
     allowed = _decide(details, object, entitlement)
     if LOG:
@@ -195,7 +221,7 @@ def roles(server_id: int) -> dict[str, dict[str, str]]:
             entry["project"]: entry["role"]
             for entry in access.effective_grants(row["user_id"], server_id)
         }
-        for given in access.instance_grants_for(row["user_id"], server_id):
+        for given in access.effective_instance_grants(row["user_id"], server_id):
             grants[f"{given['project']}/{given['instance']}"] = given["role"]
         if grants:
             found[row["fingerprint"]] = dict(sorted(grants.items()))

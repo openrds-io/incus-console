@@ -98,6 +98,40 @@
       <button class="p-button--positive">Give access</button>
     </form>
     <p class="p-form-help-text">Leave the project empty for all projects on that server. Giving a new role for the same server and project replaces the old one.</p>
+    <h3 class="p-heading--5">Single instances</h3>
+    <p class="p-form-help-text">Members reach just that instance, as its Viewer or Operator, without the rest of its project.</p>
+    {% if instance_grants %}
+    <table aria-label="Single instances">
+      <thead><tr><th>Server</th><th>Project</th><th>Instance</th><th>Role</th><th class="u-align--right">Actions</th></tr></thead>
+      <tbody>
+      {% for grant in instance_grants %}
+        <tr>
+          <td>{{ grant.server_name }}</td>
+          <td>{{ grant.project }}</td>
+          <td>{{ grant.instance }}</td>
+          <td>{{ roles[grant.role] }}</td>
+          <td class="u-align--right">
+            <form class="inline" method="post" action="{{ url_for('admin.group_instance_grant_delete', group_id=group.id, grant_id=grant.id) }}">
+              {{ csrf() }}<button class="p-button--negative is-dense u-no-margin--bottom">Remove</button>
+            </form>
+          </td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+    {% endif %}
+    <form class="inline-form" method="post" action="{{ url_for('admin.group_instance_grant_add', group_id=group.id) }}">
+      {{ csrf() }}
+      <select name="server_id" aria-label="Server" required>
+        {% for s in servers %}<option value="{{ s.id }}">{{ s.name }}</option>{% endfor %}
+      </select>
+      <input type="text" name="project" list="project-names" placeholder="default" aria-label="Project">
+      <input type="text" name="instance" placeholder="Instance name" aria-label="Instance" required>
+      <select name="role" aria-label="Role" required>
+        {% for value in instance_roles %}<option value="{{ value }}"{% if value == 'operator' %} selected{% endif %}>{{ roles[value] }}</option>{% endfor %}
+      </select>
+      <button class="p-button--positive">Give access</button>
+    </form>
     {% else %}
     {{ empty("Add a server first.") }}
     {% endif %}

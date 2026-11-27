@@ -45,8 +45,8 @@
       <tbody>
       {% for e in entries %}
         <tr>
-          <td><code>{{ e.identifier }}</code></td>
-          <td>{{ e.role or '-' }}</td>
+          <td>{% if e.console_user %}{{ e.console_user }} <span class="u-text--muted">(console user)</span><br>{% endif %}<code>{{ e.identifier }}</code></td>
+          <td>{# Incus does not know the role a scriptlet gives; it is in the table above. #}{{ e.role if e.role and e.role != 'unknown' else '-' }}</td>
           <td>{{ e.provider or '-' }}</td>
         </tr>
       {% endfor %}

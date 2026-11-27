@@ -265,11 +265,24 @@ def project_detail(name):
     )
 
 
+def _named(entries: list) -> list:
+    """Add console_user to the entries that are a console user's certificate."""
+    known = {
+        row["fingerprint"]: row["username"]
+        for row in get_db().execute(
+            "SELECT user_certs.fingerprint, users.username FROM user_certs "
+            "JOIN users ON users.id = user_certs.user_id WHERE user_certs.server_id = ?",
+            (g.sid,),
+        )
+    }
+    return [{**entry, "console_user": known.get(entry.get("identifier"))} for entry in entries]
+
+
 def incus_access(read) -> tuple[list, str | None]:
     """(what Incus says about who has access, why it could not say)."""
     try:
         found = sorted(read(), key=lambda e: (e.get("provider") or "", e.get("identifier") or ""))
-        return found, None
+        return _named(found), None
     except IncusError as error:
         if error.status == 0:
             raise

@@ -201,12 +201,22 @@ def who_can_reach(server_id: int, project: str, instance: str | None = None) -> 
             entry["via"].append(row["group_name"])
     rank_of = {"admin": 99, **ROLES}
     if instance:
+        where = (server_id, project, instance)
         given = db.execute(
-            "SELECT users.id AS user_id, users.username, instance_grants.role "
-            "FROM instance_grants JOIN users ON users.id = instance_grants.user_id "
+            "SELECT users.id AS user_id, users.username, instance_grants.role, "
+            "NULL AS group_name FROM instance_grants "
+            "JOIN users ON users.id = instance_grants.user_id "
             "WHERE instance_grants.server_id = ? AND instance_grants.project = ? "
-            "AND instance_grants.instance = ? AND users.disabled = 0",
-            (server_id, project, instance),
+            "AND instance_grants.instance = ? AND users.disabled = 0 "
+            "UNION ALL "
+            "SELECT users.id, users.username, group_instance_grants.role, user_groups.name "
+            "FROM group_instance_grants "
+            "JOIN group_members ON group_members.group_id = group_instance_grants.group_id "
+            "JOIN user_groups ON user_groups.id = group_instance_grants.group_id "
+            "JOIN users ON users.id = group_members.user_id "
+            "WHERE group_instance_grants.server_id = ? AND group_instance_grants.project = ? "
+            "AND group_instance_grants.instance = ? AND users.disabled = 0",
+            (*where, *where),
         ).fetchall()
         for row in given:
             entry = people.get(row["user_id"])
@@ -215,11 +225,16 @@ def who_can_reach(server_id: int, project: str, instance: str | None = None) -> 
                     "user_id": row["user_id"],
                     "username": row["username"],
                     "role": row["role"],
-                    "via": [None],
+                    "via": [row["group_name"]],
                     "scope": "this instance",
                 }
+            elif entry["scope"] == "this instance":
+                if rank_of[row["role"]] > rank_of[entry["role"]]:
+                    entry["role"] = row["role"]
+                if row["group_name"] not in entry["via"]:
+                    entry["via"].append(row["group_name"])
             elif rank_of[row["role"]] > rank_of[entry["role"]]:
-                entry.update(role=row["role"], scope="this instance", via=[None])
+                entry.update(role=row["role"], scope="this instance", via=[row["group_name"]])
     return sorted(people.values(), key=lambda e: (-rank_of[e["role"]], e["username"].lower()))
 
 
@@ -230,8 +245,11 @@ def users_with_access(server_id: int) -> list[int]:
         "UNION SELECT user_id FROM instance_grants WHERE server_id = ? "
         "UNION SELECT group_members.user_id FROM group_grants "
         "JOIN group_members ON group_members.group_id = group_grants.group_id "
-        "WHERE group_grants.server_id = ?",
-        (server_id, server_id, server_id),
+        "WHERE group_grants.server_id = ? "
+        "UNION SELECT group_members.user_id FROM group_instance_grants "
+        "JOIN group_members ON group_members.group_id = group_instance_grants.group_id "
+        "WHERE group_instance_grants.server_id = ?",
+        (server_id, server_id, server_id, server_id),
     )
     return [row[0] for row in rows]
 
@@ -250,13 +268,62 @@ def instance_grants_for(user_id: int, server_id: int | None = None) -> list[sqli
     return get_db().execute(sql + " ORDER BY servers.name, project, instance", args).fetchall()
 
 
+def group_instance_grants_for(user_id: int, server_id: int | None = None) -> list[sqlite3.Row]:
+    """Roles on single instances the user has through their groups."""
+    sql = (
+        "SELECT group_instance_grants.*, user_groups.name AS group_name, "
+        "servers.name AS server_name FROM group_instance_grants "
+        "JOIN group_members ON group_members.group_id = group_instance_grants.group_id "
+        "JOIN user_groups ON user_groups.id = group_instance_grants.group_id "
+        "JOIN servers ON servers.id = group_instance_grants.server_id "
+        "WHERE group_members.user_id = ?"
+    )
+    args: list = [user_id]
+    if server_id is not None:
+        sql += " AND group_instance_grants.server_id = ?"
+        args.append(server_id)
+    order = " ORDER BY servers.name, project, instance, user_groups.name"
+    return get_db().execute(sql + order, args).fetchall()
+
+
+def effective_instance_grants(user_id: int, server_id: int | None = None) -> list[dict]:
+    """The user's roles on single instances from every source, the strongest of each.
+
+    Each entry has server_id, project, instance, role, and via: None for the
+    user's own grant, else group names.
+    """
+    found: dict[tuple[int, str, str], dict] = {}
+
+    def add(row, source):
+        key = (row["server_id"], row["project"], row["instance"])
+        entry = found.setdefault(
+            key,
+            {
+                "server_id": row["server_id"],
+                "project": row["project"],
+                "instance": row["instance"],
+                "role": row["role"],
+                "via": [],
+            },
+        )
+        if ROLES[row["role"]] > ROLES[entry["role"]]:
+            entry["role"] = row["role"]
+        entry["via"].append(source)
+
+    for row in instance_grants_for(user_id, server_id):
+        add(row, None)
+    for row in group_instance_grants_for(user_id, server_id):
+        add(row, row["group_name"])
+    return sorted(found.values(), key=lambda e: (e["server_id"], e["project"], e["instance"]))
+
+
 def _own_instances(server_id: int) -> dict[tuple[str, str], int]:
     """{(project, instance): rank} for the signed-in user on one server, cached per request."""
     cache = g.setdefault("_instance_grants", {})
     if server_id not in cache:
         cache[server_id] = {
-            (row["project"], row["instance"]): ROLES[row["role"]]
-            for row in instance_grants_for(g.user["id"], server_id)
+            (entry["project"], entry["instance"]): ROLES[entry["role"]]
+            for entry in effective_instance_grants(g.user["id"], server_id)
         }
     return cache[server_id]
 
@@ -361,7 +428,7 @@ def visible_servers(rows: list[sqlite3.Row]) -> list[sqlite3.Row]:
     if not g.get("user"):
         return []
     ids = {entry["server_id"] for entry in effective_grants(g.user["id"])}
-    ids |= {row["server_id"] for row in instance_grants_for(g.user["id"])}
+    ids |= {entry["server_id"] for entry in effective_instance_grants(g.user["id"])}
     return [row for row in rows if row["id"] in ids]
 
 
