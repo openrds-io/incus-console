@@ -38,7 +38,10 @@ CREATE TABLE IF NOT EXISTS servers (
     kind TEXT NOT NULL CHECK (kind IN ('unix', 'https')),
     address TEXT NOT NULL,
     fingerprint TEXT,
-    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    -- Roles enforced by Incus (app/authz.py): on or off, and what was last sent.
+    enforce_roles INTEGER NOT NULL DEFAULT 0,
+    scriptlet_hash TEXT
 );
 CREATE TABLE IF NOT EXISTS grants (
     id INTEGER PRIMARY KEY,
@@ -47,6 +50,16 @@ CREATE TABLE IF NOT EXISTS grants (
     project TEXT NOT NULL,
     role TEXT NOT NULL CHECK (role IN ('viewer', 'operator', 'project_admin')),
     UNIQUE (user_id, server_id, project)
+);
+CREATE TABLE IF NOT EXISTS instance_grants (
+    -- A role on one instance, for a user with no role (or a lesser one) in its project.
+    id INTEGER PRIMARY KEY,
+    user_id INTEGER NOT NULL REFERENCES users (id) ON DELETE CASCADE,
+    server_id INTEGER NOT NULL REFERENCES servers (id) ON DELETE CASCADE,
+    project TEXT NOT NULL,
+    instance TEXT NOT NULL,
+    role TEXT NOT NULL CHECK (role IN ('viewer', 'operator')),
+    UNIQUE (user_id, server_id, project, instance)
 );
 CREATE TABLE IF NOT EXISTS user_groups (
     id INTEGER PRIMARY KEY,
@@ -128,6 +141,11 @@ def _migrate(db: sqlite3.Connection) -> None:
     if "session_epoch" not in columns:
         db.execute("ALTER TABLE users ADD COLUMN session_epoch INTEGER NOT NULL DEFAULT 0")
         db.execute("ALTER TABLE users ADD COLUMN failures_reset_at TEXT")
+        db.commit()
+    servers = {row["name"] for row in db.execute("PRAGMA table_info(servers)")}
+    if servers and "enforce_roles" not in servers:
+        db.execute("ALTER TABLE servers ADD COLUMN enforce_roles INTEGER NOT NULL DEFAULT 0")
+        db.execute("ALTER TABLE servers ADD COLUMN scriptlet_hash TEXT")
         db.commit()
 
 

@@ -13,6 +13,7 @@
       <td><code>{{ s.address }}</code></td>
       {% if is_admin() %}
       <td class="u-align--right">
+        {% if server_mode and s.kind == 'https' %}<a class="p-button is-dense u-no-margin--bottom" href="{{ url_for('servers.roles', server_id=s.id) }}">Roles{% if s.enforce_roles %}: enforced by Incus{% endif %}</a>{% endif %}
         <form class="inline" method="post" action="{{ url_for('servers.delete', server_id=s.id) }}" data-confirm="Remove {{ s.name }} from this console?">
           {{ csrf() }}<button class="p-button--negative is-dense u-no-margin--bottom">Remove</button>
         </form>

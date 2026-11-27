@@ -6,12 +6,74 @@ the page showed. Sign-ins, failed sign-ins and opened terminals are recorded too
 
 from __future__ import annotations
 
+import logging
+import logging.handlers
+import sys
+
 from flask import current_app, g, request, session
 
 from .db import get_db
 
 # GET requests worth recording.
 RECORDED_GETS = {"srv.instance_terminal_ws": "Opened terminal"}
+
+
+forwarder = logging.getLogger("incus_console.audit")
+forwarder.propagate = False
+_destination: logging.Handler | None = None
+
+
+def _forward_to(where: str) -> None:
+    """Point the forwarder at AUDIT_FORWARD's destination."""
+    global _destination
+    if _destination is not None:
+        forwarder.removeHandler(_destination)
+        _destination.close()
+        _destination = None
+    handler: logging.Handler | None = None
+    if where == "log":
+        handler = logging.StreamHandler(sys.stderr)
+    elif where == "syslog":
+        try:
+            handler = logging.handlers.SysLogHandler(
+                address="/dev/log", facility=logging.handlers.SysLogHandler.LOG_AUTHPRIV
+            )
+        except OSError as error:
+            # Not worth refusing to start over; say so where an admin will look.
+            print(f"incus-console: AUDIT_FORWARD=syslog but /dev/log: {error}", file=sys.stderr)
+    elif where:
+        raise ValueError(f'AUDIT_FORWARD must be "", "log" or "syslog", not {where!r}')
+    if handler is not None:
+        handler.setFormatter(logging.Formatter("incus-console audit: %(message)s"))
+        forwarder.addHandler(handler)
+        forwarder.setLevel(logging.INFO)
+        _destination = handler
+
+
+def _quoted(value) -> str:
+    """A value for a key=value log line: quoted when it has spaces, on one line."""
+    text = "-" if value in (None, "") else " ".join(str(value).split())
+    if re_plain(text):
+        return text
+    return '"' + text.replace("\\", "\\\\").replace('"', '\\"') + '"'
+
+
+def re_plain(text: str) -> bool:
+    return bool(text) and all(c.isalnum() or c in "-_./:@%+," for c in text)
+
+
+def line(username, server, project, action, path, status, outcome) -> str:
+    """One audit entry as a line for a log: key=value pairs, in a fixed order."""
+    pairs = (
+        ("user", username),
+        ("server", server),
+        ("project", project),
+        ("action", action),
+        ("path", path),
+        ("status", status),
+        ("outcome", outcome),
+    )
+    return " ".join(f"{key}={_quoted(value)}" for key, value in pairs)
 
 
 def record(
@@ -32,6 +94,12 @@ def record(
         (username, server_id, project, action, request.path, status, outcome),
     )
     db.commit()
+    if _destination is not None:
+        server = None
+        if server_id is not None:
+            row = db.execute("SELECT name FROM servers WHERE id = ?", (server_id,)).fetchone()
+            server = row["name"] if row else server_id
+        forwarder.info(line(username, server, project, action, request.path, status, outcome))
 
 
 def _action() -> str:
@@ -106,4 +174,5 @@ def recent(
 
 
 def init_app(app) -> None:
+    _forward_to(app.config.get("AUDIT_FORWARD") or "" if app.config["SERVER_MODE"] else "")
     app.after_request(_after)

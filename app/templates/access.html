@@ -1,0 +1,61 @@
+{% extends "base.html" %}
+{% from "macros.html" import crumbs as breadcrumbs, empty %}
+{% block title %}{{ title }}{% endblock %}
+{% block heading %}{{ breadcrumbs(crumbs) }}{% endblock %}
+{% block content %}
+{% if server_mode %}
+<div class="row">
+  <div class="col-3">
+    <h2 class="p-heading--5 section-heading">Console users</h2>
+    <p class="p-text--small u-text--muted">Who can open {{ what }} in this console, and with which role.</p>
+  </div>
+  <div class="col-9">
+    {% if people %}
+    <table aria-label="Console users">
+      <thead><tr><th>User</th><th>Role</th><th>For</th><th>Through</th></tr></thead>
+      <tbody>
+      {% for p in people %}
+        <tr>
+          <td>{% if is_admin() %}<a href="{{ url_for('admin.user', user_id=p.user_id) }}">{{ p.username }}</a>{% else %}{{ p.username }}{% endif %}</td>
+          <td>{{ 'Console admin' if p.role == 'admin' else role_labels[p.role] }}</td>
+          <td>{{ p.scope }}</td>
+          <td>{% if p.role == 'admin' %}-{% else %}{% for source in p.via %}{{ source if source else 'Own grant' }}{{ ', ' if not loop.last }}{% endfor %}{% endif %}</td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    {{ empty("No console user has access.") }}
+    {% endif %}
+  </div>
+</div>
+<hr class="p-rule">
+{% endif %}
+<div class="row">
+  <div class="col-3">
+    <h2 class="p-heading--5 section-heading">Incus</h2>
+    <p class="p-text--small u-text--muted">Who Incus itself lets in, console or not: trusted certificates and identity-provider users.</p>
+  </div>
+  <div class="col-9">
+    {% if problem %}
+    {{ empty(problem) }}
+    {% elif entries %}
+    <table aria-label="Incus access">
+      <thead><tr><th>Identity</th><th>Role</th><th>Kind</th></tr></thead>
+      <tbody>
+      {% for e in entries %}
+        <tr>
+          <td><code>{{ e.identifier }}</code></td>
+          <td>{{ e.role or '-' }}</td>
+          <td>{{ e.provider or '-' }}</td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+    <p class="p-text--small u-text--muted">Certificates named <code>incus-console/&lt;username&gt;</code> are the console's own, one per user. Anyone using the server's local socket has full access and is not listed.</p>
+    {% else %}
+    {{ empty("Incus lists nobody for this. Unrestricted certificates and the local socket have full access and are not listed.") }}
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

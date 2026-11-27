@@ -44,7 +44,7 @@
   <div class="col-3"><h2 class="p-heading--5 section-heading">On each member</h2></div>
   <div class="col-9">
     <table aria-label="On each member">
-      <thead><tr><th>Member</th><th>State</th><th>MAC address</th><th>Addresses</th></tr></thead>
+      <thead><tr><th>Member</th><th>State</th><th>MAC address</th><th>Addresses</th><th>External interfaces</th></tr></thead>
       <tbody>
       {% for m in per_member %}
         <tr>
@@ -52,6 +52,7 @@
           <td>{{ m.state.state or (m.status if m.status != 'Online' else '-') }}</td>
           <td>{% if m.state.hwaddr %}<code>{{ m.state.hwaddr }}</code>{% else %}-{% endif %}</td>
           <td>{% for a in m.state.addresses or [] if a.scope == 'global' %}{{ a.address }}/{{ a.netmask }}{{ ', ' if not loop.last }}{% else %}-{% endfor %}</td>
+          <td>{{ (m.own or {}).get('bridge.external_interfaces', '-') }}</td>
         </tr>
       {% endfor %}
       </tbody>

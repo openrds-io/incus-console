@@ -90,6 +90,14 @@ LOCAL_SOCKETS = [
 # Server mode: days of audit log to keep (0 keeps everything).
 AUDIT_KEEP_DAYS = 365
 
+# Server mode: also send each audit entry, as one line, somewhere outside the
+# console's own database, where the console cannot rewrite it:
+#   ""        nowhere else (the default)
+#   "log"     the service's own output; under systemd that is the journal
+#             (journalctl -u incus-console -g "incus-console audit")
+#   "syslog"  the machine's syslog (/dev/log), facility authpriv
+AUDIT_FORWARD = ""
+
 # Server mode: after this many failed sign-ins for one username within
 # LOGIN_LOCKOUT_SECONDS, further attempts for it are refused until the oldest
 # of them is that old (or an admin unlocks it). 0 turns this off. Limit
@@ -104,6 +112,11 @@ PERMANENT_SESSION_LIFETIME = 12 * 60 * 60
 # restricted to the projects that user has access to, so Incus enforces the
 # project boundary too. The console's own certificate must be unrestricted.
 PER_USER_CERTIFICATES = True
+
+# Server mode, remote servers with "Roles enforced by Incus" turned on: have
+# the scriptlet log every decision to the Incus log (journalctl -u incus), to
+# see what it is asked. Noisy: for finding out why something was refused.
+AUTHZ_SCRIPTLET_LOG = False
 
 # Seconds between refreshing the project list of an "all projects" user's
 # certificate, so it picks up projects created outside the console.

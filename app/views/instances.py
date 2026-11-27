@@ -5,7 +5,8 @@ from urllib.parse import urlsplit
 
 from flask import abort, current_app, flash, g, redirect, render_template, request, url_for
 
-from .. import catalog, terminal
+from .. import access, authz, catalog, terminal
+from ..db import get_db
 from ..filters import instance_kind
 from ..incus import IncusError
 from . import oci
@@ -49,6 +50,7 @@ EDITABLE = ("architecture", "config", "devices", "ephemeral", "profiles", "state
 @bp.get("/instances")
 def instances():
     rows = sorted(g.incus.instances(), key=lambda i: i["name"])
+    rows = access.visible_instances(g.sid, g.project, rows)
     return render_template("instances/list.html", instances=rows)
 
 
@@ -248,6 +250,7 @@ def instance_action(name):
 @bp.post("/instances/<name>/delete")
 def instance_delete(name):
     if run(lambda: g.incus.delete_instance(name), f"{name} deleted."):
+        _regrant(name, None)
         return redirect(url_for("srv.instances"))
     return redirect(url_for("srv.instance", name=name))
 
@@ -357,6 +360,24 @@ NAME = re.compile(r"[A-Za-z][A-Za-z0-9-]{0,62}")
 NAME_RULE = "Use letters, digits and dashes, starting with a letter (at most 63)."
 
 
+def _regrant(name: str, new_name: str | None) -> None:
+    """Roles given on this one instance follow its new name, or go with it."""
+    db = get_db()
+    where = "server_id = ? AND project = ? AND instance = ?"
+    args = (g.sid, g.project, name)
+    if not db.execute(f"SELECT 1 FROM instance_grants WHERE {where}", args).fetchone():  # noqa: S608
+        return
+    if new_name:
+        db.execute(f"UPDATE instance_grants SET instance = ? WHERE {where}", (new_name, *args))  # noqa: S608
+    else:
+        db.execute(f"DELETE FROM instance_grants WHERE {where}", args)  # noqa: S608
+    db.commit()
+    try:
+        authz.refresh(g.server)
+    except IncusError as error:
+        flash(f"Incus was not told about the change in access: {error.message}", "error")
+
+
 @bp.route("/instances/<name>/rename", methods=["GET", "POST"])
 def instance_rename(name):
     instance = g.incus.instance(name)
@@ -367,8 +388,28 @@ def instance_rename(name):
         elif new_name == name:
             return redirect(url_for("srv.instance", name=name))
         elif run(lambda: g.incus.rename_instance(name, new_name), f"{name} renamed to {new_name}."):
+            _regrant(name, new_name)
             return redirect(url_for("srv.instance", name=new_name))
     return render_template("instances/rename.html", instance=instance, form=request.form)
+
+
+@bp.get("/instances/<name>/access")
+def instance_access(name):
+    from .projects import incus_access
+
+    instance = g.incus.instance(name)
+    entries, problem = incus_access(lambda: g.incus.instance_access(name))
+    return render_template(
+        "access.html",
+        title=f"Access - {name}",
+        crumbs=_crumbs(instance, "Access"),
+        what=f"{name} (through project {g.project})",
+        people=access.who_can_reach(g.sid, g.project, name)
+        if current_app.config["SERVER_MODE"]
+        else [],
+        entries=entries,
+        problem=problem,
+    )
 
 
 @bp.route("/instances/<name>/move", methods=["GET", "POST"])

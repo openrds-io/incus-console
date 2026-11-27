@@ -176,6 +176,55 @@ def _current_image(instance: dict) -> str:
     return reference(origin.get("server"), origin.get("alias"), current_app.config["OCI_REGISTRY"])
 
 
+def _newer_image(instance: dict) -> tuple[bool | None, str]:
+    """(is there a newer image, what to tell the user). None: could not find out.
+
+    The console never contacts a registry itself. It asks Incus to fetch the
+    image the container was made from again, then looks at what the server
+    now holds under the same name.
+    """
+    fingerprint = (instance.get("config") or {}).get("volatile.base_image")
+    try:
+        origin = g.incus.image(fingerprint).get("update_source") if fingerprint else None
+    except IncusError as error:
+        if error.status == 0:
+            raise
+        origin = None
+    if not origin or not origin.get("alias"):
+        return None, (
+            "The image this container was made from is no longer on the server, so "
+            "there is nothing to compare with. Update image fetches the newest one."
+        )
+    try:
+        response = g.incus.refresh_image(fingerprint)
+        g.incus.wait(response, current_app.config["ACTION_WAIT"])
+    except IncusError as error:
+        if error.status == 0:
+            raise
+        return None, f"Incus could not check the registry: {error.message}"
+    same = (origin.get("server"), origin.get("alias"), origin.get("protocol"))
+    for image in g.incus.images():
+        source_ = image.get("update_source") or {}
+        if (source_.get("server"), source_.get("alias"), source_.get("protocol")) != same:
+            continue
+        if image["fingerprint"] != fingerprint:
+            return True, f"A newer {origin['alias']} is available."
+    return False, f"{instance['name']} is on the newest {origin['alias']}."
+
+
+@bp.post("/instances/<name>/check-image")
+def instance_check_image(name):
+    instance = g.incus.instance(name)
+    if instance_kind(instance) != "oci":
+        flash("Only application containers are checked against their image.", "error")
+        return redirect(url_for("srv.instance", name=name))
+    newer, message = _newer_image(instance)
+    flash(message, "info" if newer is None else "success")
+    if newer:
+        return redirect(url_for("srv.instance_update_image", name=name))
+    return redirect(url_for("srv.instance", name=name))
+
+
 @bp.route("/instances/<name>/update-image", methods=["GET", "POST"])
 def instance_update_image(name):
     """Rebuild an application container on another (usually newer) image."""

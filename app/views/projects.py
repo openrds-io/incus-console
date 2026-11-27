@@ -9,7 +9,7 @@ from __future__ import annotations
 import re
 from urllib.parse import unquote, urlsplit
 
-from flask import flash, g, redirect, render_template, request, session, url_for
+from flask import current_app, flash, g, redirect, render_template, request, session, url_for
 
 from .. import access, user_certs
 from ..db import get_db
@@ -262,6 +262,38 @@ def project_detail(name):
         sections=sections,
         is_default=name == DEFAULT,
         is_current=name == g.project,
+    )
+
+
+def incus_access(read) -> tuple[list, str | None]:
+    """(what Incus says about who has access, why it could not say)."""
+    try:
+        found = sorted(read(), key=lambda e: (e.get("provider") or "", e.get("identifier") or ""))
+        return found, None
+    except IncusError as error:
+        if error.status == 0:
+            raise
+        if error.status == 403:
+            return [], "Incus shows this to unrestricted certificates only: ask a console admin."
+        return [], "This Incus does not report who has access (it needs Incus 6.9 or later)."
+
+
+@bp.get("/projects/<name>/access")
+def project_access(name):
+    g.incus.project_details(name)  # 404 for a project that is not there
+    entries, problem = incus_access(lambda: g.incus.project_access(name))
+    return render_template(
+        "access.html",
+        title=f"Access - {name}",
+        crumbs=[
+            ("Projects", url_for("srv.projects")),
+            (name, url_for("srv.project_detail", name=name)),
+            ("Access", None),
+        ],
+        what=f"project {name}",
+        people=access.who_can_reach(g.sid, name) if current_app.config["SERVER_MODE"] else [],
+        entries=entries,
+        problem=problem,
     )
 
 

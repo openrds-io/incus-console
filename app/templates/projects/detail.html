@@ -9,6 +9,7 @@
   {{ csrf() }}<button class="p-button is-dense u-no-margin--bottom">Switch to</button>
 </form>
 {% endif %}
+{% if allowed('srv.project_access', project.name) %}<a class="p-button is-dense u-no-margin--bottom" href="{{ url_for('srv.project_access', name=project.name) }}">Access</a>{% endif %}
 {% if allowed('srv.project_edit') %}<a class="p-button is-dense u-no-margin--bottom" href="{{ url_for('srv.project_edit', name=project.name) }}">Configure</a>{% endif %}
 {% if not is_default %}
 {% if allowed('srv.project_rename') %}<a class="p-button is-dense u-no-margin--bottom" href="{{ url_for('srv.project_rename', name=project.name) }}">Rename</a>{% endif %}

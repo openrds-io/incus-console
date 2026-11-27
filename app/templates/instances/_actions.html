@@ -1,6 +1,6 @@
 {% macro actions(instance, back) %}
 {% set status = instance.status %}
-{% if allowed('srv.instance_action') %}
+{% if allowed('srv.instance_action', instance=instance.name) %}
 <form class="inline" method="post" action="{{ url_for('srv.instance_action', name=instance.name) }}">
   <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
   <input type="hidden" name="back" value="{{ back }}">

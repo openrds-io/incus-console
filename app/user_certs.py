@@ -70,6 +70,10 @@ def _wanted(user, server, admin: IncusClient) -> list[str] | None:
     if user is None or user["is_admin"] or user["disabled"]:
         return None
     grants = {e["project"] for e in access.effective_grants(user["id"], server["id"])}
+    # A role on one instance: the certificate reaches its project. Where Incus
+    # enforces the roles (app/authz.py) it narrows that to the instance; where
+    # it does not, only the console does.
+    grants |= {row["project"] for row in access.instance_grants_for(user["id"], server["id"])}
     if not grants:
         return None
     if access.ALL_PROJECTS in grants:
@@ -86,6 +90,16 @@ def sync(server, user_id: int) -> None:
     """Make the server's trust store match the user's access. Raises IncusError."""
     if not applies(server):
         return
+    try:
+        _sync(server, user_id)
+    finally:
+        # Where Incus enforces the roles too, it hears of every change.
+        from . import authz
+
+        authz.refresh(server)
+
+
+def _sync(server, user_id: int) -> None:
     user = _user(user_id)
     admin = _admin_client(server)
     projects = _wanted(user, server, admin)

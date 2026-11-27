@@ -13,7 +13,7 @@ from flask import (
     url_for,
 )
 
-from .. import access, servers, user_certs
+from .. import access, authz, servers, user_certs
 from ..certs import ensure_client_cert, fingerprint
 from ..incus import IncusClient, IncusError, enroll_with_token
 from ..incus.client import normalize_fingerprint
@@ -90,6 +90,49 @@ def add():
         return redirect(url_for("servers.index"))
     flash("Server added.", "success")
     return redirect(url_for("srv.instances", sid=server_id))
+
+
+@bp.route("/servers/<int:server_id>/roles", methods=["GET", "POST"])
+def roles(server_id):
+    """Roles enforced by Incus: what it is, on or off, and the scriptlet itself."""
+    if not access.is_admin():
+        abort(403)
+    server = servers.get(server_id)
+    if server is None:
+        abort(404)
+    applies = user_certs.applies(server)
+    if request.method == "POST" and applies:
+        turn_on = request.form.get("enforce") == "on"
+        try:
+            if turn_on:
+                authz.enable(server)
+            else:
+                authz.disable(server)
+        except IncusError as error:
+            flash(error.message, "error")
+        else:
+            flash(
+                "Incus now enforces the roles on this server."
+                if turn_on
+                else "Incus no longer enforces the roles; the console still does.",
+                "success",
+            )
+        return redirect(url_for("servers.roles", server_id=server_id))
+    supported, problem = False, None
+    if applies:
+        try:
+            supported = authz.supported(servers.client_for(server).server_info())
+        except IncusError as error:
+            problem = error.message
+    return render_template(
+        "servers/roles.html",
+        target=servers.get(server_id),
+        applies=applies,
+        supported=supported,
+        problem=problem,
+        users=len(authz.roles(server_id)),
+        scriptlet=authz.scriptlet(server_id) if applies else "",
+    )
 
 
 @bp.post("/servers/<int:server_id>/delete")

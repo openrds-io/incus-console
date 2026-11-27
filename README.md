@@ -43,8 +43,9 @@ Working today:
   variables, published ports (`8080:80`) and volumes (`data:/var/lib/app`,
   created when new); a login for private registries; "Use the usual
   settings" fills these in for well-known images (`OCI_PRESETS`); and
-  **Update image** rebuilds a stopped container on a newer image, keeping
-  its settings and volumes. The command, working directory, user and
+  **Check for update** asks whether the image has a newer build, and
+  **Update image** rebuilds a stopped container on it, keeping its settings
+  and volumes; "Restart if it exits" is a setting. The command, working directory, user and
   environment are editable in Settings, and the terminal runs `sh`.
   Environment values are hidden from Viewers and Operators, since they often
   hold passwords. Needs
@@ -79,7 +80,10 @@ Working today:
 - Users and access (server mode): console admins, and Viewer, Operator or
   Project admin roles per server and project, given to users directly or
   through groups; user and group management, own password change, and an
-  audit log that filters by user, server, action and date and exports as CSV.
+  audit log that filters by user, server, action and date, exports as CSV,
+  and can also go to the journal or syslog (`AUDIT_FORWARD`). An **Access**
+  page for each project and instance lists who can reach it: console users
+  with their role and where it comes from, and what Incus itself trusts.
   Repeated failed sign-ins lock a username for a while; a password change
   ends the user's other sessions, and admins can sign a user out everywhere
 - Live updates: lists, detail pages and Operations refresh themselves when
@@ -210,19 +214,20 @@ Pending work, roughly in the order planned:
   (Keycloak, Entra ID, Okta, ...); map identity-provider groups to console
   groups (`user_groups.external_name` is reserved for this); local accounts
   stay available
-- [ ] **Incus-enforced roles inside a project:** an authorization scriptlet
-  shipped with the console, so Incus also refuses a Viewer's or Operator's
-  changes, not just the console
-- [ ] **Per-instance access:** grant a role on one instance (needs the
-  scriptlet or OpenFGA)
-- [ ] **Access tab:** show who can reach a project or instance, from Incus's
-  `/1.0/projects/<name>/access` and `/1.0/instances/<name>/access`
+- [x] **Incus-enforced roles inside a project:** per server, under Servers >
+  Roles. The console writes an authorization scriptlet to the server, so
+  Incus itself refuses a Viewer's or Operator's changes. Needs an Incus with
+  the scriptlet and client routing; `AUTHZ_SCRIPTLET_LOG = True` has it log
+  every decision to the Incus log
+- [x] **Per-instance access:** on a user's page, Viewer or Operator of a
+  single instance, for someone who should not see the rest of its project.
+  The console enforces it everywhere; Incus too where Roles enforced by
+  Incus is on for the server. Not yet for groups
 - [ ] **Sign-in hardening:** optional TOTP second factor for local accounts;
   limiting attempts per address (today: per username, see below)
 - [ ] **Per-user certificates:** rotate them before they expire (today they
   last 10 years); a "re-sync" button per user and per server; tidy up trust
   entries left behind when a server was unreachable
-- [ ] **Audit log:** optionally also send entries to syslog or the journal
 - [ ] **Later, if needed:** OIDC tokens passed through to Incus (Incus sees the
   real user, with OpenFGA syncing grants); LDAP or a trusted proxy header
   (`X-Remote-User`) for single sign-on at nginx; letting non-admins create
@@ -432,16 +437,15 @@ wsgi.py           entry point for gunicorn
 
 ## Roadmap
 
-1. Clusters, next steps: member-specific network settings (such as a
-   bridge's external interfaces), shared storage drivers (Ceph), and OVN
-   networks. Copying and moving between separately registered servers is out
+1. Clusters, next steps: shared storage drivers (Ceph) and OVN networks
+   (a new bridge already takes external interfaces per member). Copying and moving between separately registered servers is out
    of scope for now
 2. Packages, next steps: a package repository and signing; Linux packages of
    the desktop app (`incus-console-desktop`)
 3. Test the desktop installers (`npm run dist`); code signing and a build
    workflow for all three platforms
-4. OCI application containers, next steps: checking for a newer image without
-   rebuilding; health and restart policy
+4. OCI application containers, next steps: health checks (Incus has none of
+   its own for application containers yet)
 5. More permissions work: see [Permissions: still to do](#permissions-still-to-do)
 
 ## License

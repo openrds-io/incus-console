@@ -27,6 +27,9 @@ ROLES = {"viewer": 1, "operator": 2, "project_admin": 3}
 ROLE_LABELS = {"viewer": "Viewer", "operator": "Operator", "project_admin": "Project admin"}
 CAPABILITIES = {"view": 1, "operate": 2, "manage": 3}
 ALL_PROJECTS = "*"
+# Roles that can be given on a single instance. Reconfiguring, copying or
+# deleting one touches the project around it, so that stays a project role.
+INSTANCE_ROLES = ("viewer", "operator")
 
 REQUIRED = {
     # Changing projects themselves, and server-wide storage, is for console admins.
@@ -37,6 +40,9 @@ REQUIRED = {
     "srv.project_rename": "admin",
     "srv.project_delete": "admin",
     "srv.project_use": "view",
+    # Who can reach a project is its admins' business, not every member's.
+    "srv.project_access": "manage",
+    "srv.instance_access": "manage",
     "srv.pool_create": "admin",
     "srv.pool_delete": "admin",
     # Taking a cluster member out of service affects every project on it.
@@ -143,16 +149,133 @@ def effective_grants(user_id: int, server_id: int | None = None) -> list[dict]:
     return sorted(found.values(), key=lambda e: (e["server_name"], e["project"]))
 
 
+def who_can_reach(server_id: int, project: str, instance: str | None = None) -> list[dict]:
+    """Everyone who can open this project through the console, strongest role first.
+
+    Each entry: user_id, username, role ("admin" for console admins), via (a
+    list: None for the user's own grant, else the group's name), and scope
+    ("this project" or "all projects"). Disabled users are left out.
+    """
+    db = get_db()
+    people: dict[int, dict] = {}
+    for user in db.execute("SELECT id, username FROM users WHERE is_admin = 1 AND disabled = 0"):
+        people[user["id"]] = {
+            "user_id": user["id"],
+            "username": user["username"],
+            "role": "admin",
+            "via": [],
+            "scope": "all projects",
+        }
+    rows = db.execute(
+        "SELECT users.id AS user_id, users.username, grants.role, grants.project, "
+        "NULL AS group_name FROM grants JOIN users ON users.id = grants.user_id "
+        "WHERE grants.server_id = ? AND grants.project IN (?, ?) AND users.disabled = 0 "
+        "UNION ALL "
+        "SELECT users.id, users.username, group_grants.role, group_grants.project, "
+        "user_groups.name FROM group_grants "
+        "JOIN group_members ON group_members.group_id = group_grants.group_id "
+        "JOIN user_groups ON user_groups.id = group_grants.group_id "
+        "JOIN users ON users.id = group_members.user_id "
+        "WHERE group_grants.server_id = ? AND group_grants.project IN (?, ?) "
+        "AND users.disabled = 0",
+        (server_id, project, ALL_PROJECTS, server_id, project, ALL_PROJECTS),
+    ).fetchall()
+    for row in rows:
+        entry = people.setdefault(
+            row["user_id"],
+            {
+                "user_id": row["user_id"],
+                "username": row["username"],
+                "role": row["role"],
+                "via": [],
+                "scope": "this project",
+            },
+        )
+        if entry["role"] == "admin":
+            continue
+        if ROLES[row["role"]] > ROLES[entry["role"]]:
+            entry["role"] = row["role"]
+        if row["project"] == ALL_PROJECTS:
+            entry["scope"] = "all projects"
+        if row["group_name"] not in entry["via"]:
+            entry["via"].append(row["group_name"])
+    rank_of = {"admin": 99, **ROLES}
+    if instance:
+        given = db.execute(
+            "SELECT users.id AS user_id, users.username, instance_grants.role "
+            "FROM instance_grants JOIN users ON users.id = instance_grants.user_id "
+            "WHERE instance_grants.server_id = ? AND instance_grants.project = ? "
+            "AND instance_grants.instance = ? AND users.disabled = 0",
+            (server_id, project, instance),
+        ).fetchall()
+        for row in given:
+            entry = people.get(row["user_id"])
+            if entry is None:
+                people[row["user_id"]] = {
+                    "user_id": row["user_id"],
+                    "username": row["username"],
+                    "role": row["role"],
+                    "via": [None],
+                    "scope": "this instance",
+                }
+            elif rank_of[row["role"]] > rank_of[entry["role"]]:
+                entry.update(role=row["role"], scope="this instance", via=[None])
+    return sorted(people.values(), key=lambda e: (-rank_of[e["role"]], e["username"].lower()))
+
+
 def users_with_access(server_id: int) -> list[int]:
     """Everyone given any role on the server, directly or through a group."""
     rows = get_db().execute(
         "SELECT user_id FROM grants WHERE server_id = ? "
+        "UNION SELECT user_id FROM instance_grants WHERE server_id = ? "
         "UNION SELECT group_members.user_id FROM group_grants "
         "JOIN group_members ON group_members.group_id = group_grants.group_id "
         "WHERE group_grants.server_id = ?",
-        (server_id, server_id),
+        (server_id, server_id, server_id),
     )
     return [row[0] for row in rows]
+
+
+def instance_grants_for(user_id: int, server_id: int | None = None) -> list[sqlite3.Row]:
+    """The user's roles on single instances."""
+    sql = (
+        "SELECT instance_grants.*, servers.name AS server_name, servers.kind AS server_kind "
+        "FROM instance_grants JOIN servers ON servers.id = instance_grants.server_id "
+        "WHERE user_id = ?"
+    )
+    args: list = [user_id]
+    if server_id is not None:
+        sql += " AND server_id = ?"
+        args.append(server_id)
+    return get_db().execute(sql + " ORDER BY servers.name, project, instance", args).fetchall()
+
+
+def _own_instances(server_id: int) -> dict[tuple[str, str], int]:
+    """{(project, instance): rank} for the signed-in user on one server, cached per request."""
+    cache = g.setdefault("_instance_grants", {})
+    if server_id not in cache:
+        cache[server_id] = {
+            (row["project"], row["instance"]): ROLES[row["role"]]
+            for row in instance_grants_for(g.user["id"], server_id)
+        }
+    return cache[server_id]
+
+
+def enters(server_id: int, project: str) -> bool:
+    """May the user open this project at all: a role in it, or on an instance in it?"""
+    if rank(server_id, project) >= CAPABILITIES["view"]:
+        return True
+    if is_admin() or not g.get("user"):
+        return False
+    return any(found == project for found, _instance in _own_instances(server_id))
+
+
+def visible_instances(server_id: int, project: str, rows: list) -> list:
+    """The instances of a project the user may see: all, or only those they were given."""
+    if rank(server_id, project) >= CAPABILITIES["view"]:
+        return rows
+    own = _own_instances(server_id) if g.get("user") else {}
+    return [row for row in rows if (project, row["name"]) in own]
 
 
 def _user_grants(server_id: int) -> dict[str, int]:
@@ -175,7 +298,13 @@ def rank(server_id: int, project: str) -> int:
     return max(found.get(project, 0), found.get(ALL_PROJECTS, 0))
 
 
-def can(capability: str, project: str | None = None, server_id: int | None = None) -> bool:
+def can(
+    capability: str,
+    project: str | None = None,
+    server_id: int | None = None,
+    instance: str | None = None,
+) -> bool:
+    """``instance``: also count a role the user has on that one instance."""
     if is_admin():
         return True
     if capability == "admin":
@@ -184,12 +313,29 @@ def can(capability: str, project: str | None = None, server_id: int | None = Non
     project = project if project is not None else g.get("project")
     if server_id is None or project is None:
         return False
-    return rank(server_id, project) >= CAPABILITIES[capability]
+    best = rank(server_id, project)
+    if instance and g.get("user"):
+        best = max(best, _own_instances(server_id).get((project, instance), 0))
+    return best >= CAPABILITIES[capability]
 
 
-def allowed(endpoint: str, project: str | None = None) -> bool:
-    """For templates: would the signed-in user be let through to this page?"""
-    return can(required(endpoint), project)
+def allowed(endpoint: str, project: str | None = None, instance: str | None = None) -> bool:
+    """For templates: would the signed-in user be let through to this page?
+
+    On an instance's own pages the instance is the one being shown.
+    """
+    if instance is None and project is None:
+        instance = g.get("instance_name")
+    need = required(endpoint)
+    if instance and need in ("view", "operate") and is_instance_page(endpoint):
+        return can(need, project, instance=instance)
+    return can(need, project)
+
+
+def is_instance_page(endpoint: str) -> bool:
+    """Is this one of the pages under /instances/<name>?"""
+    rules = current_app.url_map._rules_by_endpoint.get(endpoint, [])
+    return any("/instances/<name>" in rule.rule for rule in rules)
 
 
 def visible_projects(server_id: int, names: list[str]) -> list[str]:
@@ -198,12 +344,15 @@ def visible_projects(server_id: int, names: list[str]) -> list[str]:
     found = _user_grants(server_id)
     if ALL_PROJECTS in found:
         return names
-    return [name for name in names if name in found]
+    partly = {project for project, _instance in _own_instances(server_id)}
+    return [name for name in names if name in found or name in partly]
 
 
 def granted_projects(server_id: int) -> list[str]:
-    """Projects named in the user's grants (not "all projects")."""
-    return sorted(p for p in _user_grants(server_id) if p != ALL_PROJECTS)
+    """Projects named in the user's grants (not "all projects"), or holding an
+    instance they were given."""
+    named = {p for p in _user_grants(server_id) if p != ALL_PROJECTS}
+    return sorted(named | {project for project, _instance in _own_instances(server_id)})
 
 
 def visible_servers(rows: list[sqlite3.Row]) -> list[sqlite3.Row]:
@@ -212,6 +361,7 @@ def visible_servers(rows: list[sqlite3.Row]) -> list[sqlite3.Row]:
     if not g.get("user"):
         return []
     ids = {entry["server_id"] for entry in effective_grants(g.user["id"])}
+    ids |= {row["server_id"] for row in instance_grants_for(g.user["id"])}
     return [row for row in rows if row["id"] in ids]
 
 
