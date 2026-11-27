@@ -8,9 +8,6 @@
 
 A console
 
-Everything else is in the [manual](docs/manual.md): what works today, installing,
-signing in, users and roles, and the roadmap.
-
 ## Versions and About
 
 Versions follow Ubuntu's style, `YY.MM.N`: the year and month of the release
