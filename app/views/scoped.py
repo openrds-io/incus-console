@@ -28,7 +28,7 @@ def _load_server():
     if request.args.get("project"):
         session[key] = request.args["project"]
     g.project = session.get(key, "default")
-    if not access.can("view"):
+    if not access.enters(g.sid, g.project):
         # Land users who cannot see the remembered project in one they can.
         granted = access.granted_projects(g.sid)
         if not granted:
@@ -53,8 +53,19 @@ def _authorize() -> None:
         if request.endpoint.startswith("srv.project_")
         else None
     )
-    if not access.can(need, project=target):
-        abort(403)
+    if access.can(need, project=target):
+        return
+    # No such role in the project: perhaps on the one instance this page is about.
+    endpoint = request.endpoint or ""
+    name = (request.view_args or {}).get("name")
+    if need in ("view", "operate") and name and access.is_instance_page(endpoint):
+        g.instance_name = name
+        if access.can(need, instance=name):
+            return
+    # The list (cut down to their own) and its live updates are theirs to see.
+    if endpoint in ("srv.instances", "srv.events") and access.enters(g.sid, g.project):
+        return
+    abort(403)
 
 
 def cluster_members() -> list[dict]:

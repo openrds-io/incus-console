@@ -12,6 +12,18 @@
   <label for="description">Description</label>
   <input type="text" id="description" name="description" value="{{ form.get('description', '') }}">
   {{ settings_inputs(fields) }}
+  {% if cluster_members %}
+  <fieldset>
+    <legend>On each member</legend>
+    {% for key, (label, help) in member_settings.items() %}
+    {% for m in cluster_members %}
+    <label for="member-{{ loop.index }}">{{ label }} on {{ m.server_name }}</label>
+    <input type="text" id="member-{{ loop.index }}" name="member:{{ m.server_name }}:{{ key }}" value="{{ form.get('member:' ~ m.server_name ~ ':' ~ key, '') }}" placeholder="None">
+    {% endfor %}
+    <p class="p-form-help-text">{{ help }} Leave empty for a bridge that only connects the member's own containers.</p>
+    {% endfor %}
+  </fieldset>
+  {% endif %}
   <div class="form-buttons">
     <a class="p-button--base" href="{{ url_for('srv.networks') }}">Cancel</a>
     <button class="p-button--positive">Create</button>

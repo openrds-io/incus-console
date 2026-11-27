@@ -367,6 +367,10 @@ class IncusClient:
     def server_info(self) -> dict:
         return self.get()
 
+    def update_server_config(self, changes: dict) -> dict:
+        """Set server settings; an empty value unsets one. The others stay."""
+        return self.request("PATCH", "/1.0", body={"config": changes})
+
     # -- cluster -------------------------------------------------------------
 
     def cluster_members(self) -> list:
@@ -431,6 +435,13 @@ class IncusClient:
     def project_details(self, name: str) -> dict:
         return self.get("projects", name)
 
+    def project_access(self, name: str) -> list:
+        """Who Incus itself lets into the project (certificates, identity-provider users)."""
+        return self.get("projects", name, "access") or []
+
+    def instance_access(self, name: str) -> list:
+        return self.get("instances", name, "access") or []
+
     def project_state(self, name: str) -> dict:
         return self.get("projects", name, "state") or {}
 
@@ -469,6 +480,10 @@ class IncusClient:
 
     def image(self, fingerprint: str) -> dict:
         return _containers_only(self.get("images", fingerprint), "Image")
+
+    def refresh_image(self, fingerprint: str) -> dict:
+        """Ask the server to fetch the image again from where it came from."""
+        return self.request("POST", path("images", fingerprint, "refresh"))
 
     def delete_image(self, fingerprint: str) -> dict:
         return self.request("DELETE", path("images", fingerprint))
@@ -689,8 +704,9 @@ class IncusClient:
     def networks(self) -> list:
         return self.get("networks", recursion=1) or []
 
-    def network(self, name: str) -> dict:
-        return self.get("networks", name)
+    def network(self, name: str, target: str | None = None) -> dict:
+        """``target``: a cluster member, for the settings that differ between members."""
+        return self.get("networks", name, **(_target(target) or {}))
 
     def network_state(self, name: str, target: str | None = None) -> dict:
         return self.get("networks", name, "state", **(_target(target) or {})) or {}

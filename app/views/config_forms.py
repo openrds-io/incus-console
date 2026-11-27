@@ -58,6 +58,13 @@ OCI_SETTINGS = [
     ("oci.cwd", "Working directory", "text", ""),
     ("oci.uid", "User id", "text", "Runs the command as this user id."),
     ("oci.gid", "Group id", "text", ""),
+    (
+        "boot.autorestart",
+        "Restart if it exits",
+        "bool",
+        "Incus starts it again when its command ends or crashes (not when you stop it). "
+        "Needs a recent Incus.",
+    ),
 ]
 ENV_NAME = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")
 # Headings shown above the first setting of each group.

@@ -1,0 +1,34 @@
+{% extends "base.html" %}
+{% from "macros.html" import crumbs, csrf %}
+{% block title %}Roles - {{ target.name }}{% endblock %}
+{% block heading %}{{ crumbs([('Servers', url_for('servers.index')), (target.name, None), ('Roles', None)]) }}{% endblock %}
+{% block content %}
+<p>The console checks every request against the user's role. On a remote server each user also has a certificate of their own, which keeps them inside their projects whatever the console does. Inside a project, though, Incus cannot tell a Viewer from a Project admin: only the console can.</p>
+<p><strong>Roles enforced by Incus</strong> closes that gap. The console writes a small program (an authorization scriptlet) to the server, and Incus runs it for every request made with a restricted certificate. A Viewer's change is then refused by Incus itself.</p>
+{% if not applies %}
+<div class="p-notification--information"><div class="p-notification__content"><p class="p-notification__message">Not available here: it needs server mode, a remote (HTTPS) server and per-user certificates.</p></div></div>
+{% elif problem %}
+<div class="p-notification--negative"><div class="p-notification__content"><p class="p-notification__message">{{ target.name }} could not be asked: {{ problem }}</p></div></div>
+{% elif not supported and not target.enforce_roles %}
+<div class="p-notification--information"><div class="p-notification__content"><p class="p-notification__message">{{ target.name }} cannot do this: it needs an Incus with the authorization scriptlet and client routing (a recent Incus 7).</p></div></div>
+{% else %}
+<div class="p-notification--{{ 'positive' if target.enforce_roles else 'caution' }}"><div class="p-notification__content"><p class="p-notification__message">{% if target.enforce_roles %}On. Incus enforces the roles of {{ users }} user{{ '' if users == 1 else 's' }} on {{ target.name }}.{% else %}Off. On {{ target.name }} the console alone enforces the roles inside a project.{% endif %}</p></div></div>
+<form method="post" data-confirm="{% if target.enforce_roles %}Stop Incus enforcing the roles on {{ target.name }}?{% else %}Have Incus enforce the roles on {{ target.name }}? This changes how it treats every restricted certificate, not only the console's.{% endif %}">
+  {{ csrf() }}
+  <input type="hidden" name="enforce" value="{{ 'off' if target.enforce_roles else 'on' }}">
+  <button class="p-button{{ '' if target.enforce_roles else '--positive' }}">{{ 'Turn off' if target.enforce_roles else 'Turn on' }}</button>
+</form>
+<h2 class="p-heading--5">What changes on the server</h2>
+<ul>
+  <li>Two server settings: <code>authorization.scriptlet</code>, and <code>authorization.client.tls-restricted</code> set to <code>scriptlet</code>.</li>
+  <li>Restricted certificates the console did not issue keep working as before, inside the projects they list. The scriptlet takes over that check from Incus.</li>
+  <li>The console's own certificate, other unrestricted certificates and the server's local socket are not affected.</li>
+  <li>The console rewrites the scriptlet whenever users, groups or roles change.</li>
+</ul>
+<p class="p-text--small u-text--muted">If it ever misbehaves, on the server: <code>incus config unset authorization.client.tls-restricted</code>, then turn it off here.</p>
+{% endif %}
+{% if scriptlet %}
+<h2 class="p-heading--5">The scriptlet{% if not target.enforce_roles %} as it would be{% endif %}</h2>
+<pre class="log-view">{{ scriptlet }}</pre>
+{% endif %}
+{% endblock %}

@@ -63,10 +63,28 @@ def networks():
     return render_template("networks/list.html", networks=rows)
 
 
-def _create(payload: dict) -> dict:
+# Settings of a bridge that belong to each cluster member, not to the network.
+MEMBER_SETTINGS = {
+    "bridge.external_interfaces": (
+        "External interfaces",
+        "Network cards of that member to plug into the bridge, such as eth1.",
+    ),
+}
+
+
+def _member_config(form, member: str) -> dict:
+    """What the form holds for one member's own settings."""
+    found = {key: form.get(f"member:{member}:{key}", "").strip() for key in MEMBER_SETTINGS}
+    return {key: value for key, value in found.items() if value}
+
+
+def _create(payload: dict, per_member: dict[str, dict] | None = None) -> dict:
     """Create a bridge; in a cluster, define it on every member first."""
     for member in cluster_members():
         pending = {"name": payload["name"], "type": payload["type"]}
+        own = (per_member or {}).get(member["server_name"])
+        if own:
+            pending["config"] = own
         try:
             g.incus.create_network(pending, target=member["server_name"])
         except IncusError as error:
@@ -88,13 +106,17 @@ def network_create():
             "description": form.get("description", "").strip(),
             "config": apply_settings({}, form, SETTINGS),
         }
+        per_member = {
+            m["server_name"]: _member_config(form, m["server_name"]) for m in cluster_members()
+        }
         if not NAME.fullmatch(name):
             flash(NAME_RULE, "error")
-        elif run(lambda: _create(payload), f"Network {name} created."):
+        elif run(lambda: _create(payload, per_member), f"Network {name} created."):
             return redirect(url_for("srv.network", name=name))
         defaults = payload["config"]
     return render_template(
         "networks/new.html",
+        member_settings=MEMBER_SETTINGS,
         form=form,
         fields=settings_fields(defaults, settings=SETTINGS, empty="Default"),
     )
@@ -118,6 +140,8 @@ def network(name):
         if member.get("status") == "Online":
             try:
                 row["state"] = g.incus.network_state(name, target=member["server_name"])
+                own = g.incus.network(name, target=member["server_name"]).get("config") or {}
+                row["own"] = {key: own[key] for key in MEMBER_SETTINGS if own.get(key)}
             except IncusError as error:
                 if error.status == 0:
                     raise

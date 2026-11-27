@@ -107,7 +107,11 @@ class FakeIncus:
         self.pending_ops = False  # True: operations stay Running
         self.members: dict[str, dict] = {}  # cluster members by name; empty: not clustered
         self.groups: dict[str, dict] = {}  # cluster groups by name
+        self.config = {"core.storage_buckets_address": ":8555"}  # server settings
         self.pending_networks: dict[str, set] = {}  # members a network is defined on
+        self.network_member_config: dict[str, dict] = {}  # {network: {member: config}}
+        self.refreshes: dict[str, str | None] = {}  # image -> the newer image a refresh brings
+        self.access: list[dict] = []  # what the access endpoints list
         self.pending_pools: dict[str, dict] = {}  # per-member config of pools being defined
         self.targets: list[tuple[str, str, str]] = []  # (method, path, ?target=) of requests
 
@@ -572,7 +576,7 @@ class FakeIncus:
                         "api_version": "1.0",
                         "api_extensions": list(self.extensions),
                         "auth": "trusted",
-                        "config": {"core.storage_buckets_address": ":8555"},
+                        "config": dict(self.config),
                         "environment": {
                             "server_name": next(iter(self.members), "fake"),
                             "server_clustered": bool(self.members),
@@ -585,6 +589,16 @@ class FakeIncus:
                         },
                     }
                 )
+            case ("PATCH", []):
+                for key, value in (body.get("config") or {}).items():
+                    if key == "authorization.client.tls-restricted" and value == "scriptlet":
+                        if not self.config.get("authorization.scriptlet"):
+                            return self.error(400, "No authorization scriptlet is set")
+                    if value == "":
+                        self.config.pop(key, None)
+                    else:
+                        self.config[key] = value
+                return self.sync()
             case (_, ["cluster", *rest]):
                 return self._cluster(method, rest, body)
             case (_, ["certificates", *rest]) if "trust_token" not in body:
@@ -663,6 +677,18 @@ class FakeIncus:
                             image["aliases"].remove(entry)
                             return self.sync()
                 return self.error(404, "Alias not found")
+            case ("POST", ["images", fingerprint, "refresh"]):
+                image = self.images.get(fingerprint)
+                if image is None:
+                    return self.error(404, "Image not found")
+                if not image.get("update_source"):
+                    return self.error(400, "Image has no update source")
+                newer = self.refreshes.pop(fingerprint, None)
+                if newer:
+                    # A newer build arrives as an image of its own, under the same source.
+                    fresh = self.add_image(newer)
+                    self.images[fresh]["update_source"] = dict(image["update_source"])
+                return self.start_op("Refreshing image")
             case ("GET", ["images", fingerprint]):
                 image = self.images.get(fingerprint)
                 return self.sync(image) if image else self.error(404, "Image not found")
@@ -781,9 +807,11 @@ class FakeIncus:
                             return self.error(404, f'Cluster member "{target}" not found')
                         if target in defined:
                             return self.error(400, "The network is already defined on member")
-                        if body.get("config"):
+                        own = body.get("config") or {}
+                        if set(own) - {"bridge.external_interfaces", "parent"}:
                             return self.error(400, "Config key may not be used as member-specific")
                         defined.add(target)
+                        self.network_member_config.setdefault(name, {})[target] = own
                         return self.sync()
                     if defined != set(self.members):
                         return self.error(
@@ -807,6 +835,10 @@ class FakeIncus:
             case (_, ["networks", name, *rest]):
                 if name not in self.networks:
                     return self.error(404, "Network not found")
+                if method == "GET" and not rest and target:
+                    found = self._network(name)
+                    own = self.network_member_config.get(name, {}).get(target, {})
+                    return self.sync({**found, "config": {**found["config"], **own}})
                 return self._network_op(method, name, rest, body)
             case ("POST", ["storage-pools"]):
                 name = body.get("name", "")
@@ -1129,6 +1161,10 @@ class FakeIncus:
         match (method, rest):
             case ("GET", []):
                 return self.sync(self._project(name))
+            case ("GET", ["access"]):
+                if "project_access" not in self.extensions:
+                    return self.error(404, "not found")
+                return self.sync(list(self.access))
             case ("GET", ["state"]):
                 limits = project.get("config") or {}
                 instances = len(self._project(name)["used_by"]) if name == "default" else 0
@@ -1233,6 +1269,10 @@ class FakeIncus:
                 instance["name"] = new_name
                 self.instances[new_name] = instance
                 return self.start_op(f"Renaming instance {name}")
+            case ("GET", ["access"]):
+                if "project_access" not in self.extensions:
+                    return self.error(404, "not found")
+                return self.sync(list(self.access))
             case ("GET", ["logs"]):
                 return self.sync([f"/1.0/instances/{name}/logs/{f}" for f in self.LOGS])
             case ("GET", ["logs", filename]):

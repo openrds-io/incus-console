@@ -169,6 +169,8 @@ def user(user_id):
         "admin/user.html",
         user=target,
         grants=access.grants_for(user_id),
+        instance_grants=access.instance_grants_for(user_id),
+        instance_roles=access.INSTANCE_ROLES,
         group_grants=access.group_grants_for(user_id),
         groups=db.execute(
             "SELECT user_groups.* FROM user_groups JOIN group_members "
@@ -318,6 +320,50 @@ def grant_delete(user_id, grant_id):
     db.execute("DELETE FROM grants WHERE id = ? AND user_id = ?", (grant_id, user_id))
     db.commit()
     flash("Access removed.", "success")
+    if row:
+        _sync(row["server_id"], user_id)
+    return redirect(url_for("admin.user", user_id=user_id))
+
+
+INSTANCE_NAME = re.compile(r"[A-Za-z][A-Za-z0-9-]{0,62}")
+
+
+@bp.post("/users/<int:user_id>/instance-grants")
+def instance_grant_add(user_id):
+    target = _user(user_id)
+    form = request.form
+    project = form.get("project", "").strip() or "default"
+    instance = form.get("instance", "").strip()
+    role = form.get("role", "")
+    server_id = form.get("server_id", type=int) or 0
+    if servers.get(server_id) is None or role not in access.INSTANCE_ROLES:
+        flash("Pick a server and a role.", "error")
+    elif not INSTANCE_NAME.fullmatch(instance):
+        flash("Name the instance.", "error")
+    else:
+        db = get_db()
+        db.execute(
+            "INSERT INTO instance_grants (user_id, server_id, project, instance, role) "
+            "VALUES (?, ?, ?, ?, ?) ON CONFLICT (user_id, server_id, project, instance) "
+            "DO UPDATE SET role = excluded.role",
+            (user_id, server_id, project, instance, role),
+        )
+        db.commit()
+        label = access.ROLE_LABELS[role]
+        flash(f"{target['username']} is now {label} of {instance} in project {project}.", "success")
+        _sync(server_id, user_id)
+    return redirect(url_for("admin.user", user_id=user_id))
+
+
+@bp.post("/users/<int:user_id>/instance-grants/<int:grant_id>/delete")
+def instance_grant_delete(user_id, grant_id):
+    db = get_db()
+    row = db.execute(
+        "SELECT server_id FROM instance_grants WHERE id = ? AND user_id = ?", (grant_id, user_id)
+    ).fetchone()
+    db.execute("DELETE FROM instance_grants WHERE id = ? AND user_id = ?", (grant_id, user_id))
+    db.commit()
+    flash("Access to the instance removed.", "success")
     if row:
         _sync(row["server_id"], user_id)
     return redirect(url_for("admin.user", user_id=user_id))
