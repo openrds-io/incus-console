@@ -2,7 +2,7 @@
   "name": "incus-console-desktop",
   "productName": "Incus Console",
   "version": "26.11.6",
-  "description": "Desktop app for incus-console: a console for Incus",
+  "description": "A desktop and web console for Incus by your friends at OpenRDS",
   "license": "Apache-2.0",
   "author": "OpenRDS",
   "homepage": "https://github.com/openrds-io/incus-console",

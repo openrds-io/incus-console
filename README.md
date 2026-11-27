@@ -1,6 +1,7 @@
 # Incus Console
 
-A web and desktop console for [Incus](https://linuxcontainers.org/incus/).
+A desktop and web console for [Incus](https://linuxcontainers.org/incus/) by your friends at
+[OpenRDS](https://github.com/openrds-io).
 It is a front end to the Incus REST API: a small Python 3.13 / Flask app that
 renders pages on the server and talks to Incus over a local unix socket or HTTPS.
 
