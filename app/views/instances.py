@@ -365,12 +365,16 @@ def _regrant(name: str, new_name: str | None) -> None:
     db = get_db()
     where = "server_id = ? AND project = ? AND instance = ?"
     args = (g.sid, g.project, name)
-    if not db.execute(f"SELECT 1 FROM instance_grants WHERE {where}", args).fetchone():  # noqa: S608
+    changed = 0
+    # The table names are these two constants, never anything from a request.
+    for table in ("instance_grants", "group_instance_grants"):
+        if new_name:
+            done = db.execute(f"UPDATE {table} SET instance = ? WHERE {where}", (new_name, *args))  # noqa: S608
+        else:
+            done = db.execute(f"DELETE FROM {table} WHERE {where}", args)  # noqa: S608
+        changed += done.rowcount
+    if not changed:
         return
-    if new_name:
-        db.execute(f"UPDATE instance_grants SET instance = ? WHERE {where}", (new_name, *args))  # noqa: S608
-    else:
-        db.execute(f"DELETE FROM instance_grants WHERE {where}", args)  # noqa: S608
     db.commit()
     try:
         authz.refresh(g.server)

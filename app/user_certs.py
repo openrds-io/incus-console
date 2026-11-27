@@ -73,7 +73,9 @@ def _wanted(user, server, admin: IncusClient) -> list[str] | None:
     # A role on one instance: the certificate reaches its project. Where Incus
     # enforces the roles (app/authz.py) it narrows that to the instance; where
     # it does not, only the console does.
-    grants |= {row["project"] for row in access.instance_grants_for(user["id"], server["id"])}
+    grants |= {
+        entry["project"] for entry in access.effective_instance_grants(user["id"], server["id"])
+    }
     if not grants:
         return None
     if access.ALL_PROJECTS in grants:

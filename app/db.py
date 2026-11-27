@@ -61,6 +61,15 @@ CREATE TABLE IF NOT EXISTS instance_grants (
     role TEXT NOT NULL CHECK (role IN ('viewer', 'operator')),
     UNIQUE (user_id, server_id, project, instance)
 );
+CREATE TABLE IF NOT EXISTS group_instance_grants (
+    id INTEGER PRIMARY KEY,
+    group_id INTEGER NOT NULL REFERENCES user_groups (id) ON DELETE CASCADE,
+    server_id INTEGER NOT NULL REFERENCES servers (id) ON DELETE CASCADE,
+    project TEXT NOT NULL,
+    instance TEXT NOT NULL,
+    role TEXT NOT NULL CHECK (role IN ('viewer', 'operator')),
+    UNIQUE (group_id, server_id, project, instance)
+);
 CREATE TABLE IF NOT EXISTS user_groups (
     id INTEGER PRIMARY KEY,
     name TEXT NOT NULL UNIQUE COLLATE NOCASE,

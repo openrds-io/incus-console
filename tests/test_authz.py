@@ -313,3 +313,140 @@ def test_single_instances_reach_the_certificate_and_the_scriptlet(remote, fake):
     (cert,) = own_certs(fake)
     assert cert["projects"] == ["team-a"]
     assert '"team-a/web-1": "operator"' in fake.config["authorization.scriptlet"]
+
+
+def test_a_group_can_be_given_one_instance(server_app, setup, admin, fake):
+    from werkzeug.security import generate_password_hash
+
+    from .conftest import PASSWORD
+    from .test_groups import join, make_group
+
+    with server_app.app_context():
+        get_db().execute(
+            "INSERT INTO users (username, password_hash) VALUES ('ina', ?)",
+            (generate_password_hash(PASSWORD),),
+        )
+        get_db().commit()
+    fake.add_instance("other")
+    gid = make_group(admin, "web-team")
+    join(admin, server_app, gid, "ina")
+    done = admin.post(
+        f"/admin/groups/{gid}/instance-grants",
+        {"server_id": setup, "project": "default", "instance": "web-1", "role": "operator"},
+        follow_redirects=True,
+    )
+    assert "Members of web-team are now Operator of web-1 in project default." in text(done)
+    assert "<td>web-1</td>" in text(done)
+    base = f"/servers/{setup}"
+    ina = login(server_app, "ina")
+    listing = text(ina.get(f"{base}/instances"))
+    assert "web-1" in listing and "other" not in listing
+    assert ina.post(f"{base}/instances/web-1/action", {"action": "stop"}).status_code == 302
+    assert ina.get(f"{base}/instances/other").status_code == 403
+    # Shown on the member's page and on the instance's Access page, with the group named.
+    uid = user_id(server_app, "ina")
+    assert "web-1 only" in text(admin.get(f"/admin/users/{uid}"))
+    reach = text(admin.get(f"{base}/instances/web-1/access"))
+    assert "ina" in reach and "web-team" in reach and "this instance" in reach
+    # The stronger of a member's own role and the group's wins.
+    give_instance(admin, server_app, "ina", "web-1", role="viewer")
+    assert (
+        login(server_app, "ina")
+        .post(f"{base}/instances/web-1/action", {"action": "start"})
+        .status_code
+        == 302
+    )
+    # It follows a rename, and goes when removed.
+    fake.instances["web-1"].update(status="Stopped", status_code=102)
+    admin.post(f"{base}/instances/web-1/rename", {"new_name": "web-9"})
+    with server_app.app_context():
+        rows = get_db().execute("SELECT id, instance FROM group_instance_grants").fetchall()
+    assert [r["instance"] for r in rows] == ["web-9"]
+    gone = admin.post(
+        f"/admin/groups/{gid}/instance-grants/{rows[0]['id']}/delete", follow_redirects=True
+    )
+    assert "removed from the group" in text(gone)
+    assert "Name the instance" in text(
+        admin.post(
+            f"/admin/groups/{gid}/instance-grants",
+            {"server_id": setup, "instance": "bad name", "role": "viewer"},
+            follow_redirects=True,
+        )
+    )
+
+
+def test_a_groups_single_instance_reaches_the_scriptlet(remote, fake):  # noqa: F811
+    from .test_groups import join, make_group
+
+    admin = login(remote, "root")
+    fake.extensions += NEEDS
+    admin.post("/servers/1/roles", {"enforce": "on"})
+    gid = make_group(admin, "db-team")
+    join(admin, remote, gid, "vic")
+    admin.post(
+        f"/admin/groups/{gid}/instance-grants",
+        {"server_id": 1, "project": "team-a", "instance": "db", "role": "viewer"},
+    )
+    (cert,) = own_certs(fake)
+    assert cert["projects"] == ["team-a"]
+    assert '"team-a/db": "viewer"' in fake.config["authorization.scriptlet"]
+
+
+def test_the_menu_holds_only_what_the_user_can_open(server_app, setup, admin, fake):
+    base = f"/servers/{setup}"
+    give_instance(admin, server_app, "vic", "web-1")
+    with server_app.app_context():
+        get_db().execute("DELETE FROM grants WHERE user_id = ?", (user_id(server_app, "vic"),))
+        get_db().commit()
+    page = text(login(server_app, "vic").get(f"{base}/instances"))
+    assert f'href="{base}/instances"' in page
+    for hidden in ("profiles", "images", "networks", "volumes", "operations", "projects"):
+        assert f'href="{base}/{hidden}"' not in page, hidden
+    # A viewer of the project keeps the whole menu: every page there can be looked at.
+    viewer = text(login(server_app, "otto").get(f"{base}/instances"))
+    for shown in ("profiles", "images", "networks", "volumes", "operations", "projects"):
+        assert f'href="{base}/{shown}"' in viewer, shown
+
+
+def test_the_scriptlet_lists_who_has_access():
+    scope = {}
+    exec(scriptlet({**ROLES, **INSTANCE_ROLES}), scope)  # noqa: S102
+    assert sorted(scope["get_project_access"]("default")) == ["ina", "mix", "otto", "pam", "vic"]
+    assert sorted(scope["get_project_access"]("team-a")) == ["ina", "pam"]
+    assert sorted(scope["get_instance_access"]("default", "web")) == [
+        "ina",
+        "mix",
+        "otto",
+        "pam",
+        "vic",
+    ]
+    assert sorted(scope["get_instance_access"]("default", "other")) == ["mix", "otto", "pam", "vic"]
+    assert scope["get_instance_access"]("nowhere", "x") == ["pam"]
+
+
+def test_the_access_page_names_console_users_among_incus_identities(remote, fake):  # noqa: F811
+    admin = login(remote, "root")
+    grant(admin, remote, "default")
+    (cert,) = own_certs(fake)
+    fingerprint = next(f for f, c in fake.certificates.items() if c is cert)
+    fake.extensions.append("project_access")
+    fake.access = [
+        {"identifier": fingerprint, "role": "unknown", "provider": "scriptlet"},
+        {"identifier": "ffee", "role": "admin", "provider": "tls"},
+    ]
+    page = text(admin.get("/servers/1/projects/default/access"))
+    assert "vic <span" in page and "(console user)" in page and "ffee" in page
+
+
+def test_other_certificates_given_as_dictionaries_and_explained_in_the_log():
+    """However Incus hands the certificate over, its project list is found; and when
+    it is not, the log says what was there instead."""
+    authorize = run(scriptlet(ROLES))
+    as_dict = SimpleNamespace(Username="tool", Certificate={"projects": ["team-a"]})
+    assert authorize(as_dict, "instance:team-a/db", "can_edit")
+    assert not authorize(as_dict, "instance:default/web", "can_view")
+    logged = []
+    odd = SimpleNamespace(Username="tool", Certificate=SimpleNamespace(Scope=["team-a"]))
+    assert not run(scriptlet(ROLES, log=True), logged)(odd, "instance:team-a/db", "can_view")
+    said = " ".join(str(part) for line in logged for part in line)
+    assert "no project list" in said and "Scope" in said and "Certificate" in said

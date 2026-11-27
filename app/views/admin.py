@@ -172,6 +172,7 @@ def user(user_id):
         instance_grants=access.instance_grants_for(user_id),
         instance_roles=access.INSTANCE_ROLES,
         group_grants=access.group_grants_for(user_id),
+        group_instance_grants=access.group_instance_grants_for(user_id),
         groups=db.execute(
             "SELECT user_groups.* FROM user_groups JOIN group_members "
             "ON group_members.group_id = user_groups.id WHERE group_members.user_id = ? "
@@ -386,7 +387,9 @@ def _group_members(group_id: int) -> list[int]:
 
 def _group_servers(group_id: int) -> list[int]:
     rows = get_db().execute(
-        "SELECT DISTINCT server_id FROM group_grants WHERE group_id = ?", (group_id,)
+        "SELECT server_id FROM group_grants WHERE group_id = ? "
+        "UNION SELECT server_id FROM group_instance_grants WHERE group_id = ?",
+        (group_id, group_id),
     )
     return [row[0] for row in rows]
 
@@ -468,6 +471,14 @@ def group(group_id):
             "ORDER BY servers.name, project",
             (group_id,),
         ).fetchall(),
+        instance_grants=db.execute(
+            "SELECT group_instance_grants.*, servers.name AS server_name "
+            "FROM group_instance_grants "
+            "JOIN servers ON servers.id = group_instance_grants.server_id WHERE group_id = ? "
+            "ORDER BY servers.name, project, instance",
+            (group_id,),
+        ).fetchall(),
+        instance_roles=access.INSTANCE_ROLES,
         servers=servers.all_servers(),
         project_names=_project_names(),
         roles=access.ROLE_LABELS,
@@ -576,6 +587,52 @@ def group_grant_delete(group_id, grant_id):
     db.execute("DELETE FROM group_grants WHERE id = ? AND group_id = ?", (grant_id, group_id))
     db.commit()
     flash("Access removed from the group.", "success")
+    if row:
+        _report(user_certs.sync_many(_group_members(group_id), [row["server_id"]]))
+    return redirect(url_for("admin.group", group_id=group_id))
+
+
+@bp.post("/groups/<int:group_id>/instance-grants")
+def group_instance_grant_add(group_id):
+    target = _group(group_id)
+    form = request.form
+    project = form.get("project", "").strip() or "default"
+    instance = form.get("instance", "").strip()
+    role = form.get("role", "")
+    server_id = form.get("server_id", type=int) or 0
+    if servers.get(server_id) is None or role not in access.INSTANCE_ROLES:
+        flash("Pick a server and a role.", "error")
+    elif not INSTANCE_NAME.fullmatch(instance):
+        flash("Name the instance.", "error")
+    else:
+        db = get_db()
+        db.execute(
+            "INSERT INTO group_instance_grants (group_id, server_id, project, instance, role) "
+            "VALUES (?, ?, ?, ?, ?) ON CONFLICT (group_id, server_id, project, instance) "
+            "DO UPDATE SET role = excluded.role",
+            (group_id, server_id, project, instance, role),
+        )
+        db.commit()
+        label = access.ROLE_LABELS[role]
+        flash(
+            f"Members of {target['name']} are now {label} of {instance} in project {project}.",
+            "success",
+        )
+        _report(user_certs.sync_many(_group_members(group_id), [server_id]))
+    return redirect(url_for("admin.group", group_id=group_id))
+
+
+@bp.post("/groups/<int:group_id>/instance-grants/<int:grant_id>/delete")
+def group_instance_grant_delete(group_id, grant_id):
+    db = get_db()
+    where = "id = ? AND group_id = ?"
+    row = db.execute(
+        f"SELECT server_id FROM group_instance_grants WHERE {where}",  # noqa: S608
+        (grant_id, group_id),
+    ).fetchone()
+    db.execute(f"DELETE FROM group_instance_grants WHERE {where}", (grant_id, group_id))  # noqa: S608
+    db.commit()
+    flash("Access to the instance removed from the group.", "success")
     if row:
         _report(user_certs.sync_many(_group_members(group_id), [row["server_id"]]))
     return redirect(url_for("admin.group", group_id=group_id))
