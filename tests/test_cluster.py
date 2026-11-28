@@ -19,7 +19,7 @@ def test_members_are_listed(browser, sid, fake):
     page = text(browser.get(f"/servers/{sid}/cluster"))
     for name in ("node1", "node2", "node3"):
         assert name in page
-    assert "10.0.0.2:8443" in page and "database-leader" in page and "Online" in page
+    assert "10.0.0.2:8443" in page and "<td>Leader</td>" in page and "Online" in page
     listing = text(browser.get(f"/servers/{sid}/instances"))
     assert f"/servers/{sid}/cluster" in listing
     assert "<th>Member</th>" in listing and "<td>node1</td>" in listing

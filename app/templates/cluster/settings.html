@@ -1,0 +1,16 @@
+{% extends "base.html" %}
+{% from "macros.html" import crumbs, csrf %}
+{% from "config/_fields.html" import settings_inputs %}
+{% block title %}Cluster settings{% endblock %}
+{% block heading %}{{ crumbs([('Cluster', url_for('srv.cluster')), ('Settings', None)]) }}{% endblock %}
+{% block content %}
+<p class="p-form-help-text">These apply to the whole cluster. Leave a field empty for Incus's default, shown in the field.</p>
+<form class="narrow-form" method="post">
+  {{ csrf() }}
+  {{ settings_inputs(fields) }}
+  <div class="form-buttons">
+    <a class="p-button--base" href="{{ url_for('srv.cluster') }}">Cancel</a>
+    <button class="p-button--positive">Save</button>
+  </div>
+</form>
+{% endblock %}

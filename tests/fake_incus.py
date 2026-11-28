@@ -422,12 +422,28 @@ class FakeIncus:
             "metadata": op,
         }
 
-    def _cluster(self, method, rest, body):
+    def _cluster(self, method, rest, body, query=None):
         if not rest:
             return self._cluster_root(method, body)
         if not self.members:
             return self.error(400, "This server is not clustered")
         match (method, rest):
+            case ("POST", ["members", name]) if name in self.members:
+                new_name = body.get("server_name", "")
+                if not new_name or new_name in self.members:
+                    return self.error(400, f'The cluster already has a member named "{new_name}"')
+                self.members = {
+                    (new_name if n == name else n): (
+                        {**m, "server_name": new_name} if n == name else m
+                    )
+                    for n, m in self.members.items()
+                }
+                for group in self.groups.values():
+                    group["members"] = [new_name if m == name else m for m in group["members"]]
+                for instance in self.instances.values():
+                    if instance.get("location") == name:
+                        instance["location"] = new_name
+                return self.sync()
             case ("POST", ["members"]):
                 return self._join_token(body.get("server_name", ""))
             case ("GET", ["members"]):
@@ -435,7 +451,11 @@ class FakeIncus:
             case ("GET", ["members", name]) if name in self.members:
                 return self.sync(self.members[name])
             case ("DELETE", ["members", name]) if name in self.members:
-                if any(i.get("location") == name for i in self.instances.values()):
+                held = [n for n, i in self.instances.items() if i.get("location") == name]
+                if (query or {}).get("force") == "1":
+                    for instance in held:
+                        del self.instances[instance]
+                elif held:
                     return self.error(400, "Cluster member still has instances")
                 del self.members[name]
                 for group in self.groups.values():
@@ -704,7 +724,9 @@ class FakeIncus:
                                 {"Name": name, "Version": "1", "Remote": name == "ceph"}
                                 for name in ("dir", "zfs", "btrfs", "ceph")
                             ],
-                            "server_version": self.version,
+                            "server_version": self.members.get(target, {}).get(
+                                "version", self.version
+                            ),
                             "certificate": ssl.DER_cert_to_PEM_cert(self.certificate_der),
                             "architectures": ["aarch64"],
                         },
@@ -721,7 +743,7 @@ class FakeIncus:
                         self.config[key] = value
                 return self.sync()
             case (_, ["cluster", *rest]):
-                return self._cluster(method, rest, body)
+                return self._cluster(method, rest, body, query)
             case (_, ["certificates", *rest]) if "trust_token" not in body:
                 return self._certificate_op(method, rest, body, peer_cert)
             case ("POST", ["certificates"]):
