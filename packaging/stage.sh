@@ -14,8 +14,11 @@ PREFIX=/opt/incus-console
 # The environment is built at its final path, so the paths inside it are right.
 make_venv() {
   python3 -m venv "$PREFIX/venv"
-  "$PREFIX/venv/bin/pip" install --no-cache-dir --upgrade pip
-  "$PREFIX/venv/bin/pip" install --no-cache-dir -r /src/requirements.txt gunicorn
+  # A cache kept between builds (build.sh mounts one), or none.
+  local cache=(--no-cache-dir)
+  [ -z "${PIP_CACHE_DIR:-}" ] || cache=(--cache-dir "$PIP_CACHE_DIR")
+  "$PREFIX/venv/bin/pip" install "${cache[@]}" --upgrade pip
+  "$PREFIX/venv/bin/pip" install "${cache[@]}" -r /src/requirements.txt gunicorn
   # Nothing in the package should need pip again, or carry build leftovers.
   "$PREFIX/venv/bin/pip" uninstall -y pip >/dev/null
   find "$PREFIX/venv" -name __pycache__ -prune -exec rm -rf {} +

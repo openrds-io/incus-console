@@ -1,0 +1,37 @@
+{
+  "CallerReference": "pkgs.openrds.io-2026-11-28",
+  "Comment": "pkgs.openrds.io: OpenRDS package repositories",
+  "Enabled": true,
+  "Aliases": { "Quantity": 1, "Items": ["pkgs.openrds.io"] },
+  "DefaultRootObject": "",
+  "Origins": {
+    "Quantity": 1,
+    "Items": [
+      {
+        "Id": "openrds-pkgs",
+        "DomainName": "openrds-pkgs.s3.us-east-1.amazonaws.com",
+        "OriginAccessControlId": "E89ELKXBJ4WDU",
+        "S3OriginConfig": { "OriginAccessIdentity": "" }
+      }
+    ]
+  },
+  "DefaultCacheBehavior": {
+    "TargetOriginId": "openrds-pkgs",
+    "ViewerProtocolPolicy": "redirect-to-https",
+    "AllowedMethods": {
+      "Quantity": 2,
+      "Items": ["GET", "HEAD"],
+      "CachedMethods": { "Quantity": 2, "Items": ["GET", "HEAD"] }
+    },
+    "Compress": true,
+    "CachePolicyId": "658327ea-f89d-4fab-a63d-7e88639e58f6"
+  },
+  "PriceClass": "PriceClass_100",
+  "HttpVersion": "http2and3",
+  "IsIPV6Enabled": true,
+  "ViewerCertificate": {
+    "ACMCertificateArn": "arn:aws:acm:us-east-1:911167903349:certificate/9e212b91-d39d-4a0e-88cd-e1a1f0710ffb",
+    "SSLSupportMethod": "sni-only",
+    "MinimumProtocolVersion": "TLSv1.2_2021"
+  }
+}

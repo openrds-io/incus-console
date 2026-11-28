@@ -15,6 +15,11 @@
 # (default: this machine's own architecture; packages are per architecture).
 # Building for the other architecture runs under emulation: it works, slowly.
 #   PLATFORM=linux/amd64 packaging/build.sh all
+#
+# Debian 13 builds run in an image with this week's updates and the build
+# tools in it (made on the week's first build; BUILD_REFRESH=1 for a fresh one
+# now), and pip keeps their downloads in the incus-console-pip volume. The
+# other distributions build in their plain images, as before.
 
 set -euo pipefail
 
@@ -48,13 +53,20 @@ stamp() {
 PLATFORM_ARGS=()
 [ -z "${PLATFORM:-}" ] || PLATFORM_ARGS=(--platform "$PLATFORM")
 
+# shellcheck source=packaging/build-image.sh
+. "$HERE/build-image.sh"
+
 # Run the inside-the-container half for one distribution.
 package() {
-  local image="$1" family="$2" label="$3"
+  local base="$1" family="$2" label="$3" image="$1" cache=()
   mkdir -p "$DIST"
+  if [ "$label" = debian13 ]; then
+    image="$(build_image "$label" "$base")"
+    cache=(-v incus-console-pip:/pip-cache -e PIP_CACHE_DIR=/pip-cache)
+  fi
   echo "==> $label ($image)"
   "$TOOL" run --rm ${PLATFORM_ARGS[@]+"${PLATFORM_ARGS[@]}"} \
-    -v "$ROOT:/src:ro" -v "$DIST:/out" \
+    -v "$ROOT:/src:ro" -v "$DIST:/out" ${cache[@]+"${cache[@]}"} \
     -e VERSION="$VERSION" -e COMMIT_STAMP="$(stamp)" -e LABEL="$label" \
     "$image" bash "/src/packaging/inside-$family.sh"
 }
@@ -85,4 +97,5 @@ case "${1:-}" in
     ;;
   *) sed -n '2,/^$/p' "$0" | sed 's/^# \{0,1\}//'; exit 1 ;;
 esac
-[ "${1:-}" = image ] || ls -l "$DIST"
+# Just what this build made, not everything in dist/.
+[ "${1:-}" = image ] || ls -l "$DIST"/*"$VERSION"[_.~-]* 2>/dev/null || true

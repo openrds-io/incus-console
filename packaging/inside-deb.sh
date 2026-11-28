@@ -35,8 +35,11 @@ CONTROL
 
 main() {
   export DEBIAN_FRONTEND=noninteractive
-  apt-get update -q
-  apt-get install -y -q --no-install-recommends python3 python3-venv ca-certificates
+  # The build image has these already; a plain one gets them now.
+  if ! dpkg -s python3 python3-venv ca-certificates >/dev/null 2>&1; then
+    apt-get update -q
+    apt-get install -y -q --no-install-recommends python3 python3-venv ca-certificates
+  fi
   local arch python next
   arch="$(dpkg --print-architecture)"
   python="$(python3 -c 'import sys; print(f"{sys.version_info[0]}.{sys.version_info[1]}")')"
