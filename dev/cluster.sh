@@ -8,7 +8,10 @@
 # machines can reach.
 #
 #   dev/cluster.sh up [N]     create N members (default 3) and form the cluster
-#   dev/cluster.sh token      print a trust token to add the cluster to the console
+#   dev/cluster.sh spare N    member N as a server on its own, not in the cluster:
+#                             for starting a cluster or joining one from the console
+#   dev/cluster.sh token [N]  print a trust token to add the cluster (or member N)
+#                             to the console
 #   dev/cluster.sh status     the machines and the cluster's members
 #   dev/cluster.sh shell N    a root shell on member N
 #   dev/cluster.sh doctor     network checks, for when members cannot reach each other
@@ -52,7 +55,10 @@ address() {
     awk '{print $4}' | cut -d/ -f1 | head -n1
 }
 
-clustered() { root "$1" incus cluster list >/dev/null 2>&1; }
+# Incus writes cluster.crt when a server starts or joins a cluster. Asking
+# Incus itself fails when the cluster's database cannot be reached, as on a
+# member whose fellow members are stopped or gone.
+clustered() { root "$1" test -e /var/lib/incus/cluster.crt; }
 
 start_machine() {
   local name="$1"
@@ -216,21 +222,31 @@ cluster:
 PRESEED
 }
 
-up() {
-  local count="${1:-3}" first="${PREFIX}1" first_ip name ip i
-  [[ "$count" =~ ^[1-9][0-9]*$ ]] || die "up takes a number of members, such as 3"
-  if [ "$count" -gt 1 ] && [ "$(sysctl -n net.inet.ip.forwarding 2>/dev/null)" != "1" ]; then
+need_forwarding() {
+  if [ "$(sysctl -n net.inet.ip.forwarding 2>/dev/null)" != "1" ]; then
     # See relay_via_mac. Not done here: it needs sudo and is yours to decide.
     die "the members reach each other through the Mac, which is not forwarding packets.
 Turn it on (until the next restart of the Mac) with:
     sudo sysctl -w net.inet.ip.forwarding=1"
   fi
+}
+
+# A running machine with Incus installed; prints nothing.
+prepare() {
+  local name="$1"
+  start_machine "$name"
+  prefer_eth0 "$name"
+  relay_via_mac "$name"
+  install_incus "$name"
+}
+
+up() {
+  local count="${1:-3}" first="${PREFIX}1" first_ip name ip i
+  [[ "$count" =~ ^[1-9][0-9]*$ ]] || die "up takes a number of members, such as 3"
+  if [ "$count" -gt 1 ]; then need_forwarding; fi
   for i in $(seq 1 "$count"); do
     name="${PREFIX}${i}"
-    start_machine "$name"
-    prefer_eth0 "$name"
-    relay_via_mac "$name"
-    install_incus "$name"
+    prepare "$name"
     ip="$(address "$name")"
     [ -n "$ip" ] || die "$name has no address on lima0 (vzNAT)"
     if clustered "$name"; then
@@ -249,10 +265,34 @@ Turn it on (until the next restart of the Mac) with:
   echo "under Servers > Remote, with a trust token. One member is enough; any will do."
 }
 
+# Listening on the network and nothing else: no pool, no network, no cluster.
+# That is what a server joining a cluster must look like, and starting a
+# cluster from the console also works from here.
+spare() {
+  local n="${1:-}" name ip
+  [[ "$n" =~ ^[1-9][0-9]*$ ]] || die "spare takes a member number, such as 4"
+  need_forwarding
+  name="${PREFIX}${n}"
+  prepare "$name"
+  ip="$(address "$name")"
+  [ -n "$ip" ] || die "$name has no address on lima0 (vzNAT)"
+  if clustered "$name"; then
+    die "$name is already a member of a cluster ($ip). To start over, delete it:
+    limactl delete --force $name
+(or 'dev/cluster.sh delete' for all of them), then run this again."
+  fi
+  root "$name" incus config set core.https_address="$ip:$PORT"
+  echo
+  echo "$name stands alone at $ip:$PORT. Add it to Incus Console under Servers > Remote,"
+  echo "with this trust token; then start a cluster on it, or join it to one:"
+  echo
+  token "$n"
+}
+
 token() {
-  local first="${PREFIX}1"
-  exists "$first" || die "no $first yet. Run: dev/cluster.sh up"
-  root "$first" incus config trust add "incus-console-$(date +%s)" | tr -d '\r' | awk 'NF' | tail -n1
+  local member="${PREFIX}${1:-1}"
+  exists "$member" || die "no $member yet. Run: dev/cluster.sh up (or spare ${1:-1})"
+  root "$member" incus config trust add "incus-console-$(date +%s)" | tr -d '\r' | awk 'NF' | tail -n1
 }
 
 status() {
@@ -306,7 +346,8 @@ doctor() {
 
 case "${1:-}" in
   up) up "${2:-}" ;;
-  token) token ;;
+  spare) spare "${2:-}" ;;
+  token) token "${2:-}" ;;
   status) status ;;
   doctor) doctor ;;
   shell)

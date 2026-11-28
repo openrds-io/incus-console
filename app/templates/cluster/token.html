@@ -1,0 +1,20 @@
+{% extends "base.html" %}
+{% from "macros.html" import crumbs %}
+{% block title %}Join token for {{ name }}{% endblock %}
+{% block heading %}{{ crumbs([('Cluster', url_for('srv.cluster')), ('Join token for ' ~ name, None)]) }}{% endblock %}
+{% block content %}
+<div class="p-notification--positive">
+  <div class="p-notification__content">
+    <p class="p-notification__message">A join token for {{ name }}{% if expires %}, good until {{ expires }}{% endif %}. It works once; until it is used it is listed on the Cluster page, where you can revoke it.</p>
+  </div>
+</div>
+<p><code class="token">{{ token }}</code></p>
+<h2 class="p-heading--4">On the new machine</h2>
+<p>Install Incus and leave it unconfigured, then run <code>incus admin init</code>. Say yes to clustering, give the machine's own address, say yes to joining an existing cluster, and paste the token.</p>
+<p>Or answer everything at once: save this as <code>join.yaml</code> on the new machine, with its own address in place of <code>ITS-ADDRESS</code>,</p>
+<pre><code>{{ preseed }}</code></pre>
+<p>and run</p>
+<pre><code>incus admin init --preseed &lt; join.yaml</code></pre>
+{% if member_config %}<p class="p-form-help-text">The <code>member_config</code> entries are this machine's own settings for the cluster's storage pools and networks{% for item in member_config %}{% if item.description %}; {{ item.description }}{% endif %}{% endfor %}. An empty value lets Incus choose.</p>{% endif %}
+<a class="p-button--positive" href="{{ url_for('srv.cluster') }}">Back to the cluster</a>
+{% endblock %}

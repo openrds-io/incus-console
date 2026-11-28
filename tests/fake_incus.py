@@ -107,6 +107,21 @@ class FakeIncus:
         self.pending_ops = False  # True: operations stay Running
         self.members: dict[str, dict] = {}  # cluster members by name; empty: not clustered
         self.groups: dict[str, dict] = {}  # cluster groups by name
+        # What a joining server must answer (GET /1.0/cluster on a member).
+        self.member_config = [
+            {
+                "entity": "storage-pool",
+                "name": "default",
+                "key": "source",
+                "value": "",
+                "description": '"source" property for storage pool "default"',
+            }
+        ]
+        self.version = "6.0"  # environment.server_version
+        self.joins: list[dict] = []  # PUT /1.0/cluster bodies that joined a cluster
+        self.cluster_of: FakeIncus | None = None  # the fake a join token leads to
+        # Stands in for the cluster certificate (GET /1.0 environment.certificate).
+        self.certificate_der = b"fake cluster certificate " + secrets.token_bytes(8)
         self.config = {"core.storage_buckets_address": ":8555"}  # server settings
         self.pending_networks: dict[str, set] = {}  # members a network is defined on
         self.network_member_config: dict[str, dict] = {}  # {network: {member: config}}
@@ -309,10 +324,112 @@ class FakeIncus:
                 load[instance["location"]] += 1
         return min(online, key=lambda n: load[n]), None
 
+    def _cluster_root(self, method, body):
+        if method == "GET":
+            first = next(iter(self.members), "")
+            return self.sync(
+                {
+                    "server_name": first,
+                    "enabled": bool(self.members),
+                    "member_config": self.member_config if self.members else [],
+                }
+            )
+        if method != "PUT" or not body.get("enabled"):
+            return self.error(400, "Clustering cannot be turned off")
+        if self.members:
+            return self.error(400, "This server is already clustered")
+        name = body.get("server_name", "")
+        # Like Incus: with no cluster address it starts a cluster, token or not.
+        if body.get("cluster_address"):
+            return self._join(name, body)
+        address = self.config.get("core.https_address", "")
+        if not address or address.startswith(":"):
+            return self.error(400, "This server is not available on the network")
+        self.make_cluster(name)
+        self.members[name]["url"] = f"https://{address}"
+        return self.start_op("Creating bootstrap node")
+
+    def _join(self, name, body):
+        """Join the cluster of ``cluster_of`` with a token it handed out."""
+        token = body["cluster_token"]
+        try:
+            data = json.loads(base64.b64decode(token))
+        except ValueError:
+            return self.error(400, "Invalid cluster join token")
+        cluster = self.cluster_of
+        op = cluster and next(
+            (
+                o
+                for o in cluster.operations.values()
+                if o["class"] == "token"
+                and o["status"] == "Running"
+                and o["metadata"]["secret"] == data.get("secret")
+            ),
+            None,
+        )
+        if op is None:
+            return self.error(403, "No matching cluster join operation found")
+        if body.get("cluster_certificate") != ssl.DER_cert_to_PEM_cert(cluster.certificate_der):
+            return self.error(400, "The cluster certificate does not match")
+        if self.instances:
+            return self.error(400, "The joining server has instances")
+        if not body.get("server_address"):
+            return self.error(400, "No server address given")
+        with cluster.lock:
+            op.update(status="Success", status_code=200, may_cancel=False)
+            member_name = op["metadata"]["serverName"]
+            cluster.members[member_name] = {
+                **next(iter(cluster.members.values())),
+                "server_name": member_name,
+                "url": f"https://{body['server_address']}",
+                "roles": [],
+                "groups": ["default"],
+            }
+            cluster.groups["default"]["members"].append(member_name)
+        self.joins.append(body)
+        self.members, self.groups = cluster.members, cluster.groups
+        return self.start_op("Joining cluster")
+
+    def _join_token(self, name):
+        if not name or name in self.members:
+            return self.error(400, "The cluster already has a member with name: " + name)
+        op_id = str(uuid.uuid4())
+        address = next(iter(self.members.values()))["url"].removeprefix("https://")
+        op = {
+            "id": op_id,
+            "class": "token",
+            "description": "Requesting a join token",
+            "created_at": _now(),
+            "status": "Running",
+            "status_code": 103,
+            "may_cancel": True,
+            "err": "",
+            "metadata": {
+                "serverName": name,
+                "secret": secrets.token_hex(16),
+                "fingerprint": hashlib.sha256(self.certificate_der).hexdigest(),
+                "addresses": [address],
+                "expiresAt": "2026-11-29T15:04:05Z",
+            },
+        }
+        self.operations[op_id] = op
+        self.op_done[op_id] = threading.Event()
+        return 202, {
+            "type": "async",
+            "status": "Operation created",
+            "status_code": 100,
+            "operation": f"/1.0/operations/{op_id}",
+            "metadata": op,
+        }
+
     def _cluster(self, method, rest, body):
+        if not rest:
+            return self._cluster_root(method, body)
         if not self.members:
             return self.error(400, "This server is not clustered")
         match (method, rest):
+            case ("POST", ["members"]):
+                return self._join_token(body.get("server_name", ""))
             case ("GET", ["members"]):
                 return self.sync(list(self.members.values()))
             case ("GET", ["members", name]) if name in self.members:
@@ -580,11 +697,15 @@ class FakeIncus:
                         "environment": {
                             "server_name": next(iter(self.members), "fake"),
                             "server_clustered": bool(self.members),
+                            "addresses": [self.config["core.https_address"]]
+                            if self.config.get("core.https_address", "").split(":")[0]
+                            else [],
                             "storage_supported_drivers": [
                                 {"Name": name, "Version": "1", "Remote": name == "ceph"}
                                 for name in ("dir", "zfs", "btrfs", "ceph")
                             ],
-                            "server_version": "6.0",
+                            "server_version": self.version,
+                            "certificate": ssl.DER_cert_to_PEM_cert(self.certificate_der),
                             "architectures": ["aarch64"],
                         },
                     }
@@ -608,6 +729,8 @@ class FakeIncus:
                     return self.error(403, "Invalid trust token")
                 if not peer_cert:
                     return self.error(400, "No client certificate provided")
+                if hashlib.sha256(peer_cert).hexdigest() in self.trusted:
+                    return self.error(409, "Client is already trusted")
                 self.trusted.append(hashlib.sha256(peer_cert).hexdigest())
                 return self.sync()
             case ("GET", ["projects"]):

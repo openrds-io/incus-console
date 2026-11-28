@@ -1,0 +1,40 @@
+{% extends "base.html" %}
+{% from "macros.html" import crumbs, csrf %}
+{% block title %}Join {{ target.name }}{% endblock %}
+{% block heading %}{{ crumbs([('Cluster', url_for('srv.cluster')), ('Join a registered server', url_for('srv.cluster_join')), (target.name, None)]) }}{% endblock %}
+{% block content %}
+{% if probe.problem %}
+<div class="p-notification--negative">
+  <div class="p-notification__content">
+    <p class="p-notification__message">{{ target.name }} cannot join: {{ probe.problem }}</p>
+  </div>
+</div>
+{% else %}
+<form class="narrow-form" method="post" action="{{ url_for('srv.cluster_join') }}" data-confirm="Join {{ target.name }} to the cluster? This cannot be undone: it takes on the cluster's projects, profiles, networks and storage pools.">
+  {{ csrf() }}
+  <input type="hidden" name="server" value="{{ target.id }}">
+  <p class="u-text--muted">{{ target.name }} must be empty: Incus refuses a server with instances or images of its own. Afterwards it shows the same cluster as {{ server.name }}, and its own entry under Servers can go.</p>
+  <label for="name">Member name</label>
+  <input type="text" id="name" name="name" value="{{ values.name }}" required>
+  <label for="address">Cluster address</label>
+  <input type="text" id="address" name="address" value="{{ values.address }}" placeholder="192.168.64.6:8443" required>
+  <p class="p-form-help-text">Where the other members reach {{ target.name }}.</p>
+  {% if member_config %}
+  <fieldset>
+    <legend>Its own settings</legend>
+    {% for item in member_config %}
+    <label for="config-{{ loop.index0 }}">{{ item.entity|replace('-', ' ')|capitalize }} {{ item.name }}: <code>{{ item.key }}</code></label>
+    <input type="text" id="config-{{ loop.index0 }}" name="config-{{ loop.index0 }}" value="{{ values.config[loop.index0] }}">
+    {% if item.description %}<p class="p-form-help-text">{{ item.description }}</p>{% endif %}
+    {% endfor %}
+    <p class="p-form-help-text">Settings that differ from member to member. An empty value lets Incus choose.</p>
+  </fieldset>
+  {% endif %}
+  <div class="form-buttons">
+    <a class="p-button--base" href="{{ url_for('srv.cluster_join') }}">Cancel</a>
+    <button class="p-button--positive" data-busy="Joining…">Join the cluster</button>
+  </div>
+  <p class="p-form-help-text" data-busy-note hidden>Joining takes a minute or so: {{ target.name }} takes on the cluster's certificate, settings and storage. Leave this page open.</p>
+</form>
+{% endif %}
+{% endblock %}

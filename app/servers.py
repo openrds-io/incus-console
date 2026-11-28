@@ -45,6 +45,13 @@ def add(name: str, kind: str, address: str, fingerprint: str | None = None) -> i
     return cursor.lastrowid
 
 
+def set_fingerprint(server_id: int, fingerprint: str) -> None:
+    """A server that joins a cluster answers with the cluster's certificate from then on."""
+    db = get_db()
+    db.execute("UPDATE servers SET fingerprint = ? WHERE id = ?", (fingerprint, server_id))
+    db.commit()
+
+
 def delete(server_id: int) -> None:
     db = get_db()
     db.execute("DELETE FROM servers WHERE id = ?", (server_id,))

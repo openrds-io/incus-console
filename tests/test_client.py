@@ -121,6 +121,15 @@ def test_enroll_with_token_presents_client_certificate(fake, tls):
     assert fake.trusted == [fingerprint(tls["cert"])]
 
 
+def test_enroll_accepts_a_server_that_already_trusts_us(fake, tls):
+    first, second = _token(tls), _token(tls, secret="again")
+    fake.tokens.update({first, second})
+    enroll_with_token(first, tls["cert"], tls["key"], timeout=5)
+    result = enroll_with_token(second, tls["cert"], tls["key"], timeout=5)
+    assert result["url"] == tls["url"] and result["fingerprint"] == tls["fingerprint"]
+    assert fake.trusted == [fingerprint(tls["cert"])]
+
+
 def test_enroll_refuses_server_that_does_not_match_token(fake, tls):
     token = _token(tls, fingerprint="cd" * 32)
     fake.tokens.add(token)
