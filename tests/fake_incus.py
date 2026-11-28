@@ -118,6 +118,7 @@ class FakeIncus:
             }
         ]
         self.version = "6.0"  # environment.server_version
+        self.renewed: list[dict] = []  # PUT /1.0/cluster/certificate bodies
         self.joins: list[dict] = []  # PUT /1.0/cluster bodies that joined a cluster
         self.cluster_of: FakeIncus | None = None  # the fake a join token leads to
         # Stands in for the cluster certificate (GET /1.0 environment.certificate).
@@ -428,6 +429,13 @@ class FakeIncus:
         if not self.members:
             return self.error(400, "This server is not clustered")
         match (method, rest):
+            case ("PUT", ["certificate"]):
+                try:
+                    self.certificate_der = ssl.PEM_cert_to_DER_cert(body["cluster_certificate"])
+                except (KeyError, ValueError):
+                    return self.error(400, "Invalid certificate")
+                self.renewed.append(body)
+                return self.sync()
             case ("POST", ["members", name]) if name in self.members:
                 new_name = body.get("server_name", "")
                 if not new_name or new_name in self.members:

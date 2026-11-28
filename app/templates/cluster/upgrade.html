@@ -1,0 +1,36 @@
+{% extends "base.html" %}
+{% set live = true %}
+{% from "macros.html" import crumbs, status %}
+{% block title %}Upgrade Incus{% endblock %}
+{% block heading %}{{ crumbs([('Cluster', url_for('srv.cluster')), ('Upgrade Incus', None)]) }}{% endblock %}
+{% block content %}
+{% if done %}
+<div class="p-notification--positive">
+  <div class="p-notification__content">
+    <p class="p-notification__message">Every member runs Incus {{ newest }}. To see whether there is a newer one, run <code>apt list --upgradable incus</code> on any member.</p>
+  </div>
+</div>
+{% endif %}
+<p>Every member of a cluster runs the same version of Incus. Once one member is upgraded, it waits, <em>blocked</em>, until all the others are too: in that time the cluster takes no changes, but the instances keep running. So upgrade the members one after another without stopping in between, in the order below. The console reaches the cluster through the last one.</p>
+<p class="u-text--muted">There is no need to evacuate a member for an Incus upgrade. Evacuate it (on its own page) before you restart the machine itself, for a new kernel or work on the hardware.</p>
+<table aria-label="Members to upgrade">
+  <thead><tr><th>Order</th><th>Member</th><th>Incus</th><th>Status</th><th>What to do</th></tr></thead>
+  <tbody>
+  {% for row in rows %}
+    <tr>
+      <td>{{ loop.index }}</td>
+      <td><a href="{{ url_for('srv.cluster_member', member=row.name) }}">{{ row.name }}</a>{% if row.console %}<br><span class="p-text--small u-text--muted">The console connects here</span>{% endif %}</td>
+      <td>{{ row.version or '-' }}</td>
+      <td>{{ status(row.status) }}</td>
+      <td>
+        {% if row.state == 'behind' %}On {{ row.name }}, run <code>{{ command }}</code>
+        {% elif row.state == 'waiting' %}Upgraded; it waits for the others{% if row.message %} <span class="u-text--muted">({{ row.message }})</span>{% endif %}
+        {% elif row.state == 'unknown' %}It did not say which version it runs{% if row.message %}: {{ row.message }}{% endif %}
+        {% else %}Up to date{% endif %}
+      </td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+<p class="p-text--small u-text--muted">This page updates itself as the members come back. If the console's own member is the one that is blocked, open the cluster through another member under Servers.</p>
+{% endblock %}

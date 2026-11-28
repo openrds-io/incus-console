@@ -59,6 +59,8 @@ REQUIRED = {
     "srv.cluster_token_create": "admin",
     "srv.cluster_token_revoke": "admin",
     "srv.cluster_settings": "admin",
+    "srv.cluster_upgrade": "admin",
+    "srv.cluster_certificate": "admin",
     # Day-to-day work on instances.
     "srv.instance_action": "operate",
     "srv.instance_terminal": "operate",

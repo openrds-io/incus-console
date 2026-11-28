@@ -388,6 +388,11 @@ class IncusClient:
         operation until it is used, revoked or runs out."""
         return self.request("POST", path("cluster", "members"), body={"server_name": name})
 
+    def update_cluster_certificate(self, certificate: str, key: str) -> dict:
+        """Give every member a new cluster certificate (PEM certificate and key)."""
+        body = {"cluster_certificate": certificate, "cluster_certificate_key": key}
+        return self.request("PUT", path("cluster", "certificate"), body=body)
+
     def cluster_members(self) -> list:
         return self.get("cluster", "members", recursion=1) or []
 

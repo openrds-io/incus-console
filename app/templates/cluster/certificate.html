@@ -1,0 +1,37 @@
+{% extends "base.html" %}
+{% from "macros.html" import crumbs, csrf %}
+{% block title %}Cluster certificate{% endblock %}
+{% block heading %}{{ crumbs([('Cluster', url_for('srv.cluster')), ('Certificate', None)]) }}{% endblock %}
+{% block content %}
+<p>Every member answers with the cluster's certificate, and the members use it with each other.</p>
+{% if current %}
+<table class="facts" aria-label="Current certificate">
+  <tbody>
+    <tr><th>Fingerprint</th><td><code class="token">{{ current.fingerprint }}</code></td></tr>
+    <tr><th>Subject</th><td>{{ current.subject }}</td></tr>
+    <tr><th>Expires</th><td>{{ current.expires }}</td></tr>
+  </tbody>
+</table>
+{% endif %}
+<h2 class="p-heading--4">Renew it</h2>
+<p class="u-text--muted">The console follows the new certificate on its own. Anything else that trusts the old one by its fingerprint, such as an <code>incus remote</code> on someone's machine, has to accept the new one.</p>
+<form class="narrow-form" method="post" data-confirm="Give the whole cluster a new certificate? Clients that pinned the old one stop connecting until they accept the new one.">
+  {{ csrf() }}
+  <label class="p-radio">
+    <input type="radio" class="p-radio__input" name="source" value="generate" checked>
+    <span class="p-radio__label">Make a new self-signed certificate, good for 10 years</span>
+  </label>
+  <label class="p-radio">
+    <input type="radio" class="p-radio__input" name="source" value="paste">
+    <span class="p-radio__label">Use my own (from a certificate authority, say)</span>
+  </label>
+  <label for="certificate">Certificate (PEM)</label>
+  <textarea class="code-editor" id="certificate" name="certificate" rows="5" spellcheck="false" placeholder="-----BEGIN CERTIFICATE-----"></textarea>
+  <label for="key">Private key (PEM, without a passphrase)</label>
+  <textarea class="code-editor" id="key" name="key" rows="5" spellcheck="false" placeholder="-----BEGIN PRIVATE KEY-----"></textarea>
+  <div class="form-buttons">
+    <a class="p-button--base" href="{{ url_for('srv.cluster') }}">Cancel</a>
+    <button class="p-button--positive" data-busy="Renewing…">Renew certificate</button>
+  </div>
+</form>
+{% endblock %}

@@ -43,6 +43,14 @@ Working today:
   cluster-wide settings: offline and healing thresholds, database voters and
   stand-bys, copies of each image, and how long join tokens last. A member
   that has lost touch with the cluster's database says so
+- Upgrading and renewing: an Upgrade Incus page lists the members in the
+  order to upgrade them (the console's own last), gives the command to run on
+  each one that is behind, and shows the upgraded ones waiting, blocked, for
+  the rest; it turns green when every member runs the same version. The
+  Certificate page shows the cluster's certificate and renews it, with a new
+  self-signed one or your own, and the console follows it on its own. A
+  member's page says when to evacuate it: before restarting the machine, not
+  for an Incus upgrade
 - Instances, of either kind: list, start, stop, restart, freeze, delete,
   rename, copy, snapshots (by hand or on a schedule, with expiry), logs
   (console and Incus log files), a settings form for limits and common
@@ -491,8 +499,7 @@ wsgi.py           entry point for gunicorn
 ## Roadmap
 
 1. Clusters, next steps: shared storage drivers (Ceph) and OVN networks
-   (a new bridge already takes external interfaces per member); the guided
-   rolling upgrade and renewing the cluster certificate come next. Copying and
+   (a new bridge already takes external interfaces per member). Copying and
    moving between separately registered servers is out of scope for now
 2. Packages, next steps: a package repository and signing; Linux packages of
    the desktop app (`incus-console-desktop`)
