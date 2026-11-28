@@ -4,6 +4,8 @@
 {% block title %}Cluster{% endblock %}
 {% block controls %}
 {% if members and is_admin() %}
+<a class="p-button is-dense u-no-margin--bottom" href="{{ url_for('srv.cluster_upgrade') }}">Upgrade Incus</a>
+<a class="p-button is-dense u-no-margin--bottom" href="{{ url_for('srv.cluster_certificate') }}">Certificate</a>
 <a class="p-button is-dense u-no-margin--bottom" href="{{ url_for('srv.cluster_settings') }}">Settings</a>
 {% endif %}
 {% endblock %}
@@ -12,7 +14,7 @@
 {% if mixed %}
 <div class="p-notification--caution">
   <div class="p-notification__content">
-    <p class="p-notification__message">The members run different versions of Incus: {{ mixed }}. Incus holds back the upgraded members until every member runs the same version, so finish the upgrade.</p>
+    <p class="p-notification__message">The members run different versions of Incus: {{ mixed }}. Incus holds back the upgraded members until every member runs the same version, so finish the upgrade{% if is_admin() %}: see <a href="{{ url_for('srv.cluster_upgrade') }}">Upgrade Incus</a>{% endif %}.</p>
   </div>
 </div>
 {% endif %}

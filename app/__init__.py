@@ -59,6 +59,7 @@ def create_app(test_config: dict | None = None) -> Flask:
         about,
         admin,
         cluster,
+        cluster_upkeep,
         events,
         files,
         images,

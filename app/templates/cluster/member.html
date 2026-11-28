@@ -33,6 +33,9 @@
 {% endif %}
 {% endblock %}
 {% block content %}
+{% if is_admin() and member.status == 'Online' and not alone %}
+<p class="p-form-help-text">Evacuate a member before you restart or shut down the machine itself (a new kernel, work on the hardware), and restore it afterwards. An Incus upgrade needs no evacuation: see <a href="{{ url_for('srv.cluster_upgrade') }}">Upgrade Incus</a>.</p>
+{% endif %}
 <div class="row">
   <div class="col-3"><h2 class="p-heading--5 section-heading">General</h2></div>
   <div class="col-9">
