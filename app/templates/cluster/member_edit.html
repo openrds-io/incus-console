@@ -12,6 +12,14 @@
   <label for="failure_domain">Failure domain</label>
   <input type="text" id="failure_domain" name="failure_domain" value="{{ member.failure_domain or 'default' }}">
   <p class="p-form-help-text">Members that fail together, such as a rack or a site, share one. Incus spreads the database across failure domains.</p>
+  <label for="scheduler">New instances</label>
+  {% set scheduler = (member.config or {}).get('scheduler.instance', 'all') %}
+  <select id="scheduler" name="scheduler">
+    <option value="all"{% if scheduler == 'all' %} selected{% endif %}>Incus may place them here</option>
+    <option value="group"{% if scheduler == 'group' %} selected{% endif %}>Only when placed on one of its groups</option>
+    <option value="manual"{% if scheduler == 'manual' %} selected{% endif %}>Only when placed here by name</option>
+  </select>
+  <p class="p-form-help-text">Where Incus may put an instance nobody placed: <code class="key-name">scheduler.instance</code>.</p>
   <fieldset>
     <legend>Groups</legend>
     {% for name in groups %}

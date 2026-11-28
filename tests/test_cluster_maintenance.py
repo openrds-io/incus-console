@@ -82,3 +82,57 @@ def test_a_member_without_its_database_is_not_called_standalone(browser, sid, fa
     page = text(browser.get(f"/servers/{sid}/cluster"))
     assert "cannot say which cluster it belongs to: no available cowsql leader" in page
     assert "is not part of a cluster" not in page and "Start a cluster" not in page
+
+
+def test_cluster_settings(browser, sid, fake):
+    fake.make_cluster("node1", "node2", "node3")
+    fake.config["cluster.max_voters"] = "5"
+    assert "/cluster/settings" in text(browser.get(f"/servers/{sid}/cluster"))
+    form = text(browser.get(f"/servers/{sid}/cluster/settings"))
+    assert 'value="5"' in form and 'placeholder="Default: 20"' in form
+    keys = {
+        "cfg:cluster.offline_threshold": "30",
+        "cfg:cluster.healing_threshold": "",
+        "cfg:cluster.max_voters": "",
+        "cfg:cluster.max_standby": "",
+        "cfg:cluster.images_minimal_replica": "-1",
+        "cfg:cluster.join_token_expiry": "1d",
+    }
+    done = browser.post(f"/servers/{sid}/cluster/settings", keys, follow_redirects=True)
+    assert "Cluster settings saved." in text(done)
+    assert fake.config["cluster.offline_threshold"] == "30"
+    assert fake.config["cluster.images_minimal_replica"] == "-1"
+    assert fake.config["cluster.join_token_expiry"] == "1d"
+    assert "cluster.max_voters" not in fake.config  # emptied: back to the default
+
+
+def test_cluster_settings_refuse_what_incus_would(browser, sid, fake):
+    fake.make_cluster("node1", "node2", "node3")
+    for key, value, why in (
+        ("cluster.max_voters", "4", "an odd number"),
+        ("cluster.offline_threshold", "soon", "a whole number"),
+        ("cluster.images_minimal_replica", "0", "1 or more"),
+        ("cluster.join_token_expiry", "3 hours", "a form like 3H"),
+    ):
+        page = text(browser.post(f"/servers/{sid}/cluster/settings", {f"cfg:{key}": value}))
+        assert why in page and key not in fake.config
+
+
+def test_cluster_settings_are_for_admins_and_clusters(server_app, setup, fake, browser, sid):
+    from .conftest import login
+
+    assert browser.get(f"/servers/{sid}/cluster/settings").status_code == 404
+    fake.make_cluster("node1", "node2")
+    pam = login(server_app, "pam")
+    assert pam.get(f"/servers/{setup}/cluster/settings").status_code == 403
+
+
+def test_where_new_instances_may_go(browser, sid, fake):
+    fake.make_cluster("node1", "node2")
+    form = {"description": "", "failure_domain": "default", "groups": "default"}
+    base = f"/servers/{sid}/cluster/members/node2/edit"
+    browser.post(base, {**form, "scheduler": "manual"})
+    assert fake.members["node2"]["config"] == {"scheduler.instance": "manual"}
+    assert 'value="manual" selected' in text(browser.get(base))
+    browser.post(base, {**form, "scheduler": "all"})
+    assert fake.members["node2"]["config"] == {}

@@ -2,6 +2,11 @@
 {% set live = true %}
 {% from "macros.html" import status, csrf, empty %}
 {% block title %}Cluster{% endblock %}
+{% block controls %}
+{% if members and is_admin() %}
+<a class="p-button is-dense u-no-margin--bottom" href="{{ url_for('srv.cluster_settings') }}">Settings</a>
+{% endif %}
+{% endblock %}
 {% block content %}
 {% if members %}
 {% if mixed %}

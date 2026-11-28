@@ -14,6 +14,7 @@ from flask import abort, current_app, flash, g, redirect, render_template, reque
 from .. import access, servers
 from ..incus import IncusConnectionError, IncusError
 from ..incus.client import is_join_token, join_token, normalize_fingerprint, peer_fingerprint
+from .config_forms import settings_fields
 from .scoped import bp, cluster_groups, cluster_members, run
 
 # How an evacuation treats the member's instances. Containers cannot move while
@@ -51,6 +52,103 @@ def _counts() -> dict[str, int]:
         location = instance.get("location") or ""
         counts[location] = counts.get(location, 0) + 1
     return counts
+
+
+# Cluster-wide settings: (key, label, kind, help), as config_forms.SETTINGS.
+CLUSTER_SETTINGS = [
+    (
+        "cluster.offline_threshold",
+        "Offline after (seconds)",
+        "text",
+        "How long a member may miss its heartbeats before it counts as offline.",
+    ),
+    (
+        "cluster.healing_threshold",
+        "Evacuate an offline member after (seconds)",
+        "text",
+        "Incus then restarts its instances on other members. They need shared storage, "
+        "such as Ceph, to come back with their data. 0 or empty: never.",
+    ),
+    (
+        "cluster.max_voters",
+        "Database voters",
+        "text",
+        "How many members hold a vote in the cluster's database: an odd number, 3 or more.",
+    ),
+    (
+        "cluster.max_standby",
+        "Database stand-bys",
+        "text",
+        "Members that keep a copy of the database, ready to become voters.",
+    ),
+    (
+        "cluster.images_minimal_replica",
+        "Copies of each image",
+        "text",
+        "On how many members an image is kept. -1: on every member.",
+    ),
+    (
+        "cluster.join_token_expiry",
+        "Join tokens last",
+        "text",
+        "Such as 3H, 1d or 30M (hours, days, minutes).",
+    ),
+]
+CLUSTER_DEFAULTS = {
+    "cluster.offline_threshold": "20",
+    "cluster.healing_threshold": "0",
+    "cluster.max_voters": "3",
+    "cluster.max_standby": "2",
+    "cluster.images_minimal_replica": "3",
+    "cluster.join_token_expiry": "3H",
+}
+WHOLE_NUMBER = re.compile(r"\d+")
+DURATION = re.compile(r"\d+[SMHdwmy]")
+# Where Incus places new instances: on any member, only when asked by name, or
+# only as a member of one of its groups.
+SCHEDULER_CHOICES = ("all", "manual", "group")
+
+
+def _check_cluster_setting(key: str, value: str) -> str | None:
+    """Why Incus would refuse the value, in plain words; None if it is fine."""
+    if key == "cluster.join_token_expiry":
+        return None if DURATION.fullmatch(value) else "Join tokens last: use a form like 3H."
+    if key == "cluster.images_minimal_replica":
+        ok = value == "-1" or (WHOLE_NUMBER.fullmatch(value) and int(value) >= 1)
+        return None if ok else "Copies of each image: 1 or more, or -1."
+    if not WHOLE_NUMBER.fullmatch(value):
+        label = next(label for k, label, _kind, _help in CLUSTER_SETTINGS if k == key)
+        return f"{label}: a whole number."
+    if key == "cluster.max_voters" and (int(value) < 3 or int(value) % 2 == 0):
+        return "Database voters: an odd number, 3 or more."
+    return None
+
+
+@bp.route("/cluster/settings", methods=["GET", "POST"])
+def cluster_settings():
+    if not cluster_members():
+        abort(404)
+    config = g.incus.server_info().get("config") or {}
+    if request.method == "POST":
+        changes = {
+            key: request.form.get(f"cfg:{key}", "").strip()
+            for key, _label, _kind, _help in CLUSTER_SETTINGS
+        }
+        problems = [p for k, v in changes.items() if v and (p := _check_cluster_setting(k, v))]
+        # Only what changed: an empty field unsets the key, back to Incus's default.
+        changes = {k: v for k, v in changes.items() if v != config.get(k, "")}
+        for problem in problems:
+            flash(problem, "error")
+        if not problems and (
+            not changes
+            or run(lambda: g.incus.update_server_config(changes), "Cluster settings saved.")
+        ):
+            return redirect(url_for("srv.cluster"))
+        config = {**config, **changes}
+    fields = settings_fields(config, settings=CLUSTER_SETTINGS, defaults=CLUSTER_DEFAULTS)
+    for field in fields:
+        field["empty"] = f"Default: {field['default']}"
+    return render_template("cluster/settings.html", fields=fields)
 
 
 # What the roles Incus gives out mean for a member's share of the database.
@@ -598,12 +696,18 @@ def cluster_member_edit(member):
         new_name = form.get("name", member).strip()
         chosen = [name for name in form.getlist("groups") if name in groups]
         automatic = [r for r in found.get("roles") or [] if r not in ASSIGNABLE_ROLES]
+        config = dict(found.get("config") or {})
+        scheduler = form.get("scheduler", "")
+        if scheduler in SCHEDULER_CHOICES and scheduler != "all":
+            config["scheduler.instance"] = scheduler
+        else:
+            config.pop("scheduler.instance", None)
         payload = {
             "description": form.get("description", "").strip(),
             "failure_domain": form.get("failure_domain", "").strip() or "default",
             "roles": automatic + [r for r in form.getlist("roles") if r in ASSIGNABLE_ROLES],
             "groups": chosen,
-            "config": found.get("config") or {},
+            "config": config,
         }
         if not chosen:
             flash("A member belongs to at least one group.", "error")
