@@ -35,6 +35,14 @@ Working today:
   token and run `incus admin init` on the new machine, with a preseed file
   the console writes out. Unused tokens are listed and can be revoked. A
   server on another Incus version than the cluster's is not offered
+- Looking after a cluster: the members list shows each member's part in the
+  database (leader, voter, stand-by or spare) and the Incus version it runs,
+  with a warning when versions differ. Admins rename members, choose where
+  Incus may place new instances (anywhere, only through a group, or only by
+  name), force out a member that is offline for good, and set the
+  cluster-wide settings: offline and healing thresholds, database voters and
+  stand-bys, copies of each image, and how long join tokens last. A member
+  that has lost touch with the cluster's database says so
 - Instances, of either kind: list, start, stop, restart, freeze, delete,
   rename, copy, snapshots (by hand or on a schedule, with expiry), logs
   (console and Incus log files), a settings form for limits and common
@@ -483,8 +491,9 @@ wsgi.py           entry point for gunicorn
 ## Roadmap
 
 1. Clusters, next steps: shared storage drivers (Ceph) and OVN networks
-   (a new bridge already takes external interfaces per member). Copying and moving between separately registered servers is out
-   of scope for now
+   (a new bridge already takes external interfaces per member); the guided
+   rolling upgrade and renewing the cluster certificate come next. Copying and
+   moving between separately registered servers is out of scope for now
 2. Packages, next steps: a package repository and signing; Linux packages of
    the desktop app (`incus-console-desktop`)
 3. Test the desktop installers (`npm run dist`); code signing and a build
