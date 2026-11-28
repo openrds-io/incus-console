@@ -135,7 +135,25 @@ address="$(ip -4 -o addr show dev lima0 | awk '{print $4; exit}' | cut -d/ -f1)"
 [ -n "$gateway" ] && [ -n "$address" ] || exit 0
 prefix="${address%.*}"
 # The Mac will say "talk to it directly"; that is exactly what does not work.
+printf 'net.ipv4.conf.all.accept_redirects = 0\nnet.ipv4.conf.lima0.accept_redirects = 0\n' \
+  > /etc/sysctl.d/60-cluster-sh.conf
 sysctl -qw net.ipv4.conf.all.accept_redirects=0 net.ipv4.conf.lima0.accept_redirects=0
+# Kept in systemd-networkd's settings too, when it manages lima0: plain routes
+# are lost whenever lima0 is set up again (a DHCP renewal, a restart), and the
+# member then cannot reach the others.
+file="$(networkctl status lima0 2>/dev/null | sed -n 's/.*Network File: *//p' | head -n1)"
+if [ -n "$file" ]; then
+  dropin="/etc/systemd/network/$(basename "$file").d"
+  mkdir -p "$dropin"
+  printf '[Route]\nDestination=%s.0/25\nGateway=%s\n\n[Route]\nDestination=%s.128/25\nGateway=%s\n' \
+    "$prefix" "$gateway" "$prefix" "$gateway" > "$dropin/60-cluster-sh-relay.conf"
+  networkctl reload
+  networkctl reconfigure lima0
+  for _ in $(seq 1 30); do
+    ip -4 route show default dev lima0 | grep -q . && break
+    sleep 1
+  done
+fi
 ip -4 route replace "$gateway/32" dev lima0 scope link
 ip -4 route replace "$prefix.0/25" via "$gateway" dev lima0
 ip -4 route replace "$prefix.128/25" via "$gateway" dev lima0

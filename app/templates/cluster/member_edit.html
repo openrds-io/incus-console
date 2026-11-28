@@ -5,6 +5,8 @@
 {% block content %}
 <form class="narrow-form" method="post">
   {{ csrf() }}
+  <label for="name">Name</label>
+  <input type="text" id="name" name="name" value="{{ member.server_name }}" required>
   <label for="description">Description</label>
   <input type="text" id="description" name="description" value="{{ member.description or '' }}" autofocus>
   <label for="failure_domain">Failure domain</label>

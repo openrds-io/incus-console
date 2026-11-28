@@ -53,17 +53,63 @@ def _counts() -> dict[str, int]:
     return counts
 
 
+# What the roles Incus gives out mean for a member's share of the database.
+DATABASE_ROLES = (
+    ("database-leader", "Leader"),
+    ("database", "Voter"),
+    ("database-standby", "Stand-by"),
+)
+
+
+def database_role(member: dict) -> str:
+    """Leader, Voter, Stand-by or Spare: how the member takes part in the database."""
+    roles = member.get("roles") or []
+    return next((label for role, label in DATABASE_ROLES if role in roles), "Spare")
+
+
+def _versions(members: list[dict]) -> dict[str, str]:
+    """The Incus version each member that answers runs."""
+    found = {}
+    for member in members:
+        if member.get("status") == "Offline":
+            continue
+        try:
+            info = g.incus.server_info(target=member["server_name"])
+        except IncusError:
+            continue
+        version = (info.get("environment") or {}).get("server_version")
+        if version:
+            found[member["server_name"]] = version
+    return found
+
+
+def _mixed(versions: dict[str, str]) -> str:
+    """'7.7 on incus1, incus2; 7.8 on incus3' when the versions differ, else ''."""
+    by_version: dict[str, list[str]] = {}
+    for name, version in sorted(versions.items()):
+        by_version.setdefault(version, []).append(name)
+    if len(by_version) < 2:
+        return ""
+    return "; ".join(f"{v} on {', '.join(names)}" for v, names in sorted(by_version.items()))
+
+
 @bp.get("/cluster")
 def cluster():
     members = cluster_members()
     admin = access.is_admin()
+    problem = g.get("cluster_error")
+    versions = _versions(members) if members else {}
     return render_template(
         "cluster/members.html",
         members=members,
+        versions=versions,
+        mixed=_mixed(versions),
+        database_role=database_role,
         groups=cluster_groups(),
         counts=_counts() if members else {},
         tokens=_tokens() if members and admin else [],
-        enable=_enable_defaults() if admin and not members else None,
+        enable=_enable_defaults() if admin and not members and not problem else None,
+        problem=problem,
     )
 
 
@@ -529,9 +575,12 @@ def cluster_member(member):
     instances = sorted(
         i["name"] for i in g.incus.instances() if (i.get("location") or "") == member
     )
+    versions = _versions([found])
     return render_template(
         "cluster/member.html",
         member=found,
+        version=versions.get(member, ""),
+        database=database_role(found),
         resources=_resources(member) if found.get("status") != "Offline" else {},
         instances=instances,
         modes=EVACUATE_MODES,
@@ -546,6 +595,7 @@ def cluster_member_edit(member):
     groups = [group["name"] for group in cluster_groups()]
     if request.method == "POST":
         form = request.form
+        new_name = form.get("name", member).strip()
         chosen = [name for name in form.getlist("groups") if name in groups]
         automatic = [r for r in found.get("roles") or [] if r not in ASSIGNABLE_ROLES]
         payload = {
@@ -557,12 +607,24 @@ def cluster_member_edit(member):
         }
         if not chosen:
             flash("A member belongs to at least one group.", "error")
-        elif run(lambda: g.incus.update_cluster_member(member, payload), f"{member} updated."):
-            return redirect(url_for("srv.cluster_member", member=member))
+        elif new_name != member and not _new_member_name(new_name):
+            pass
+        elif run(
+            lambda: _save_member(member, new_name, payload),
+            f"{new_name} updated." if new_name == member else f"{member} is now {new_name}.",
+        ):
+            return redirect(url_for("srv.cluster_member", member=new_name))
         found = {**found, **payload}
     return render_template(
         "cluster/member_edit.html", member=found, groups=groups, roles=ASSIGNABLE_ROLES
     )
+
+
+def _save_member(member: str, new_name: str, payload: dict) -> dict:
+    response = g.incus.update_cluster_member(member, payload)
+    if new_name != member:
+        response = g.incus.rename_cluster_member(member, new_name)
+    return response
 
 
 @bp.post("/cluster/members/<member>/evacuate")
@@ -603,7 +665,14 @@ def cluster_member_remove(member):
             "error",
         )
         return redirect(url_for("srv.cluster_member", member=member))
-    if run(lambda: g.incus.remove_cluster_member(member), f"{member} removed from the cluster."):
+    # Forcing is for a member that is gone: Incus forgets it, and the
+    # instances and volumes it held, without asking it.
+    force = request.form.get("force") == "1"
+    if force and found.get("status") != "Offline":
+        flash(f"{member} is {found.get('status', '').lower()}: remove it normally.", "error")
+        return redirect(url_for("srv.cluster_member", member=member))
+    removed = f"{member} {'forgotten by' if force else 'removed from'} the cluster."
+    if run(lambda: g.incus.remove_cluster_member(member, force=force), removed):
         return redirect(url_for("srv.cluster"))
     return redirect(url_for("srv.cluster_member", member=member))
 

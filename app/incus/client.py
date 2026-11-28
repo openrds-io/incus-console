@@ -364,8 +364,9 @@ class IncusClient:
 
     # -- server ------------------------------------------------------------
 
-    def server_info(self) -> dict:
-        return self.get()
+    def server_info(self, target: str | None = None) -> dict:
+        """The server, or with ``target`` one member of its cluster."""
+        return self.get(**(_target(target) or {}))
 
     def update_server_config(self, changes: dict) -> dict:
         """Set server settings; an empty value unsets one. The others stay."""
@@ -396,9 +397,16 @@ class IncusClient:
     def update_cluster_member(self, member: str, payload: dict) -> dict:
         return self.request("PUT", path("cluster", "members", member), body=payload)
 
-    def remove_cluster_member(self, member: str) -> dict:
-        """Take a member out of the cluster for good. Incus refuses while it holds instances."""
-        return self.request("DELETE", path("cluster", "members", member))
+    def remove_cluster_member(self, member: str, force: bool = False) -> dict:
+        """Take a member out of the cluster for good. Incus refuses while it holds
+        instances, unless ``force``: for a member that is gone, it forgets it
+        and everything on it without asking the member."""
+        params = {"force": "1"} if force else None
+        return self.request("DELETE", path("cluster", "members", member), params=params)
+
+    def rename_cluster_member(self, member: str, new_name: str) -> dict:
+        body = {"server_name": new_name}
+        return self.request("POST", path("cluster", "members", member), body=body)
 
     def cluster_member_resources(self, member: str) -> dict:
         """Load, memory and storage pool usage of one member."""

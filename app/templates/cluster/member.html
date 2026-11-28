@@ -20,9 +20,15 @@
 </form>
 {% endif %}
 {% if not alone and not console_address %}
+{% if member.status == 'Offline' %}
+<form class="inline" method="post" action="{{ url_for('srv.cluster_member_remove', member=member.server_name) }}" data-confirm="Force {{ member.server_name }} out of the cluster? Use this only when the machine is gone for good: the cluster forgets it without asking it, along with every instance and volume it held, and that cannot be undone.">
+  {{ csrf() }}<input type="hidden" name="force" value="1"><button class="p-button--negative is-dense u-no-margin--bottom">Force remove</button>
+</form>
+{% else %}
 <form class="inline" method="post" action="{{ url_for('srv.cluster_member_remove', member=member.server_name) }}" data-confirm="Remove {{ member.server_name }} from the cluster? This cannot be undone: Incus on that machine has to be reinstalled before it can be used again.">
   {{ csrf() }}<button class="p-button--negative is-dense u-no-margin--bottom">Remove</button>
 </form>
+{% endif %}
 {% endif %}
 {% endif %}
 {% endblock %}
@@ -35,7 +41,9 @@
         <tr><th>Address</th><td><code>{{ (member.url or '')|replace('https://', '') }}</code></td></tr>
         <tr><th>Description</th><td>{{ member.description or '-' }}</td></tr>
         <tr><th>Status</th><td>{{ member.status }}{% if member.message %}: {{ member.message }}{% endif %}</td></tr>
+        <tr><th>Database</th><td>{{ database }}</td></tr>
         <tr><th>Roles</th><td>{{ (member.roles or [])|join(', ') or '-' }}</td></tr>
+        <tr><th>Incus</th><td>{{ version or '-' }}</td></tr>
         <tr><th>Groups</th><td>{{ (member.groups or [])|join(', ') or '-' }}</td></tr>
         <tr><th>Failure domain</th><td>{{ member.failure_domain or '-' }}</td></tr>
         <tr><th>Architecture</th><td>{{ member.architecture or '-' }}</td></tr>

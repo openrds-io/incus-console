@@ -4,20 +4,28 @@
 {% block title %}Cluster{% endblock %}
 {% block content %}
 {% if members %}
+{% if mixed %}
+<div class="p-notification--caution">
+  <div class="p-notification__content">
+    <p class="p-notification__message">The members run different versions of Incus: {{ mixed }}. Incus holds back the upgraded members until every member runs the same version, so finish the upgrade.</p>
+  </div>
+</div>
+{% endif %}
 <p class="u-text--muted">{{ members|length }} member{{ '' if members|length == 1 else 's' }}. They share projects, profiles, images and networks; each instance runs on one of them.</p>
 <table aria-label="Cluster members">
-  <thead><tr><th>Name</th><th>Address</th><th>Roles</th><th>Groups</th><th>Architecture</th><th>Failure domain</th><th>Instances</th><th>Status</th></tr></thead>
+  <thead><tr><th>Name</th><th>Address</th><th>Database</th><th>Groups</th><th>Incus</th><th>Architecture</th><th>Failure domain</th><th>Instances</th><th>Status</th></tr></thead>
   <tbody>
   {% for m in members %}
     <tr>
       <td><a href="{{ url_for('srv.cluster_member', member=m.server_name) }}">{{ m.server_name }}</a>{% if m.description %}<br><span class="p-text--small u-text--muted">{{ m.description }}</span>{% endif %}</td>
       <td><code>{{ (m.url or '')|replace('https://', '') }}</code></td>
-      <td>{{ (m.roles or [])|join(', ') or '-' }}</td>
+      <td>{{ database_role(m) }}</td>
       <td>{{ (m.groups or [])|join(', ') or '-' }}</td>
+      <td>{{ versions.get(m.server_name, '-') }}</td>
       <td>{{ m.architecture or '-' }}</td>
       <td>{{ m.failure_domain or '-' }}</td>
       <td>{{ counts.get(m.server_name, 0) }}</td>
-      <td>{{ status(m.status) }}{% if m.message and m.status != 'Online' %}<br><span class="p-text--small u-text--muted">{{ m.message }}</span>{% endif %}</td>
+      <td>{{ status(m.status) }}{% if m.message and m.message != 'Fully operational' %}<br><span class="p-text--small u-text--muted">{{ m.message }}</span>{% endif %}</td>
     </tr>
   {% endfor %}
   </tbody>
@@ -84,6 +92,13 @@
 </table>
 {% endif %}
 {% endif %}
+{% elif problem %}
+<div class="p-notification--negative">
+  <div class="p-notification__content">
+    <p class="p-notification__message">{{ server.name }} cannot say which cluster it belongs to: {{ problem }}</p>
+  </div>
+</div>
+<p class="u-text--muted">A member that has lost touch with the others answers like this. Another member's page may still show the cluster.</p>
 {% else %}
 {{ empty(server.name ~ " is not part of a cluster.") }}
 {% if enable %}

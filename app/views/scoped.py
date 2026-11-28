@@ -79,8 +79,10 @@ def cluster_members() -> list[dict]:
         environment = g.incus.server_info().get("environment") or {}
         if environment.get("server_clustered"):
             g.cluster_members = sorted(_members(), key=lambda m: m["server_name"])
-    except IncusError:
-        pass
+    except IncusError as error:
+        # Not "it stands alone": a member that has lost touch with the
+        # cluster's database says so here.
+        g.cluster_error = error.message
     return g.cluster_members
 
 
