@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import datetime
 import hashlib
 import re
 import ssl
@@ -207,6 +208,38 @@ def _follow_new_certificate(server, tries: int = 15) -> None:
 
 # -- join tokens --------------------------------------------------------------
 
+_ISO = re.compile(r"(\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d)(?:\.\d+)?(Z|[+-]\d\d:\d\d)?")
+
+
+def in_utc(value: str) -> str:
+    """'2026-11-28 13:07 UTC' from Incus's '2026-11-28T08:07:54.608212927-05:00'."""
+    found = _ISO.fullmatch(value or "")
+    if not found:
+        return value or ""
+    offset = (found[2] or "Z").replace("Z", "+00:00")
+    when = datetime.datetime.fromisoformat(found[1] + offset)
+    return when.astimezone(datetime.UTC).strftime("%Y-%m-%d %H:%M UTC")
+
+
+def preseed(token: str, member_config: list[dict]) -> str:
+    """What ``incus admin init --preseed`` needs to join with this token."""
+    lines = [
+        "cluster:",
+        "  enabled: true",
+        "  server_address: ITS-ADDRESS:8443",
+        f"  cluster_token: {token}",
+    ]
+    if member_config:
+        lines.append("  member_config:")
+        for item in member_config:
+            lines += [
+                f"  - entity: {item.get('entity', '')}",
+                f"    name: {item.get('name', '')}",
+                f"    key: {item.get('key', '')}",
+                f'    value: "{item.get("value") or ""}"',
+            ]
+    return "\n".join(lines) + "\n"
+
 
 def _tokens() -> list[dict]:
     """Join tokens handed out and not used yet."""
@@ -222,7 +255,7 @@ def _tokens() -> list[dict]:
                 {
                     "id": op["id"],
                     "name": meta.get("serverName", ""),
-                    "expires": (meta.get("expiresAt") or "")[:16].replace("T", " "),
+                    "expires": in_utc(meta.get("expiresAt") or ""),
                     "token": join_token(op),
                 }
             )
@@ -261,12 +294,15 @@ def cluster_token_create():
         flash(error.message, "error")
         return redirect(url_for("srv.cluster"))
     meta = operation.get("metadata") or {}
+    token = join_token(operation)
+    member_config = _member_config()
     return render_template(
         "cluster/token.html",
         name=name,
-        token=join_token(operation),
-        expires=(meta.get("expiresAt") or "")[:16].replace("T", " "),
-        member_config=_member_config(),
+        token=token,
+        expires=in_utc(meta.get("expiresAt") or ""),
+        member_config=member_config,
+        preseed=preseed(token, member_config),
     )
 
 

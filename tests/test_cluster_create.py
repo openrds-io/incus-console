@@ -76,6 +76,8 @@ def test_join_tokens(browser, sid, fake):
     assert data["server_name"] == "node3" and data["addresses"] == ["10.0.0.1:8443"]
     assert data["secret"] and data["fingerprint"]
     assert "incus admin init --preseed" in page and "entity: storage-pool" in page
+    assert "good until 2026-11-29 15:04 UTC" in page and "&lt;&lt;" not in page
+    assert f"  cluster_token: {token}\n" in page
     listing = text(browser.get(f"/servers/{sid}/cluster"))
     assert "Join token for" in listing and token in listing
     # A name that is taken gets no token.
@@ -245,3 +247,19 @@ def test_a_server_on_another_incus_version_cannot_join(browser, sid, fake, spare
         {"server": spare_id, "name": "node2", "address": "10.0.0.2", "config-0": ""},
     )
     assert "node2" not in fake.members and not world.joins
+
+
+@pytest.mark.parametrize(
+    ("given", "expected"),
+    [
+        ("2026-11-28T08:07:54.608212927-05:00", "2026-11-28 13:07 UTC"),
+        ("2026-11-29T15:04:05Z", "2026-11-29 15:04 UTC"),
+        ("2026-11-29T15:04:05", "2026-11-29 15:04 UTC"),
+        ("", ""),
+        ("soon", "soon"),
+    ],
+)
+def test_token_expiry_in_utc(given, expected):
+    from app.views.cluster import in_utc
+
+    assert in_utc(given) == expected
