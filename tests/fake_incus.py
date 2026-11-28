@@ -119,6 +119,7 @@ class FakeIncus:
         ]
         self.version = "6.0"  # environment.server_version
         self.renewed: list[dict] = []  # PUT /1.0/cluster/certificate bodies
+        self.metric_calls = 0  # each GET /1.0/metrics moves the counters on
         self.joins: list[dict] = []  # PUT /1.0/cluster bodies that joined a cluster
         self.cluster_of: FakeIncus | None = None  # the fake a join token leads to
         # Stands in for the cluster certificate (GET /1.0 environment.certificate).
@@ -324,6 +325,36 @@ class FakeIncus:
             if instance.get("location") in load:
                 load[instance["location"]] += 1
         return min(online, key=lambda n: load[n]), None
+
+    def _metrics(self, target=None) -> str:
+        """/1.0/metrics in Prometheus text for the running containers (on one member)."""
+        self.metric_calls += 1
+        n = self.metric_calls
+        lines = ["# HELP incus_cpu_seconds_total The total number of CPU time used in seconds."]
+        for name, instance in sorted(self.instances.items()):
+            if instance["status"] != "Running" or instance.get("type") == "virtual-machine":
+                continue
+            if target and instance.get("location") != target:
+                continue
+            base = f'name="{name}",project="{instance.get("project", "default")}",type="container"'
+            lines += [
+                f'incus_cpu_seconds_total{{cpu="0",mode="user",{base}}} {n * 3.0}',
+                f'incus_cpu_seconds_total{{cpu="0",mode="idle",{base}}} {n * 100.0}',
+                f"incus_cpu_effective_total{{{base}}} 2",
+                f"incus_memory_MemTotal_bytes{{{base}}} {1024**3}",
+                f"incus_memory_MemAvailable_bytes{{{base}}} {768 * 1024**2}",
+                f'incus_filesystem_size_bytes{{device="root",fstype="dir",mountpoint="/",{base}}} '
+                f"{10 * 1024**3}",
+                f'incus_filesystem_avail_bytes{{device="root",fstype="dir",mountpoint="/",{base}}} '
+                f"{8 * 1024**3}",
+                f'incus_disk_read_bytes_total{{device="sda",{base}}} {n * 1500.0}',
+                f'incus_disk_written_bytes_total{{device="sda",{base}}} {n * 3000.0}',
+                f'incus_network_receive_bytes_total{{device="eth0",{base}}} {n * 600.0}',
+                f'incus_network_receive_bytes_total{{device="lo",{base}}} {n * 99999.0}',
+                f'incus_network_transmit_bytes_total{{device="eth0",{base}}} {n * 300.0}',
+                f"incus_procs_total{{{base}}} 12",
+            ]
+        return "\n".join(lines) + "\n"
 
     def _cluster_root(self, method, body):
         if method == "GET":
@@ -736,10 +767,15 @@ class FakeIncus:
                                 "version", self.version
                             ),
                             "certificate": ssl.DER_cert_to_PEM_cert(self.certificate_der),
+                            "certificate_fingerprint": hashlib.sha256(
+                                self.certificate_der
+                            ).hexdigest(),
                             "architectures": ["aarch64"],
                         },
                     }
                 )
+            case ("GET", ["metrics"]):
+                return 200, self._metrics(target)
             case ("PATCH", []):
                 for key, value in (body.get("config") or {}).items():
                     if key == "authorization.client.tls-restricted" and value == "scriptlet":

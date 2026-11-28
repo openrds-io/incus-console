@@ -177,7 +177,10 @@ class IncusClient:
 
     def _send(self, method, url_path, *, params=None, body=None, timeout=None):
         """Send one request; return (HTTP status, body bytes)."""
-        query = {"project": self.project, **(params or {})}
+        # A parameter given as None is left out (metrics: every project, not one).
+        query = {
+            k: v for k, v in {"project": self.project, **(params or {})}.items() if v is not None
+        }
         target = f"{url_path}?{urlencode(query)}"
         headers = {"User-Agent": "incus-console"}
         payload = None
@@ -367,6 +370,11 @@ class IncusClient:
     def server_info(self, target: str | None = None) -> dict:
         """The server, or with ``target`` one member of its cluster."""
         return self.get(**(_target(target) or {}))
+
+    def metrics_text(self, target: str | None = None) -> str:
+        """/1.0/metrics in Prometheus text, for every project (of one member, with target)."""
+        params = {"project": None, **(_target(target) or {})}
+        return self.get_text("metrics", **params)
 
     def update_server_config(self, changes: dict) -> dict:
         """Set server settings; an empty value unsets one. The others stay."""

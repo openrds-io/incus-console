@@ -537,3 +537,58 @@ td code {
   width: auto;
   vertical-align: -0.2rem;
 }
+
+/* Metrics: small line graphs drawn as SVG on the server (app/metrics/charts.py). */
+.charts {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(18rem, 1fr));
+  gap: 1rem 1.5rem;
+}
+.chart-box {
+  margin: 0;
+}
+.chart-box figcaption {
+  font-weight: 550;
+  margin-bottom: 0.25rem;
+}
+.chart {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+.chart-line,
+.chart-peak {
+  fill: none;
+  stroke-width: 1.5;
+  vector-effect: non-scaling-stroke;
+}
+.chart-peak {
+  stroke-opacity: 0.35;
+  stroke-dasharray: 3 2;
+}
+.chart-axis {
+  stroke: currentColor;
+  stroke-opacity: 0.25;
+  vector-effect: non-scaling-stroke;
+}
+.chart-label {
+  font-size: 11px;
+  fill: currentColor;
+  fill-opacity: 0.6;
+}
+.chart-legend {
+  font-size: 0.8125rem;
+  margin: 0.25rem 0 0;
+}
+.chart-key::before {
+  content: "";
+  display: inline-block;
+  width: 0.6rem;
+  height: 0.6rem;
+  margin-right: 0.3rem;
+  background: var(--key);
+  border-radius: 50%;
+}
+.range-links {
+  font-size: 0.875rem;
+}

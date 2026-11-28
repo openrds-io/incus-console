@@ -7,3 +7,5 @@ ignore = ["S101"]
 
 [lint.per-file-ignores]
 "tests/*" = ["S"]
+# Table and column names there are the module's own constants; values go as parameters.
+"app/metrics/store.py" = ["S608"]

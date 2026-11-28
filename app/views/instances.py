@@ -9,6 +9,8 @@ from .. import access, authz, catalog, terminal
 from ..db import get_db
 from ..filters import instance_kind
 from ..incus import IncusError
+from ..metrics import store as metrics_store
+from ..metrics.pages import instance_charts
 from . import oci
 from .config_forms import (
     DEVICE_TYPES,
@@ -227,7 +229,19 @@ def instance_create():
 
 @bp.get("/instances/<name>")
 def instance(name):
-    return render_template("instances/detail.html", instance=g.incus.instance(name))
+    found = g.incus.instance(name)
+    span = request.args.get("range", "1h")
+    if span not in metrics_store.RANGES:
+        span = "1h"
+    charts = instance_charts(current_app.config["DATA_DIR"], g.sid, g.project, name, span)
+    return render_template(
+        "instances/detail.html",
+        instance=found,
+        charts=charts,
+        span=span,
+        spans=list(metrics_store.RANGES),
+        collecting=bool(current_app.config.get("METRICS_INTERVAL")),
+    )
 
 
 def _back(name):

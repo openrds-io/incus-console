@@ -135,3 +135,12 @@ AUTHZ_SCRIPTLET_LOG = False
 # Seconds between refreshing the project list of an "all projects" user's
 # certificate, so it picks up projects created outside the console.
 CERT_SYNC_INTERVAL = 300
+
+# Metrics: the console samples /1.0/metrics of every registered server (each
+# cluster member) this often, in seconds; 0 turns collecting off. History is
+# kept in metrics.db in the data directory: every sample for METRICS_RAW_HOURS,
+# 5-minute averages and peaks for METRICS_5M_DAYS, hourly ones for METRICS_1H_DAYS.
+METRICS_INTERVAL = 15
+METRICS_RAW_HOURS = 24
+METRICS_5M_DAYS = 7
+METRICS_1H_DAYS = 30

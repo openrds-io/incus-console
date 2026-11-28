@@ -87,6 +87,27 @@
 <hr class="p-rule">
 <div class="row">
   <div class="col-3">
+    <h2 class="p-heading--5 section-heading">Metrics</h2>
+    <p class="range-links">{% for s in spans %}{% if s == span %}<strong>{{ s }}</strong>{% else %}<a href="{{ url_for('srv.instance', name=instance.name, range=s) }}">{{ s }}</a>{% endif %}{{ ' · ' if not loop.last }}{% endfor %}</p>
+  </div>
+  <div class="col-9">
+    {% if charts %}
+    <div class="charts">
+      {% for title, svg in charts %}
+      <figure class="chart-box"><figcaption>{{ title }}</figcaption>{{ svg }}</figure>
+      {% endfor %}
+    </div>
+    <p class="p-text--small u-text--muted">Averages, with each period's peak as a fainter line. Kept for {{ config.METRICS_1H_DAYS }} days.</p>
+    {% elif collecting %}
+    {{ empty("No history yet. The console records this every " ~ config.METRICS_INTERVAL ~ " seconds while it runs, and while the instance is running.") }}
+    {% else %}
+    {{ empty("Collecting metrics is off (METRICS_INTERVAL = 0).") }}
+    {% endif %}
+  </div>
+</div>
+<hr class="p-rule">
+<div class="row">
+  <div class="col-3">
     <h2 class="p-heading--5 section-heading">Snapshots</h2>
     {% if allowed('srv.instance_settings') %}<a class="p-button is-dense" href="{{ url_for('srv.instance_settings', name=instance.name) }}">Schedule</a>{% endif %}
   </div>

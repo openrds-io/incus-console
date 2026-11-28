@@ -13,7 +13,7 @@ from pathlib import Path
 
 from flask import Flask, g, render_template, request
 
-from . import access, audit, auth, db, filters
+from . import access, audit, auth, db, filters, metrics
 from .incus import IncusConnectionError, IncusError
 from .version import __version__, build
 
@@ -74,6 +74,8 @@ def create_app(test_config: dict | None = None) -> Flask:
         volumes,
     )
     from .views import servers as servers_view
+
+    metrics.start(app)
 
     app.register_blueprint(servers_view.bp)
     app.register_blueprint(about.bp)
