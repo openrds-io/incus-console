@@ -2,14 +2,17 @@
 
 from __future__ import annotations
 
+import hashlib
 import re
+import ssl
+import time
 from urllib.parse import urlsplit
 
 from flask import abort, current_app, flash, g, redirect, render_template, request, url_for
 
 from .. import access, servers
 from ..incus import IncusConnectionError, IncusError
-from ..incus.client import is_join_token, join_token, normalize_fingerprint
+from ..incus.client import is_join_token, join_token, normalize_fingerprint, peer_fingerprint
 from .scoped import bp, cluster_groups, cluster_members, run
 
 # How an evacuation treats the member's instances. Containers cannot move while
@@ -156,11 +159,50 @@ def cluster_enable():
         flash(error.message, "error")
         return redirect(url_for("srv.cluster"))
     payload = {"server_name": name, "enabled": True}
-    run(
-        lambda: g.incus.update_cluster(payload),
-        f"Cluster started: {g.server['name']} is its first member, {name}.",
-    )
+    try:
+        response = g.incus.update_cluster(payload)
+        finished = _wait_for_join(g.incus, response)
+    except IncusError as error:
+        flash(error.message, "error")
+        return redirect(url_for("srv.cluster"))
+    if g.server["kind"] == "https":
+        _follow_new_certificate(g.server)
+    if finished:
+        flash(f"Cluster started: {g.server['name']} is its first member, {name}.", "success")
+    else:
+        flash(f"The cluster is starting on {g.server['name']}.", "info")
     return redirect(url_for("srv.cluster"))
+
+
+def _follow_new_certificate(server, tries: int = 15) -> None:
+    """Starting a cluster gives the server a new certificate, the cluster's.
+
+    Pin it, for every registration at that address, once the server behind
+    it is shown to trust this console and to be clustered: the change was
+    asked for a moment ago, by this console, over the old pinned certificate.
+    """
+    for attempt in range(tries):
+        try:
+            found = peer_fingerprint(server["address"], PROBE_TIMEOUT)
+        except IncusError:
+            found = None
+        if found and found != server["fingerprint"]:
+            break
+        if attempt + 1 < tries:
+            time.sleep(1)
+    else:
+        return
+    client = servers.client_for({**dict(server), "fingerprint": found})
+    try:
+        info = client.server_info()
+    except IncusError:
+        return
+    clustered = (info.get("environment") or {}).get("server_clustered")
+    if info.get("auth") != "trusted" or not clustered:
+        return
+    for row in servers.all_servers():
+        if row["kind"] == "https" and row["address"].rstrip("/") == server["address"].rstrip("/"):
+            servers.set_fingerprint(row["id"], found)
 
 
 # -- join tokens --------------------------------------------------------------
@@ -332,13 +374,25 @@ def _join(row, values: dict, member_config: list[dict]) -> bool:
     answers = [{**item, "value": value} for item, value in pairs]
     try:
         token_op = g.incus.add_cluster_member(name).get("metadata") or {}
+        certificate = (g.incus.server_info().get("environment") or {}).get("certificate", "")
     except IncusError as error:
         flash(error.message, "error")
+        return False
+    meta = token_op.get("metadata") or {}
+    fingerprint = normalize_fingerprint(meta.get("fingerprint"))
+    addresses = meta.get("addresses") or []
+    # Incus does not read the token for the address and certificate (incus
+    # admin init does): without them, the server would start a cluster of its own.
+    if not addresses or not fingerprint or _pem_fingerprint(certificate) != fingerprint:
+        _drop_token(token_op)
+        flash("The cluster's certificate does not match its join token.", "error")
         return False
     payload = {
         "server_name": name,
         "enabled": True,
         "server_address": address,
+        "cluster_address": addresses[0],
+        "cluster_certificate": certificate,
         "cluster_token": join_token(token_op),
         "member_config": answers,
     }
@@ -350,21 +404,33 @@ def _join(row, values: dict, member_config: list[dict]) -> bool:
         _drop_token(token_op)
         flash(f"{row['name']} could not join: {error.message}", "error")
         return False
-    fingerprint = normalize_fingerprint((token_op.get("metadata") or {}).get("fingerprint"))
-    if row["kind"] == "https" and fingerprint:
+    if row["kind"] == "https":
         servers.set_fingerprint(row["id"], fingerprint)
-    if finished:
-        flash(f"{row['name']} joined the cluster as {name}.", "success")
-    else:
+    if not finished:
         flash(
             f"{row['name']} is joining the cluster. It shows up here as {name} when it is done.",
             "info",
         )
+    elif any(m["server_name"] == name for m in g.incus.cluster_members()):
+        flash(f"{row['name']} joined the cluster as {name}.", "success")
+    else:
+        flash(
+            f"{row['name']} says it is done, but the cluster does not list {name}. "
+            "Check its Cluster page.",
+            "error",
+        )
     return True
 
 
+def _pem_fingerprint(pem: str) -> str | None:
+    try:
+        return hashlib.sha256(ssl.PEM_cert_to_DER_cert(pem)).hexdigest()
+    except (ValueError, TypeError):
+        return None
+
+
 def _wait_for_join(joiner, response) -> bool:
-    """True when the join finished. Part way through the server takes on the
+    """True when it finished. Part way through, the server takes on the
     cluster's certificate, so losing touch with it means it is still going."""
     try:
         return joiner.wait(response, current_app.config["ACTION_WAIT"])

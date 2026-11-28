@@ -32,8 +32,9 @@
   {% endif %}
   <div class="form-buttons">
     <a class="p-button--base" href="{{ url_for('srv.cluster_join') }}">Cancel</a>
-    <button class="p-button--positive">Join the cluster</button>
+    <button class="p-button--positive" data-busy="Joining…">Join the cluster</button>
   </div>
+  <p class="p-form-help-text" data-busy-note hidden>Joining takes a minute or so: {{ target.name }} takes on the cluster's certificate, settings and storage. Leave this page open.</p>
 </form>
 {% endif %}
 {% endblock %}

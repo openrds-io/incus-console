@@ -119,6 +119,8 @@ class FakeIncus:
         ]
         self.joins: list[dict] = []  # PUT /1.0/cluster bodies that joined a cluster
         self.cluster_of: FakeIncus | None = None  # the fake a join token leads to
+        # Stands in for the cluster certificate (GET /1.0 environment.certificate).
+        self.certificate_der = b"fake cluster certificate " + secrets.token_bytes(8)
         self.config = {"core.storage_buckets_address": ":8555"}  # server settings
         self.pending_networks: dict[str, set] = {}  # members a network is defined on
         self.network_member_config: dict[str, dict] = {}  # {network: {member: config}}
@@ -336,7 +338,8 @@ class FakeIncus:
         if self.members:
             return self.error(400, "This server is already clustered")
         name = body.get("server_name", "")
-        if body.get("cluster_token"):
+        # Like Incus: with no cluster address it starts a cluster, token or not.
+        if body.get("cluster_address"):
             return self._join(name, body)
         address = self.config.get("core.https_address", "")
         if not address or address.startswith(":"):
@@ -365,6 +368,8 @@ class FakeIncus:
         )
         if op is None:
             return self.error(403, "No matching cluster join operation found")
+        if body.get("cluster_certificate") != ssl.DER_cert_to_PEM_cert(cluster.certificate_der):
+            return self.error(400, "The cluster certificate does not match")
         if self.instances:
             return self.error(400, "The joining server has instances")
         if not body.get("server_address"):
@@ -401,7 +406,7 @@ class FakeIncus:
             "metadata": {
                 "serverName": name,
                 "secret": secrets.token_hex(16),
-                "fingerprint": "ab" * 32,
+                "fingerprint": hashlib.sha256(self.certificate_der).hexdigest(),
                 "addresses": [address],
                 "expiresAt": "2026-11-29T15:04:05Z",
             },
@@ -699,6 +704,7 @@ class FakeIncus:
                                 for name in ("dir", "zfs", "btrfs", "ceph")
                             ],
                             "server_version": "6.0",
+                            "certificate": ssl.DER_cert_to_PEM_cert(self.certificate_der),
                             "architectures": ["aarch64"],
                         },
                     }

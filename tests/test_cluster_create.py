@@ -126,6 +126,8 @@ def test_join_a_registered_server(browser, sid, fake, spare):
     assert join["server_address"] == "10.0.0.3:8443" and join["server_name"] == "node3"
     assert join["member_config"][0]["key"] == "source"
     assert join["member_config"][0]["value"] == "/srv/pool"
+    assert join["cluster_address"] == "10.0.0.1:8443"
+    assert "BEGIN CERTIFICATE" in join["cluster_certificate"]
     # Now part of the cluster, it is no longer offered.
     assert "already part of a cluster" in text(browser.get(f"/servers/{sid}/cluster/join"))
 
@@ -172,3 +174,58 @@ def test_only_console_admins_build_clusters(server_app, setup, fake):
     assert pam.post(f"{base}/tokens", {"name": "node3"}).status_code == 403
     assert pam.get(f"{base}/join").status_code == 403
     assert not [o for o in fake.operations.values() if o["class"] == "token"]
+
+
+class _Answers:
+    def __init__(self, auth="trusted", clustered=True):
+        self.info = {"auth": auth, "environment": {"server_clustered": clustered}}
+
+    def server_info(self):
+        return self.info
+
+
+@pytest.mark.parametrize(
+    ("answers", "pinned"),
+    [
+        (_Answers(), "bb" * 32),
+        (_Answers(auth="untrusted"), "aa" * 32),
+        (_Answers(clustered=False), "aa" * 32),
+    ],
+)
+def test_starting_a_cluster_pins_its_new_certificate(app, monkeypatch, answers, pinned):
+    from app import servers
+    from app.views import cluster as view
+
+    monkeypatch.setattr(view, "peer_fingerprint", lambda url, timeout: "bb" * 32)
+    monkeypatch.setattr(view.servers, "client_for", lambda row: answers)
+    with app.app_context():
+        first = servers.add("incus1", "https", "https://10.0.0.9:8443", "aa" * 32)
+        again = servers.add("again", "https", "https://10.0.0.9:8443/", "aa" * 32)
+        other = servers.add("other", "https", "https://10.0.0.8:8443", "aa" * 32)
+        view._follow_new_certificate(servers.get(first), tries=1)
+        found = [servers.get(i)["fingerprint"] for i in (first, again, other)]
+    assert found == [pinned, pinned, "aa" * 32]
+
+
+def test_a_server_that_starts_its_own_cluster_is_not_reported_as_joined(
+    browser, sid, fake, spare, monkeypatch
+):
+    world, spare_id = spare
+    fake.make_cluster("node1")
+    world.cluster_of = fake
+    world.config["core.https_address"] = "10.0.0.2:8443"
+    # As Incus does when the request lacks the cluster address.
+    from app.incus import IncusClient
+
+    real = IncusClient.update_cluster
+    monkeypatch.setattr(
+        IncusClient,
+        "update_cluster",
+        lambda self, body: real(self, {k: v for k, v in body.items() if k != "cluster_address"}),
+    )
+    done = browser.post(
+        f"/servers/{sid}/cluster/join",
+        {"server": spare_id, "name": "node2", "address": "10.0.0.2", "config-0": ""},
+        follow_redirects=True,
+    )
+    assert "the cluster does not list node2" in text(done)

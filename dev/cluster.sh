@@ -55,7 +55,10 @@ address() {
     awk '{print $4}' | cut -d/ -f1 | head -n1
 }
 
-clustered() { root "$1" incus cluster list >/dev/null 2>&1; }
+# Incus writes cluster.crt when a server starts or joins a cluster. Asking
+# Incus itself fails when the cluster's database cannot be reached, as on a
+# member whose fellow members are stopped or gone.
+clustered() { root "$1" test -e /var/lib/incus/cluster.crt; }
 
 start_machine() {
   local name="$1"
@@ -274,10 +277,11 @@ spare() {
   ip="$(address "$name")"
   [ -n "$ip" ] || die "$name has no address on lima0 (vzNAT)"
   if clustered "$name"; then
-    say "$name is already a member of a cluster ($ip)"
-    return
+    die "$name is already a member of a cluster ($ip). To start over, delete it:
+    limactl delete --force $name
+(or 'dev/cluster.sh delete' for all of them), then run this again."
   fi
-  root "$name" incus config set core.https_address "$ip:$PORT"
+  root "$name" incus config set core.https_address="$ip:$PORT"
   echo
   echo "$name stands alone at $ip:$PORT. Add it to Incus Console under Servers > Remote,"
   echo "with this trust token; then start a cluster on it, or join it to one:"

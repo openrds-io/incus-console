@@ -873,6 +873,27 @@ def decode_trust_token(token: str) -> dict:
     return data
 
 
+def peer_fingerprint(url: str, timeout: float = 10) -> str:
+    """SHA-256 fingerprint of the certificate a server presents, unchecked.
+
+    Only for a server that has just changed its certificate on our say-so;
+    the caller must confirm it is still the same, trusting, server.
+    """
+    parts = urlsplit(url)
+    if parts.scheme != "https" or not parts.hostname:
+        raise IncusConnectionError("Remote servers need an https:// address.")
+    context = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
+    context.check_hostname = False
+    context.verify_mode = ssl.CERT_NONE
+    try:
+        with socket.create_connection((parts.hostname, parts.port or 8443), timeout) as raw:
+            with context.wrap_socket(raw, server_hostname=parts.hostname) as tls:
+                der = tls.getpeercert(binary_form=True)
+    except OSError as exc:
+        raise IncusConnectionError(f"Cannot reach Incus at {url}: {exc}") from exc
+    return hashlib.sha256(der).hexdigest()
+
+
 # -- cluster join tokens -----------------------------------------------------
 
 

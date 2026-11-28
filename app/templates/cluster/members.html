@@ -62,7 +62,7 @@
 <form class="inline-form" method="post" action="{{ url_for('srv.cluster_token_create') }}">
   {{ csrf() }}
   <input type="text" name="name" placeholder="New member, e.g. node4" aria-label="New member's name" required>
-  <button class="p-button">Get a join token</button>
+  <button class="p-button" data-busy="Asking…">Get a join token</button>
 </form>
 {% if tokens %}
 <table aria-label="Join tokens">
@@ -98,8 +98,9 @@
   <input type="text" id="address" name="address" value="{{ enable.address }}" placeholder="192.168.64.5:8443" required>
   <p class="p-form-help-text">Where the other members reach it. {% if enable.current %}It listens at <code>{{ enable.current }}</code> now.{% else %}It does not listen on the network yet; this turns that on.{% endif %}</p>
   <div class="form-buttons">
-    <button class="p-button--positive">Start cluster</button>
+    <button class="p-button--positive" data-busy="Starting…">Start cluster</button>
   </div>
+  <p class="p-form-help-text" data-busy-note hidden>This takes a few seconds while {{ server.name }} switches to the cluster's certificate.</p>
 </form>
 {% endif %}
 {% endif %}
