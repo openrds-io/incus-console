@@ -24,3 +24,22 @@
 {% macro empty(text) -%}
 <p class="u-text--muted empty-state">{{ text }}</p>
 {%- endmacro %}
+
+{# Links to a page's graph ranges (1h, 24h, ...), the current one in bold. #}
+{% macro range_links(spans, span, endpoint) -%}
+<p class="range-links">{% for s in spans %}{% if s == span %}<strong>{{ s }}</strong>{% else %}<a href="{{ url_for(endpoint, range=s, **kwargs) }}">{{ s }}</a>{% endif %}{{ ' · ' if not loop.last }}{% endfor %}</p>
+{%- endmacro %}
+
+{# The graphs of a page, or a note when there is no history yet. #}
+{% macro chart_grid(charts, none_yet) -%}
+{% if charts %}
+<div class="charts">
+  {% for title, svg in charts %}
+  <figure class="chart-box"><figcaption>{{ title }}</figcaption>{{ svg }}</figure>
+  {% endfor %}
+</div>
+<p class="p-text--small u-text--muted">Averages, with each period's peak as a fainter line.</p>
+{% else %}
+{{ empty(none_yet) }}
+{% endif %}
+{%- endmacro %}

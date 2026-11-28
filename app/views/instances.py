@@ -10,7 +10,7 @@ from ..db import get_db
 from ..filters import instance_kind
 from ..incus import IncusError
 from ..metrics import store as metrics_store
-from ..metrics.pages import instance_charts
+from ..metrics.pages import instance_charts, sparklines
 from . import oci
 from .config_forms import (
     DEVICE_TYPES,
@@ -53,7 +53,8 @@ EDITABLE = ("architecture", "config", "devices", "ephemeral", "profiles", "state
 def instances():
     rows = sorted(g.incus.instances(), key=lambda i: i["name"])
     rows = access.visible_instances(g.sid, g.project, rows)
-    return render_template("instances/list.html", instances=rows)
+    sparks = sparklines(current_app.config["DATA_DIR"], g.sid, g.project)
+    return render_template("instances/list.html", instances=rows, sparks=sparks)
 
 
 def _placement(form) -> tuple[str | None, str | None]:

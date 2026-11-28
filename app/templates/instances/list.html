@@ -8,7 +8,7 @@
 {% if instances %}
 <p class="u-text--muted">Showing all {{ instances|length }} instance{{ '' if instances|length == 1 else 's' }}</p>
 <table aria-label="Instances">
-  <thead><tr><th>Name</th><th>Type</th>{% if cluster_members %}<th>Member</th>{% endif %}<th>Description</th><th>IPv4</th><th>Snapshots</th><th>Status</th><th class="u-align--right">Actions</th></tr></thead>
+  <thead><tr><th>Name</th><th>Type</th>{% if cluster_members %}<th>Member</th>{% endif %}<th>Description</th><th>IPv4</th>{% if sparks %}<th title="The last hour">CPU</th><th title="The last hour">Memory</th>{% endif %}<th>Snapshots</th><th>Status</th><th class="u-align--right">Actions</th></tr></thead>
   <tbody>
   {% for i in instances %}
     <tr>
@@ -17,6 +17,7 @@
       {% if cluster_members %}<td>{{ i.location or '-' }}</td>{% endif %}
       <td>{{ i.description or (i.config or {}).get('image.description', '') }}</td>
       <td>{{ i|addresses|join(', ') }}</td>
+      {% if sparks %}{% set spark = sparks.get(i.name) %}<td>{{ spark[0] if spark else '' }}</td><td>{{ spark[1] if spark else '' }}</td>{% endif %}
       <td>{{ (i.snapshots or [])|length }}</td>
       <td>{{ status(i.status) }}</td>
       <td class="u-align--right">{{ actions(i, 'list') }}</td>

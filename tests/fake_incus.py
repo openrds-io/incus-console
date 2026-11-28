@@ -120,6 +120,8 @@ class FakeIncus:
         self.version = "6.0"  # environment.server_version
         self.renewed: list[dict] = []  # PUT /1.0/cluster/certificate bodies
         self.metric_calls = 0  # each GET /1.0/metrics moves the counters on
+        # Clear for an Incus whose member state leaves out the CPU count (as 7.7 does).
+        self.cpus_in_state = True
         self.joins: list[dict] = []  # PUT /1.0/cluster bodies that joined a cluster
         self.cluster_of: FakeIncus | None = None  # the fake a join token leads to
         # Stands in for the cluster certificate (GET /1.0 environment.certificate).
@@ -524,7 +526,7 @@ class FakeIncus:
                             "total_swap": 0,
                             "free_swap": 0,
                             "processes": 123,
-                            "logical_cpus": 4,
+                            **({"logical_cpus": 4} if self.cpus_in_state else {}),
                         },
                         "storage_pools": {
                             "default": {"space": {"used": 5 * gib, "total": 20 * gib}}
@@ -774,7 +776,13 @@ class FakeIncus:
                         },
                     }
                 )
+            case ("GET", ["resources"]):
+                return self.sync({"cpu": {"total": 4}, "memory": {"total": 8 * 1024**3}})
             case ("GET", ["metrics"]):
+                if not self.pools:  # as Incus does
+                    return self.error(
+                        404, "Failed loading storage pools: Storage pool(s) not found"
+                    )
                 return 200, self._metrics(target)
             case ("PATCH", []):
                 for key, value in (body.get("config") or {}).items():

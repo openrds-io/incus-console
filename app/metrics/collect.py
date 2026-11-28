@@ -2,11 +2,14 @@
 
 from __future__ import annotations
 
+import logging
 import time
 
 from .. import servers
 from ..incus import IncusError
 from . import prom, store
+
+log = logging.getLogger(__name__)
 
 # Counters, whose change per second is what is kept.
 COUNTERS = ("busy", "rd", "wr", "rx", "tx")
@@ -63,6 +66,7 @@ def values(now: dict, before: dict | None, seconds: float) -> dict:
         rates[key] = change / seconds if change >= 0 else None  # restarted: no rate
     if rates["busy"] is not None:
         cpus = now.get("cpus") or 1
+        out["cores"] = max(0.0, rates["busy"])
         out["cpu"] = min(100.0, max(0.0, 100 * rates["busy"] / cpus))
     for key in ("rd", "wr", "rx", "tx"):
         out[key] = rates[key]
@@ -78,19 +82,60 @@ class Collector:
         self.last: dict[tuple, tuple[float, dict]] = {}
         self.rounds = 0
         self.clock = time.time
+        self.failing: dict[str, str] = {}  # where /1.0/metrics last failed, and why
+        self.cpus: dict[str, float | None] = {}  # members' CPU counts
 
-    def _texts(self, client, info: dict) -> list[str]:
-        """/1.0/metrics of the server, or of each online member of its cluster."""
+    def _metrics(self, client, where: str, target: str | None = None) -> str:
+        """/1.0/metrics, or "" when Incus will not give it. Incus fails the whole
+        request on a server without storage pools, for one; that is said once."""
+        try:
+            text = client.metrics_text(target=target)
+        except IncusError as error:
+            if self.failing.get(where) != error.message:
+                log.warning("No metrics from %s: %s", where, error.message)
+            self.failing[where] = error.message
+            return ""
+        self.failing.pop(where, None)
+        return text
+
+    def _texts(self, client, info: dict, server: str) -> list[tuple[str | None, str]]:
+        """(member, /1.0/metrics) of the server, or of each online member of its cluster."""
         if not (info.get("environment") or {}).get("server_clustered"):
-            return [client.metrics_text()]
-        texts = []
-        for member in client.cluster_members():
-            if member.get("status") == "Online":
-                try:
-                    texts.append(client.metrics_text(target=member["server_name"]))
-                except IncusError:
-                    continue
-        return texts
+            return [(None, self._metrics(client, server))]
+        return [
+            (m["server_name"], self._metrics(client, m["server_name"], m["server_name"]))
+            for m in client.cluster_members()
+            if m.get("status") == "Online"
+        ]
+
+    def _cpus(self, client, member: str) -> float | None:
+        """How many CPUs a member has: /1.0/resources, asked once per member."""
+        if member not in self.cpus:
+            try:
+                found = client.get("resources", target=member) or {}
+                self.cpus[member] = (found.get("cpu") or {}).get("total")
+            except IncusError:
+                return None
+        return self.cpus[member]
+
+    def _member_row(self, client, member: str, rows: list[dict]) -> dict:
+        """A member's own load and memory, and what its instances use together."""
+        out: dict = {"instances": len(rows)}
+        for key in ("cores", "rd", "wr", "rx", "tx"):
+            known = [r[key] for r in rows if r.get(key) is not None]
+            out[key] = sum(known) if known else None
+        try:
+            info = client.cluster_member_resources(member).get("sysinfo") or {}
+        except IncusError:
+            info = {}
+        if info.get("load_averages"):
+            out["load"] = info["load_averages"][0]
+        # Not every Incus says logical_cpus here; resources always has the count.
+        out["cpus"] = info.get("logical_cpus") or self._cpus(client, member)
+        if info.get("total_ram"):
+            out["mem_total"] = info["total_ram"]
+            out["mem"] = max(0, info["total_ram"] - (info.get("free_ram") or 0))
+        return out
 
     def cycle(self) -> None:
         done: set[str] = set()
@@ -106,12 +151,13 @@ class Collector:
                 if source in done:
                     continue
                 done.add(source)
-                texts = self._texts(client, info)
+                texts = self._texts(client, info, row["name"])
             except IncusError:
                 continue
             now = self.clock()
             ts = int(now)
-            for text in texts:
+            for member, text in texts:
+                rows = []
                 for (project, name), totals in instance_totals(text).items():
                     key = (source, project, name)
                     before = self.last.get(key)
@@ -119,6 +165,10 @@ class Collector:
                     row = values(totals, before[1] if before else None, seconds)
                     store.add(self.conn, source, project, name, ts, row)
                     self.last[key] = (now, totals)
+                    rows.append(row)
+                if member:
+                    member_row = self._member_row(client, member, rows)
+                    store.add_row(self.conn, "member", source, (member,), ts, member_row)
         self.conn.commit()
         self.rounds += 1
         # Rolling up and pruning once a minute is plenty.

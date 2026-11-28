@@ -592,3 +592,14 @@ td code {
 .range-links {
   font-size: 0.875rem;
 }
+.sparkline {
+  display: block;
+  width: 5.5rem;
+  height: 1.25rem;
+}
+.sparkline polyline {
+  fill: none;
+  stroke: var(--chart-1, #0e8420);
+  stroke-width: 1.25;
+  vector-effect: non-scaling-stroke;
+}

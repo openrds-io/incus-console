@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 {% set live = true %}
-{% from "macros.html" import crumbs, csrf, empty %}
+{% from "macros.html" import crumbs, csrf, empty, range_links, chart_grid %}
 {% block title %}{{ project.name }}{% endblock %}
 {% block heading %}{{ crumbs([('Projects', url_for('srv.projects')), (project.name, None)]) }}{% if is_current %} <span class="title-status">current</span>{% endif %}{% endblock %}
 {% block controls %}
@@ -52,6 +52,32 @@
     </table>
     {% else %}
     {{ empty("Incus did not report usage for this project.") }}
+    {% endif %}
+  </div>
+</div>
+<hr class="p-rule">
+<div class="row">
+  <div class="col-3">
+    <h2 class="p-heading--5 section-heading">Over time</h2>
+    {{ range_links(spans, span, 'srv.project_detail', name=project.name) }}
+  </div>
+  <div class="col-9">
+    {{ chart_grid(charts, "No history yet: the console records its instances every " ~ config.METRICS_INTERVAL ~ " seconds while it runs.") }}
+    {% if consumers %}
+    <h3 class="p-heading--5">Busiest in the last hour</h3>
+    <table aria-label="Busiest instances">
+      <thead><tr><th>Instance</th><th>CPU</th><th>Of its own</th><th>Memory</th></tr></thead>
+      <tbody>
+      {% for c in consumers %}
+        <tr>
+          <td><a href="{{ url_for('srv.instance', name=c.name, project=project.name) }}">{{ c.name }}</a></td>
+          <td>{{ cores_fmt(c.cores) if c.cores is not none else '-' }}</td>
+          <td>{{ percent_fmt(c.cpu) if c.cpu is not none else '-' }}</td>
+          <td>{{ size_fmt(c.mem) if c.mem else '-' }}{% if c.mem_total %} of {{ size_fmt(c.mem_total) }}{% endif %}</td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
     {% endif %}
   </div>
 </div>

@@ -29,6 +29,26 @@ def nice_top(value: float) -> float:
     return 10 * power
 
 
+def sparkline(points, field: str, top: float | None = None, title: str = "") -> Markup:
+    """A tiny line for a list row: no axis, no labels; title says the latest value."""
+    values = [(p["t"], p[field]) for p in points if p.get(field) is not None]
+    if len(values) < 2:
+        return Markup('<span class="u-text--muted">-</span>')
+    width, height = 90, 20
+    first, last = values[0][0], values[-1][0]
+    scale = top or nice_top(max(v for _, v in values) * 1.1)
+    coords = " ".join(
+        f"{(t - first) / max(1, last - first) * width:.1f},"
+        f"{height - 1 - min(v, scale) / scale * (height - 2):.1f}"
+        for t, v in values
+    )
+    return Markup(  # noqa: S704 - numbers made here, and the title escaped
+        f'<svg class="sparkline" viewBox="0 0 {width} {height}" role="img" '
+        f'aria-label="{escape(title)}"><title>{escape(title)}</title>'
+        f'<polyline points="{coords}"/></svg>'
+    )
+
+
 def line_chart(
     rows, lines, span: str, fmt, floor: float = 0, of: float | None = None, label: str = ""
 ) -> Markup:

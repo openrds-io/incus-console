@@ -14,6 +14,8 @@ from flask import abort, current_app, flash, g, redirect, render_template, reque
 from .. import access, servers
 from ..incus import IncusConnectionError, IncusError
 from ..incus.client import is_join_token, join_token, normalize_fingerprint, peer_fingerprint
+from ..metrics import store as metrics_store
+from ..metrics.pages import member_charts
 from .config_forms import settings_fields
 from .scoped import bp, cluster_groups, cluster_members, run
 
@@ -674,9 +676,15 @@ def cluster_member(member):
         i["name"] for i in g.incus.instances() if (i.get("location") or "") == member
     )
     versions = _versions([found])
+    span = request.args.get("range", "1h")
+    if span not in metrics_store.RANGES:
+        span = "1h"
     return render_template(
         "cluster/member.html",
         member=found,
+        charts=member_charts(current_app.config["DATA_DIR"], g.sid, member, span),
+        span=span,
+        spans=list(metrics_store.RANGES),
         version=versions.get(member, ""),
         database=database_role(found),
         resources=_resources(member) if found.get("status") != "Offline" else {},

@@ -14,6 +14,8 @@ from flask import current_app, flash, g, redirect, render_template, request, ses
 from .. import access, user_certs
 from ..db import get_db
 from ..incus import IncusError
+from ..metrics import store as metrics_store
+from ..metrics.pages import cores, percent, project_charts, project_top, size
 from .config_forms import apply_settings, dump_yaml, load_yaml, settings_fields
 from .scoped import bp, run
 
@@ -226,6 +228,13 @@ def project_detail(name):
         if error.status == 0:
             raise
     resources = (state.get("resources") or {}) if isinstance(state, dict) else {}
+    span = request.args.get("range", "1h")
+    if span not in metrics_store.RANGES:
+        span = "1h"
+    data_dir = current_app.config["DATA_DIR"]
+    charts = project_charts(data_dir, g.sid, name, span)
+    # Someone given single instances sees those, not the whole project's.
+    consumers = access.visible_instances(g.sid, name, project_top(data_dir, g.sid, name))[:10]
     usage = []
     for key, label, is_bytes in USAGE:
         entry = resources.get(key)
@@ -262,6 +271,13 @@ def project_detail(name):
         sections=sections,
         is_default=name == DEFAULT,
         is_current=name == g.project,
+        charts=charts if access.rank(g.sid, name) >= access.CAPABILITIES["view"] else [],
+        consumers=consumers,
+        cores_fmt=cores,
+        percent_fmt=percent,
+        size_fmt=size,
+        span=span,
+        spans=list(metrics_store.RANGES),
     )
 
 
