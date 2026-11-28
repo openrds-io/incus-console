@@ -358,7 +358,40 @@ that could not start is not written. Like pgAdmin's, it carries its
 own Python environment (`/opt/incus-console/venv`), so it depends only on the
 distribution's `python3`, `nginx` and `openssl`.
 
-On the server:
+### Installing on Debian 13
+
+Incus Console's packages are in the OpenRDS package repository at
+`pkgs.openrds.io`, laid out like Zabbly's Incus repository. For now there is
+one channel, `testing`, with arm64 packages; amd64 follows.
+
+```bash
+sudo apt install -y curl
+sudo mkdir -p /etc/apt/keyrings
+sudo curl -fsSL https://pkgs.openrds.io/key.asc -o /etc/apt/keyrings/openrds.asc
+sudo tee /etc/apt/sources.list.d/openrds-incus-console-testing.sources >/dev/null <<SOURCES
+Enabled: yes
+Types: deb
+URIs: https://pkgs.openrds.io/incus-console/testing
+Suites: trixie
+Components: main
+Architectures: $(dpkg --print-architecture)
+Signed-By: /etc/apt/keyrings/openrds.asc
+SOURCES
+sudo apt update
+sudo apt install incus-console
+sudo incus-console-setup
+```
+
+The key's fingerprint is `BCCB 267F BFD9 E236 5EC7  7EF9 94D3 EEF6 D5A2 B39C`;
+`gpg --show-keys /etc/apt/keyrings/openrds.asc` shows it. Upgrades come with
+the system's own: `sudo apt update && sudo apt upgrade`.
+
+To manage the Incus on the same machine, install Incus first, from Zabbly's
+repository (see https://github.com/zabbly/incus); `incus-console-setup` then
+gives the console access to it. A console on its own machine manages Incus
+servers elsewhere, added under Servers.
+
+Or, with a package file you built yourself:
 
 ```bash
 sudo apt install ./incus-console_*.deb     # or: sudo dnf install ./incus-console-*.rpm

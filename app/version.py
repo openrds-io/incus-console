@@ -15,7 +15,7 @@ import os
 import subprocess
 from pathlib import Path
 
-__version__ = "26.11.15"
+__version__ = "26.11.16"
 
 HERE = Path(__file__).resolve().parent
 
