@@ -287,7 +287,14 @@ def cluster_token_revoke(op_id):
 # -- joining a registered server --------------------------------------------
 
 
-def _probe(row) -> dict:
+def _cluster_version() -> str:
+    try:
+        return (g.incus.server_info().get("environment") or {}).get("server_version") or ""
+    except IncusError:
+        return ""
+
+
+def _probe(row, cluster_version: str = "") -> dict:
     """A registered server as a possible new member: its details, or why it cannot join."""
     entry = {"id": row["id"], "name": row["name"], "info": {}, "problem": None}
     client = servers.client_for(row)
@@ -302,14 +309,23 @@ def _probe(row) -> dict:
         entry["problem"] = "It does not trust this console."
     elif (info.get("environment") or {}).get("server_clustered"):
         entry["problem"] = "It is already part of a cluster."
+    else:
+        version = (info.get("environment") or {}).get("server_version") or ""
+        # Incus refuses a member whose version differs from the cluster's.
+        if cluster_version and version and version != cluster_version:
+            entry["problem"] = (
+                f"It runs Incus {version} and the cluster runs {cluster_version}; "
+                "members must run the same version."
+            )
     return entry
 
 
 def _candidates() -> list[dict]:
     """The other registered servers, each with why it cannot join (None if it can)."""
     member_urls = {(m.get("url") or "").rstrip("/") for m in cluster_members()}
+    version = _cluster_version()
     return [
-        _probe(row)
+        _probe(row, version)
         for row in servers.all_servers()
         if row["id"] != g.sid
         and not (row["kind"] == "https" and row["address"].rstrip("/") in member_urls)
@@ -324,7 +340,7 @@ def _candidate(server_id) -> tuple:
         abort(404)
     if row is None or row["id"] == g.sid:
         abort(404)
-    return row, _probe(row)
+    return row, _probe(row, _cluster_version())
 
 
 @bp.route("/cluster/join", methods=["GET", "POST"])

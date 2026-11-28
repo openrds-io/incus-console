@@ -117,6 +117,7 @@ class FakeIncus:
                 "description": '"source" property for storage pool "default"',
             }
         ]
+        self.version = "6.0"  # environment.server_version
         self.joins: list[dict] = []  # PUT /1.0/cluster bodies that joined a cluster
         self.cluster_of: FakeIncus | None = None  # the fake a join token leads to
         # Stands in for the cluster certificate (GET /1.0 environment.certificate).
@@ -703,7 +704,7 @@ class FakeIncus:
                                 {"Name": name, "Version": "1", "Remote": name == "ceph"}
                                 for name in ("dir", "zfs", "btrfs", "ceph")
                             ],
-                            "server_version": "6.0",
+                            "server_version": self.version,
                             "certificate": ssl.DER_cert_to_PEM_cert(self.certificate_der),
                             "architectures": ["aarch64"],
                         },
@@ -728,6 +729,8 @@ class FakeIncus:
                     return self.error(403, "Invalid trust token")
                 if not peer_cert:
                     return self.error(400, "No client certificate provided")
+                if hashlib.sha256(peer_cert).hexdigest() in self.trusted:
+                    return self.error(409, "Client is already trusted")
                 self.trusted.append(hashlib.sha256(peer_cert).hexdigest())
                 return self.sync()
             case ("GET", ["projects"]):

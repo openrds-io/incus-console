@@ -229,3 +229,19 @@ def test_a_server_that_starts_its_own_cluster_is_not_reported_as_joined(
         follow_redirects=True,
     )
     assert "the cluster does not list node2" in text(done)
+
+
+def test_a_server_on_another_incus_version_cannot_join(browser, sid, fake, spare):
+    world, spare_id = spare
+    fake.make_cluster("node1")
+    world.cluster_of = fake
+    world.version = "7.1"
+    pick = text(browser.get(f"/servers/{sid}/cluster/join"))
+    assert "runs Incus 7.1 and the cluster runs 6.0" in pick and f"server={spare_id}" not in pick
+    form = text(browser.get(f"/servers/{sid}/cluster/join?server={spare_id}"))
+    assert "cannot join" in form and 'name="name"' not in form
+    browser.post(
+        f"/servers/{sid}/cluster/join",
+        {"server": spare_id, "name": "node2", "address": "10.0.0.2", "config-0": ""},
+    )
+    assert "node2" not in fake.members and not world.joins

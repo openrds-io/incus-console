@@ -914,6 +914,18 @@ def is_join_token(operation: dict) -> bool:
     return operation.get("class") == "token" and "serverName" in (operation.get("metadata") or {})
 
 
+def _revoke_trust_token(client: IncusClient, secret: str | None) -> None:
+    """Withdraw an unused trust token, so it cannot be used by someone else."""
+    if not secret:
+        return
+    try:
+        for op in client.operations():
+            if op.get("class") == "token" and (op.get("metadata") or {}).get("secret") == secret:
+                client.cancel_operation(op["id"])
+    except IncusError:
+        pass
+
+
 def enroll_with_token(token: str, cert: str, key: str, timeout: float = 15) -> dict:
     """Add our client certificate to a server's trust store using a token.
 
@@ -936,6 +948,14 @@ def enroll_with_token(token: str, cert: str, key: str, timeout: float = 15) -> d
         except IncusConnectionError as exc:
             last_error = exc
             continue
+        except IncusError as exc:
+            # The server trusts us already (as after it starts a cluster and
+            # changes certificate): the token's fingerprint is all we needed.
+            if "already trusted" not in exc.message.lower():
+                raise
+            if client.server_info().get("auth") != "trusted":
+                raise
+            _revoke_trust_token(client, info.get("secret"))
         return {
             "url": url,
             "fingerprint": normalize_fingerprint(info["fingerprint"]),
