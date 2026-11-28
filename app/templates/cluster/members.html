@@ -55,7 +55,52 @@
   <button class="p-button--positive">Create group</button>
 </form>
 {% endif %}
+{% if is_admin() %}
+<h2 class="p-heading--4">Add a member</h2>
+<p class="u-text--muted">Bring in a server this console already knows, or hand out a join token for a machine you set up yourself. A new member has to be empty: Incus installed, with no instances or images of its own.</p>
+<p><a class="p-button" href="{{ url_for('srv.cluster_join') }}">Join a registered server</a></p>
+<form class="inline-form" method="post" action="{{ url_for('srv.cluster_token_create') }}">
+  {{ csrf() }}
+  <input type="text" name="name" placeholder="New member, e.g. node4" aria-label="New member's name" required>
+  <button class="p-button">Get a join token</button>
+</form>
+{% if tokens %}
+<table aria-label="Join tokens">
+  <thead><tr><th>Join token for</th><th>Expires</th><th>Token</th><th class="u-align--right">Actions</th></tr></thead>
+  <tbody>
+  {% for t in tokens %}
+    <tr>
+      <td>{{ t.name }}</td>
+      <td>{{ t.expires or 'Never' }}</td>
+      <td><details><summary>Show</summary><code class="token">{{ t.token }}</code></details></td>
+      <td class="u-align--right">
+        <form class="inline" method="post" action="{{ url_for('srv.cluster_token_revoke', op_id=t.id) }}" data-confirm="Revoke the join token for {{ t.name }}? It can no longer be used to join.">
+          {{ csrf() }}<button class="p-button--negative is-dense u-no-margin--bottom">Revoke</button>
+        </form>
+      </td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% endif %}
+{% endif %}
 {% else %}
 {{ empty(server.name ~ " is not part of a cluster.") }}
+{% if enable %}
+<h2 class="p-heading--4">Start a cluster</h2>
+<p class="u-text--muted">{{ server.name }} becomes the cluster's first member and keeps everything it has. Other servers join it afterwards, from this page.</p>
+<form class="narrow-form" method="post" action="{{ url_for('srv.cluster_enable') }}" data-confirm="Start a cluster on {{ server.name }}? This cannot be undone: a server cannot leave a cluster it started.">
+  {{ csrf() }}
+  <label for="server_name">Member name</label>
+  <input type="text" id="server_name" name="server_name" value="{{ enable.name }}" required>
+  <p class="p-form-help-text">How the cluster names this server, usually its host name.</p>
+  <label for="address">Cluster address</label>
+  <input type="text" id="address" name="address" value="{{ enable.address }}" placeholder="192.168.64.5:8443" required>
+  <p class="p-form-help-text">Where the other members reach it. {% if enable.current %}It listens at <code>{{ enable.current }}</code> now.{% else %}It does not listen on the network yet; this turns that on.{% endif %}</p>
+  <div class="form-buttons">
+    <button class="p-button--positive">Start cluster</button>
+  </div>
+</form>
+{% endif %}
 {% endif %}
 {% endblock %}

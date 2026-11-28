@@ -7,7 +7,7 @@ from .test_app import text
 def test_a_standalone_server_shows_no_cluster(browser, sid, fake):
     fake.add_instance("c1")
     page = text(browser.get(f"/servers/{sid}/instances"))
-    assert f"/servers/{sid}/cluster" not in page and "<th>Member</th>" not in page
+    assert "<th>Member</th>" not in page
     assert "is not part of a cluster" in text(browser.get(f"/servers/{sid}/cluster"))
     assert 'name="target"' not in text(browser.get(f"/servers/{sid}/create-instance"))
     assert browser.get(f"/servers/{sid}/instances/c1/move").status_code == 404

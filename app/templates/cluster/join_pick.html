@@ -1,0 +1,24 @@
+{% extends "base.html" %}
+{% from "macros.html" import crumbs, empty %}
+{% block title %}Join a registered server{% endblock %}
+{% block heading %}{{ crumbs([('Cluster', url_for('srv.cluster')), ('Join a registered server', None)]) }}{% endblock %}
+{% block content %}
+<p class="u-text--muted">The servers this console knows, other than the cluster itself. One that stands alone and trusts the console can join.</p>
+{% if candidates %}
+<table aria-label="Servers that could join">
+  <thead><tr><th>Server</th><th>Incus</th><th>Can it join?</th><th class="u-align--right">Actions</th></tr></thead>
+  <tbody>
+  {% for c in candidates %}
+    <tr>
+      <td>{{ c.name }}</td>
+      <td>{{ (c.info.environment or {}).server_version or '-' }}</td>
+      <td>{% if c.problem %}<span class="u-text--muted">No: {{ c.problem }}</span>{% else %}Yes{% endif %}</td>
+      <td class="u-align--right">{% if not c.problem %}<a class="p-button is-dense u-no-margin--bottom" href="{{ url_for('srv.cluster_join', server=c.id) }}">Join</a>{% endif %}</td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% else %}
+{{ empty("No other servers are registered. Add the new machine under Servers first, or hand out a join token from the Cluster page.") }}
+{% endif %}
+{% endblock %}

@@ -373,6 +373,20 @@ class IncusClient:
 
     # -- cluster -------------------------------------------------------------
 
+    def cluster(self) -> dict:
+        """``server_name``, ``enabled``, and on a member the ``member_config`` a
+        joining server must answer (pool sources and the like)."""
+        return self.get("cluster") or {}
+
+    def update_cluster(self, payload: dict) -> dict:
+        """Start a cluster on this server, or join it to one (an operation)."""
+        return self.request("PUT", path("cluster"), body=payload)
+
+    def add_cluster_member(self, name: str) -> dict:
+        """Ask for a join token for a new member. The token lives on as an
+        operation until it is used, revoked or runs out."""
+        return self.request("POST", path("cluster", "members"), body={"server_name": name})
+
     def cluster_members(self) -> list:
         return self.get("cluster", "members", recursion=1) or []
 
@@ -857,6 +871,26 @@ def decode_trust_token(token: str) -> dict:
     if not isinstance(data, dict) or not data.get("fingerprint") or not data.get("addresses"):
         raise IncusError(400, "The trust token has no server address or fingerprint.")
     return data
+
+
+# -- cluster join tokens -----------------------------------------------------
+
+
+def join_token(operation: dict) -> str:
+    """The token ``incus cluster add`` prints, made from the operation behind it."""
+    meta = operation.get("metadata") or {}
+    data = {
+        "server_name": meta.get("serverName", ""),
+        "fingerprint": meta.get("fingerprint", ""),
+        "addresses": list(meta.get("addresses") or []),
+        "secret": meta.get("secret", ""),
+        "expires_at": meta.get("expiresAt", ""),
+    }
+    return base64.b64encode(json.dumps(data, separators=(",", ":")).encode()).decode()
+
+
+def is_join_token(operation: dict) -> bool:
+    return operation.get("class") == "token" and "serverName" in (operation.get("metadata") or {})
 
 
 def enroll_with_token(token: str, cert: str, key: str, timeout: float = 15) -> dict:

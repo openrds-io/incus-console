@@ -384,7 +384,8 @@ td.nowrap {
   margin: 0;
   padding: 0;
 }
-table.credentials code {
+table.credentials code,
+code.token {
   word-break: break-all;
 }
 

@@ -71,7 +71,7 @@
                 ('srv.projects', 'Projects', here.startswith('srv.project_') or here == 'srv.projects'),
               ] %}
               {# Someone given single instances gets their list and nothing they would be refused. #}
-              {% for endpoint, label, active in nav if (endpoint != 'srv.cluster' or cluster_members) and (endpoint == 'srv.instances' or allowed(endpoint)) %}
+              {% for endpoint, label, active in nav if (endpoint != 'srv.cluster' or cluster_members or is_admin()) and (endpoint == 'srv.instances' or allowed(endpoint)) %}
               <li class="p-side-navigation__item">
                 <a class="p-side-navigation__link" href="{{ url_for(endpoint) }}"{% if active %} aria-current="page"{% endif %}>{{ label }}</a>
               </li>

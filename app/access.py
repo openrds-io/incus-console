@@ -53,6 +53,11 @@ REQUIRED = {
     "srv.cluster_group_create": "admin",
     "srv.cluster_group_edit": "admin",
     "srv.cluster_group_delete": "admin",
+    # Starting a cluster, and bringing servers into it.
+    "srv.cluster_enable": "admin",
+    "srv.cluster_join": "admin",
+    "srv.cluster_token_create": "admin",
+    "srv.cluster_token_revoke": "admin",
     # Day-to-day work on instances.
     "srv.instance_action": "operate",
     "srv.instance_terminal": "operate",
