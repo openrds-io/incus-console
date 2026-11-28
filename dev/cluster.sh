@@ -17,6 +17,10 @@
 #   dev/cluster.sh doctor     network checks, for when members cannot reach each other
 #   dev/cluster.sh stop       stop the machines (start again with "up")
 #   dev/cluster.sh delete     delete the machines and everything in them
+#   dev/cluster.sh base       build (or rebuild) incus-base: Debian 13 upgraded, with
+#                             Incus installed, stopped. New machines are cloned from it,
+#                             which skips the upgrade and the install. Rebuild it now
+#                             and then for newer packages; "delete" leaves it alone.
 #
 # Settings (environment): CLUSTER_PREFIX=incus  CLUSTER_CPUS=2  CLUSTER_MEMORY=2
 # CLUSTER_DISK=20 (GiB)  INCUS_CHANNEL=stable (or lts-6.0)
@@ -60,6 +64,11 @@ address() {
 # member whose fellow members are stopped or gone.
 clustered() { root "$1" test -e /var/lib/incus/cluster.crt; }
 
+BASE="${PREFIX}-base"
+
+# Lima 1.1 and later can copy a stopped machine.
+can_clone() { limactl clone --help >/dev/null 2>&1; }
+
 start_machine() {
   local name="$1"
   if exists "$name"; then
@@ -67,6 +76,14 @@ start_machine() {
       say "Starting $name"
       limactl start --tty=false "$name"
     fi
+    return
+  fi
+  if [ "$name" != "$BASE" ] && exists "$BASE" && can_clone; then
+    [ "$(state "$BASE")" = "Stopped" ] || limactl stop "$BASE"
+    say "Creating $name from $BASE"
+    # --tty=false: no "start it now?" question; it is started just below.
+    limactl clone --tty=false "$BASE" "$name"
+    limactl start --tty=false "$name"
     return
   fi
   say "Creating $name (Debian 13, ${CPUS} CPUs, ${MEMORY}GiB memory, ${DISK}GiB disk)"
@@ -258,6 +275,35 @@ prepare() {
   install_incus "$name"
 }
 
+# A machine to clone the others from: everything up to Incus being installed,
+# and nothing of its own that its clones must not share.
+base() {
+  if exists "$BASE"; then
+    say "Replacing $BASE"
+    limactl delete --force "$BASE"
+  fi
+  can_clone || die "this Lima cannot clone machines (limactl clone); update it: brew upgrade lima"
+  prepare "$BASE"
+  say "Upgrading Debian on $BASE"
+  root "$BASE" bash -s <<'REMOTE'
+set -eu
+export DEBIAN_FRONTEND=noninteractive
+apt-get update -q
+apt-get full-upgrade -y -q
+apt-get autoremove -y -q
+apt-get clean
+# Incus makes its certificate and database on its first start: each clone its own.
+systemctl stop 'incus*' 2>/dev/null || true
+rm -rf /var/lib/incus/* /var/log/incus/*
+# A clone with the same machine-id would get the same address from DHCP.
+truncate -s 0 /etc/machine-id
+rm -f /var/lib/dbus/machine-id
+REMOTE
+  limactl stop "$BASE"
+  echo
+  echo "$BASE is ready. New machines (up, spare) are now cloned from it."
+}
+
 up() {
   local count="${1:-3}" first="${PREFIX}1" first_ip name ip i
   [[ "$count" =~ ^[1-9][0-9]*$ ]] || die "up takes a number of members, such as 3"
@@ -366,6 +412,7 @@ case "${1:-}" in
   up) up "${2:-}" ;;
   spare) spare "${2:-}" ;;
   token) token "${2:-}" ;;
+  base) base ;;
   status) status ;;
   doctor) doctor ;;
   shell)
