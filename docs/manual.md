@@ -27,6 +27,14 @@ Working today:
   create, rename, choose members, delete; an instance or a copy of one can
   be placed on a member or on any member of a group. Admins can remove an
   empty member from the cluster
+- Building a cluster: on a server that stands alone, admins start a cluster
+  (its Cluster page asks for the member name and the address the others
+  reach it at). New members join in either of two ways: pick a server
+  already registered in the console, answer its per-member settings (such as
+  a storage pool's source) and the console joins it; or hand out a join
+  token and run `incus admin init` on the new machine, with a preseed file
+  the console writes out. Unused tokens are listed and can be revoked. A
+  server on another Incus version than the cluster's is not offered
 - Instances, of either kind: list, start, stop, restart, freeze, delete,
   rename, copy, snapshots (by hand or on a schedule, with expiry), logs
   (console and Incus log files), a settings form for limits and common
@@ -131,7 +139,8 @@ sudo sysctl -w net.inet.ip.forwarding=1
 
 ```bash
 dev/cluster.sh up 3      # create incus1..incus3 and form the cluster
-dev/cluster.sh token     # a trust token: paste it under Servers > Remote, with a trust token
+dev/cluster.sh spare 4   # incus4 on its own: start a cluster, or join one, from the console
+dev/cluster.sh token     # a trust token (token N: member N): paste it under Servers > Remote, with a trust token
 dev/cluster.sh status
 dev/cluster.sh stop      # "up" starts them again; "delete" removes them
 ```
@@ -483,6 +492,10 @@ wsgi.py           entry point for gunicorn
 4. OCI application containers, next steps: health checks (Incus has none of
    its own for application containers yet)
 5. More permissions work: see [Permissions: still to do](#permissions-still-to-do)
+6. Lower priority: an API reference page, with Swagger UI and the Incus REST
+   API description bundled in the packages. The work so far is on the
+   `swagger` branch; "Try it out" with each user's own Incus certificate
+   comes after that
 
 ## License
 
